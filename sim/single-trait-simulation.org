@@ -1,0 +1,234 @@
+#+title: Generate LD matrix and do single trait whole-genome simulation
+#+subtitle:
+#+description:
+#+date: 2021-03-01
+#+author: Liu, Shouye
+#+STARTUP: overview
+
+* Per LD block LD matrix
+** Extract snplist from per ld block and generate HM3 data based on snpInfo
+#+begin_src R
+library(data.table)
+mainPath = "/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/ldblock/"
+ldbinfoFileSuffix = "chr-1-22-ukbV3_eur_unrel_n20k_hm3.eigen.ldblock.info"
+snpinfoFileSuffix = "chr-1-22-ukbV3_eur_unrel_n20k_hm3.eigen.ldblock.snp.info"
+ldbinfo = fread( paste0(mainPath,ldbinfoFileSuffix))
+snpinfo = fread( paste0(mainPath,snpinfoFileSuffix))
+lbs = unique(ldbinfo$ldBlockID)
+for(i in lbs){
+  snps = ldbinfo[which(ldbinfo$ldBlockID == i),]
+  snpNumInLbs = unique(snps$NumSnpInLdBlock)
+  snplist = snps$snpInLdBlock
+  outFile = paste0(mainPath,"/snplist/","ukbV3_eur_unrel_n20k_hm3-ldm-block-",i,"")
+  fwrite(data.frame(snplist),file = outFile,col.names = FALSE)
+}
+
+outFile = paste0(mainPath,"/snplist/","ukbV3_eur_unrel_n20k_hm3.snplists")
+fwrite(data.frame(snpinfo$ID),file = outFile,col.names = FALSE)
+
+## ## Use plink to extract HM3
+## plink19 = "/home/uqsliu28/softwares/plink/plink19"
+## rawDatPath <- "//home/uqsliu28/projects/annotation//dataRaw/ukbGeno/"
+## bfileName <- paste0(paste0(rawDatPath,"ukbEURu_imp_v3_HM3_maf01" ) )
+## bim = fread(paste0(bfileName,".bim"))
+
+## ## plinkHM3 <- paste0(plink19," --bfile ",rawDataPath,rawBimFileSuffix,
+## ##                     "--extract ", snpListFile,
+## ##                     " --make-bed ",
+## ##                     " --out ", outPath, rawBimFileSuffix, ".assoc"
+## ##                     )
+
+## ## ## run gwas function
+## ## system(plinkHM3)
+#+end_src
+** Generate LD matrix based on per-block-snplist
+#+begin_src bash
+gctb="/home/uqsliu28/softwares/sbayese/gctb-genesvd0215"
+
+rawDatPath="/home/uqsliu28/90days/projects/annotation/real/debug/data/"
+outPath="/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/ldblock"
+snpinfo="ukbV3_eur_unrel_n20k_hm3-ldm-block-${TASK_ID}"
+
+bfileSuffix="ukbV3_eur_unrel_n20k_hm3"
+outFile="ukbV3_eur_unrel_n20k_hm3-ldm-block-${TASK_ID}.txt"
+
+${gctb} --bfile ${rawDatPath}/${bfileSuffix} \
+    --make-full-ldm \
+    --write-ldm-txt \
+    --extract ${outPath}/snplist/${snpinfo} \
+    --out   ${outPath}/ldm/${outFile} 2>&1 | tee ${outPath}/log/log-${outFile}.log
+################################################################
+######################### Script ends ##########################
+################################################################
+## Step 1. Basic cluster setting
+## homePath="/home/yangjianLab/liushouye/"
+homePath="/home/uqsliu28/"
+qsubshcom="${homePath}/softwares/qsubshcom/qsubshcom"
+## scriptPath="${homePath}/projects/annotation/sim/prediction/eqtlComparison/scripts"
+scriptPath="/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/ldblock"
+logPath="${scriptPath}/log"
+mkdir -p ${logPath}
+
+scriptName="ldm.sh"
+chmod 751 ${scriptPath}/${scriptName}
+qsubName="${scriptName}"
+printLog="${logPath}/${qsubName}-$(date +"%Y-%m-%d-%I-%M-%p").log"
+tmp_cmd="${scriptPath}/${scriptName}  > ${printLog}"
+## $qsubshcom "$tmp_cmd" 1 60G  ${qsubName}  100:00:00 "-queue=intel-fat,amd-ep2"
+$qsubshcom "$tmp_cmd" 1 100G  ${qsubName}  100:00:00 "-queue=normal -array=1-591"
+#+end_src
+
+* Simulation
+** Testing dataset
+*** Select samples
+#+begin_src bash
+options(scipen=999)
+library(data.table)
+set.seed(1234)
+MainPath <- "/home/yangjianLab/liushouye/projects/annotation/"
+MainPath <- "/home/uqsliu28/projects/annotation/"
+
+rawDataPath <- paste0(MainPath, "/dataRaw/ukbGeno/")
+outPath <- paste0("/scratch/90days/uqsliu28/projects/sbayesRC/ldAndMa/sim/data/")
+commandline <- paste0("mkdir -p ",outPath)
+system(commandline)
+
+rawFamFileSuffix <- paste0("ukbEURu_imp_v3_HM3_maf01" )
+rawFamFile <- paste0(rawDataPath,rawFamFileSuffix,".fam")
+fam <- fread(rawFamFile)
+names(fam) <- c("FID","IID","FA","MA","SEX","PHENO")
+
+sams <- c(300000,dim(fam)[1] - 300000)
+tags <- c("train","valid")
+samsLeft <- fam[,c("FID","IID")]
+for(i in 1:length(sams)){
+    tmp <- samsLeft[sample(.N,sams[i])]
+    ## remove inds sampled
+    samsLeft <- samsLeft[!samsLeft$FID %in% tmp$FID,]
+    ## training dataset
+    tmpFileName <- paste0(tags[i],"-chr1-22-shuf-",sams[i],
+                          "-sams-ukbEURu_imp_v3_HM3_maf01-",Sys.Date(),".samlist")
+    tmpFilePath <- paste0(outPath,tmpFileName)
+    fwrite(data.frame(tmp),file=tmpFilePath,col.names = FALSE, sep = "\t")
+}
+
+#+end_src
+*** Selecting a series of training datasets
+#+begin_src bash
+####################################################################
+## ExtractASeriesOfTrain.sh
+## Extraxt SNPs from 22 chromosome UKB unrelated European
+## Author: Shouye Liu <syliu.xue@foxmail.com>
+## Version: 1.0
+## Date:<2022-03-10 Thu>
+####################################################################
+## homePath="/home/yangjianLab/liushouye/"
+homePath="/home/uqsliu28/"
+MainPath="${homePath}/projects/annotation/"
+plink2="${homePath}/softwares/plink/plink2"
+
+rawDatPath="${MainPath}/dataRaw/ukbGeno/"
+outPath="/scratch/90days/uqsliu28/projects/sbayesRC/ldAndMa/sim/data/"
+## file
+## in westlake
+##plinkbfile="${rawDatPath}/chr1-eur-349662-sam-unrel-maf01-geno01-hwe-1e-6-2021-09-19"
+## in UQ
+plinkbfile="${rawDatPath}/ukbEURu_imp_v3_HM3_maf01"
+selectSampleIdSuffix=$1
+
+${plink2} --bfile ${plinkbfile} \
+--keep ${outPath}/${selectSampleIdSuffix}.samlist \
+--make-bed    \
+--threads  100 \
+--out ${outPath}/${selectSampleIdSuffix}
+################################################################
+## Write multiple lines to a given script from the command line
+## EOF
+#################################5###############################
+######################### Script ends ##########################
+################################################################
+## Step 2. Set cluster parameters and submit the script into cluster
+## Step 1. Basic cluster setting
+## homePath="/home/yangjianLab/liushouye/"
+if false; then
+homePath="/home/uqsliu28/"
+qsubshcom="${homePath}/softwares/qsubshcom/qsubshcom"
+## scriptPath="${homePath}/projects/annotation/sim/prediction/eqtlComparison/scripts"
+scriptPath="/scratch/90days/uqsliu28/projects/sbayesRC/ldAndMa/sim/data/"
+
+declare -a samfiles=("train-chr1-22-shuf-300000-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21"
+"valid-chr1-22-shuf-48501-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21"
+)
+
+## declare -a samfiles=( "vary-train-chr1-shuf-5000-sams-eur-unrel-maf01-geno01-hwe-1e-6-2021-09-25")
+#################################################################
+#################################################################
+## declare -a samNums=( "10000" )
+scriptName="ExtractASeriesOfTrain.sh"
+chmod 751 ${scriptPath}/${scriptName}
+for samfile in "${samfiles[@]}"
+do
+tmp_cmd="${scriptPath}/${scriptName} ${samfile}"
+qsubName="${samfile}-${scriptName}"
+## $qsubshcom "$tmp_cmd" 1 60G  ${qsubName}  100:00:00 "-queue=intel-fat,amd-ep2"
+$qsubshcom "$tmp_cmd" 1 100G  ${qsubName}  100:00:00 "-queue=normal"
+done
+
+fi
+
+##################################################################
+##################################################################
+#+end_src
+** Generating simulation
+#+begin_src R
+####################################################################
+#### Author: Shouye Liu
+#### Email: syliu.xue@foxmail.com
+####################################################################
+options(scipen=999)
+library(data.table)
+set.seed(1234)
+MainPath <- "/home/uqsliu28/projects/annotation/"
+gcta64 = "/home/uqsliu28/softwares/gcta/gcta64"
+plink19 = "/home/uqsliu28/softwares/plink/plink19"
+
+rawDataPath <- paste0( "/scratch/90days/uqsliu28/projects/sbayesRC/ldAndMa/sim/data/")
+outPath = "/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/sim/gcta/"
+
+rawBimFileSuffix <- paste0("train-chr1-22-shuf-300000-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21" )
+rawBimFile <- paste0(rawDataPath,rawBimFileSuffix,".bim")
+bim <- fread(rawBimFile)
+names(bim) <- c("CHR","SNP","POS","CM","A1","A2 ")
+### Step 1. generate causal snplists
+repNum = 1
+h2snp = 0.5
+sams <- c(10) * 1000
+sigmaSq = h2snp / sams
+samsLeft <- bim
+tmp <- samsLeft[sample(.N,sams)]
+tmp$beta = rnorm(sams,0,sqrt(sigmaSq) )
+
+causalSnplistFile = paste0(outPath,rawBimFileSuffix,"-causal.snplist")
+fwrite(data.frame(tmp[,c("SNP","beta")]),file=causalSnplistFile,col.names = FALSE, sep = "\t")
+### Step 2. do simulation
+gctaMlm <- paste0(gcta64," --bfile ",rawDataPath,rawBimFileSuffix,
+                  " --simu-qt ",
+                  " --simu-causal-loci ", causalSnplistFile,
+                  " --simu-hsq ",h2snp,
+                  " --simu-rep ", repNum,
+                  " --thread-num 100",
+                  " --out ", outPath, rawBimFileSuffix, ".sim"
+                  )
+system(gctaMlm)
+
+## Step 3. extract summary data
+plinkGWAS <- paste0(plink19," --bfile ",rawDataPath,rawBimFileSuffix,
+                    " --pheno ", outPath, rawBimFileSuffix, ".sim.phen",
+                    " --linear ",
+                    " --out ", outPath, rawBimFileSuffix, ".assoc"
+                    )
+
+## run gwas function
+system(plinkGWAS)
+
+#+end_src
