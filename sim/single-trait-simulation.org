@@ -9,21 +9,22 @@
 ** Extract snplist from per ld block and generate HM3 data based on snpInfo
 #+begin_src R
 library(data.table)
-mainPath = "/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/ldblock/"
-ldbinfoFileSuffix = "chr-1-22-ukbV3_eur_unrel_n20k_hm3.eigen.ldblock.info"
-snpinfoFileSuffix = "chr-1-22-ukbV3_eur_unrel_n20k_hm3.eigen.ldblock.snp.info"
-ldbinfo = fread( paste0(mainPath,ldbinfoFileSuffix))
-snpinfo = fread( paste0(mainPath,snpinfoFileSuffix))
-lbs = unique(ldbinfo$ldBlockID)
+mainPath = "/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/ldblockComm/"
+rawDatPath = "/home/uqsliu28//projects/annotation//dataRaw/ukbGeno/"
+ldbinfoFileSuffix = "chr1-22-ukbEURu_imp_v3_HM3_maf01.eigen.ldblock.info"
+snpinfoFileSuffix = "chr1-22-ukbEURu_imp_v3_HM3_maf01.eigen.ldblock.snp.info"
+ldbinfo = fread( paste0(rawDatPath,ldbinfoFileSuffix))
+snpinfo = fread( paste0(rawDatPath,snpinfoFileSuffix))
+lbs = unique(ldbinfo$LDBLOCK)
 for(i in lbs){
-  snps = ldbinfo[which(ldbinfo$ldBlockID == i),]
+  snps = ldbinfo[which(ldbinfo$LDBLOCK == i),]
   snpNumInLbs = unique(snps$NumSnpInLdBlock)
   snplist = snps$snpInLdBlock
-  outFile = paste0(mainPath,"/snplist/","ukbV3_eur_unrel_n20k_hm3-ldm-block-",i,"")
+  outFile = paste0(mainPath,"/snplist/","chr1-22-ukbEURu_imp_v3_HM3_maf01-ldm-block-",i,".snplist")
   fwrite(data.frame(snplist),file = outFile,col.names = FALSE)
 }
 
-outFile = paste0(mainPath,"/snplist/","ukbV3_eur_unrel_n20k_hm3.snplists")
+outFile = paste0(mainPath,"/snplist/","chr1-22-ukbEURu_imp_v3_HM3_maf01")
 fwrite(data.frame(snpinfo$ID),file = outFile,col.names = FALSE)
 
 ## ## Use plink to extract HM3
@@ -43,14 +44,15 @@ fwrite(data.frame(snpinfo$ID),file = outFile,col.names = FALSE)
 #+end_src
 ** Generate LD matrix based on per-block-snplist
 #+begin_src bash
-gctb="/home/uqsliu28/softwares/sbayese/gctb-genesvd0215"
+gctb="/home/uqsliu28/softwares/gctb/gctb"
 
-rawDatPath="/home/uqsliu28/90days/projects/annotation/real/debug/data/"
-outPath="/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/ldblock"
-snpinfo="ukbV3_eur_unrel_n20k_hm3-ldm-block-${TASK_ID}"
+rawDatPath="/home/uqsliu28//projects/annotation//dataRaw/ukbGeno/"
+outPath="/home/uqsliu28/90days/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/ldblockComm/"
+## TASK_ID=1
+snpinfo="chr1-22-ukbEURu_imp_v3_HM3_maf01-ldm-block-${TASK_ID}.snplist"
 
-bfileSuffix="ukbV3_eur_unrel_n20k_hm3"
-outFile="ukbV3_eur_unrel_n20k_hm3-ldm-block-${TASK_ID}.txt"
+bfileSuffix="ukbEURu_imp_v3_HM3_maf01"
+outFile="chr1-22-ukbEURu_imp_v3_HM3_maf01-ldm-block-${TASK_ID}"
 
 ${gctb} --bfile ${rawDatPath}/${bfileSuffix} \
     --make-full-ldm \
@@ -62,10 +64,11 @@ ${gctb} --bfile ${rawDatPath}/${bfileSuffix} \
 ################################################################
 ## Step 1. Basic cluster setting
 ## homePath="/home/yangjianLab/liushouye/"
+if false; then
 homePath="/home/uqsliu28/"
 qsubshcom="${homePath}/softwares/qsubshcom/qsubshcom"
 ## scriptPath="${homePath}/projects/annotation/sim/prediction/eqtlComparison/scripts"
-scriptPath="/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/ldblock"
+scriptPath="/scratch/90days/uqsliu28/projects/sbayesRC/ldAndMa/ldblockComm/ldm/"
 logPath="${scriptPath}/log"
 mkdir -p ${logPath}
 
@@ -76,10 +79,13 @@ printLog="${logPath}/${qsubName}-$(date +"%Y-%m-%d-%I-%M-%p").log"
 tmp_cmd="${scriptPath}/${scriptName}  > ${printLog}"
 ## $qsubshcom "$tmp_cmd" 1 60G  ${qsubName}  100:00:00 "-queue=intel-fat,amd-ep2"
 $qsubshcom "$tmp_cmd" 1 100G  ${qsubName}  100:00:00 "-queue=normal -array=1-591"
+
+fi
+
 #+end_src
 
 * Simulation
-** Testing dataset
+** Training and testing dataset
 *** Select samples
 #+begin_src bash
 options(scipen=999)
@@ -179,7 +185,7 @@ fi
 ##################################################################
 ##################################################################
 #+end_src
-** Generating simulation
+** Generating single-trait-simulation
 #+begin_src R
 ####################################################################
 #### Author: Shouye Liu
@@ -193,7 +199,7 @@ gcta64 = "/home/uqsliu28/softwares/gcta/gcta64"
 plink19 = "/home/uqsliu28/softwares/plink/plink19"
 
 rawDataPath <- paste0( "/scratch/90days/uqsliu28/projects/sbayesRC/ldAndMa/sim/data/")
-outPath = "/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/sim/gcta/"
+outPath = "/scratch/90days/uqsliu28/projects/sbayesRC/ldAndMa/sim/gcta/"
 
 rawBimFileSuffix <- paste0("train-chr1-22-shuf-300000-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21" )
 rawBimFile <- paste0(rawDataPath,rawBimFileSuffix,".bim")
@@ -221,14 +227,270 @@ gctaMlm <- paste0(gcta64," --bfile ",rawDataPath,rawBimFileSuffix,
                   )
 system(gctaMlm)
 
-## Step 3. extract summary data
+## Step 3. Calculate allele frequency
+plinkFreq <- paste0(plink19," --bfile ",rawDataPath,rawBimFileSuffix,
+                    " --freq ",
+                    " --out ", rawDataPath,rawBimFileSuffix
+                    )
+
+## Step 4. extract summary data
 plinkGWAS <- paste0(plink19," --bfile ",rawDataPath,rawBimFileSuffix,
                     " --pheno ", outPath, rawBimFileSuffix, ".sim.phen",
                     " --linear ",
+                    " --ci 0.95 ",
                     " --out ", outPath, rawBimFileSuffix, ".assoc"
                     )
 
 ## run gwas function
 system(plinkGWAS)
+#+end_src
+* Perform analysis
+** Perform gctb-ldm-SbayesC using band LD matrix
+*** Construct GWAS ma format
+#+begin_src R
+library(data.table)
+#############################################
+## Change chromosome into ld block id
+#############################################
+mainPath = "/scratch/90days/uqsliu28/projects/sbayesRC/ldAndMa/ldblock/ldm/"
+for(i in 1:591){
+  ldmInfoFile = paste0(mainPath,"ukbV3_eur_unrel_n20k_hm3-ldm-block-",i,".txt.ldm.full.info")
+  system(paste0("cp ", ldmInfoFile, " ", ldmInfoFile, ".bak"))
+  ldmInfo = fread(ldmInfoFile,header = TRUE)
+  ## fwrite(ldmInfo,file = paste0(ldmInfoFile,".bak"),sep = "\t")
+  ## Chnange chromosome into ld block id
+  ldmInfo$Chrom = i
+  fwrite(ldmInfo,file = paste0(ldmInfoFile), sep = "\t")
+}
+#############################################
+#### Convert plink result into ma format
+#############################################
+###
+rawDatPath <- paste0( "/scratch/90days/uqsliu28/projects/sbayesRC/ldAndMa/sim/data/")
+outPath = "/scratch/90days/uqsliu28/projects/sbayesRC/ldAndMa/sim/gcta/"
 
+rawFrqFile <- paste0(rawDatPath,"train-chr1-22-shuf-300000-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21.frq" )
+freq =fread(rawFrqFile)
+
+assocFile=paste0(outPath,"train-chr1-22-shuf-300000-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21.assoc.ci.assoc.linear" )
+assoc = fread(assocFile)
+## find common snp
+
+com_snp = intersect(assoc$SNP, freq$SNP)
+message(length(com_snp), " SNPs in common with LD information")
+
+idx1 = match(com_snp, assoc$SNP)
+assocCom = assoc[idx1]
+
+idx2 = match(com_snp, freq$SNP)
+freqCom = freq[idx2]
+
+## check allele flip
+bA1A1 = (freqCom$A1 == assocCom$A1)
+bA1A2 = (assocCom$A1 ==  freqCom$A2 )
+bAll = bA1A1 | bA1A2
+message(sum(bAll), " SNPs have consistent alleles (A1, A2) between the summary data and freq file")
+
+assocCom[, FRQ_ref:=freq$MAF] ## add new column
+assocCom[, A1_ref:=freq$A1] ## add A1
+assocCom[, A2_ref:=freq$A2] ## add A2
+assocCom[, A2:=freq$A2] ## add A2
+
+## flip allele frequency
+assocCom[bA1A2,A2:= A1_ref]
+assocCom[bA1A2, FRQ_ref:=1-FRQ_ref]
+message(sum(bA1A2), " SNPs flipped alleles. and use allele frequency from freq file")
+
+## assocCombine =  merge(bim, assoc, by=c("CHR","SNP","BP","A1"),all = FALSE)
+maCols = c("SNP", "A1", "A2",   "FRQ_ref",  "BETA", "SE",  "P",  "NMISS")
+maHeader = c("SNP", "A1", "A2",   "freq",  "b", "se",  "p",  "N")
+maDat = assocCom[,..maCols]
+names(maDat) <- maHeader
+
+fwrite(maDat,file = paste0(assocFile,".ma"),sep = "\t")
+#+end_src
+*** run gctb-ldm-SbayesC
+**** Using band LD matrix
+#+begin_src bash
+homePath="/home/uqsliu28/"
+gctb="/home/uqsliu28/softwares/gctb/gctb"
+outPath="/scratch/90days/uqsliu28/projects/sbayesRC/ldAndMa/sim/out/"
+maPath="/scratch/90days/uqsliu28/projects/sbayesRC/ldAndMa/sim/gcta/"
+#TASK_ID=22
+ldPath="/scratch/90days/uqsliu28/projects/sbayesRC/ldAndMa/ldblock.bak/ldm/"
+gwasPath="/scratch/90days/uqsliu28/projects/sbayesRC/ldAndMa/sim/gcta/"
+gwasFile="train-chr1-22-shuf-300000-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21.assoc.ci.assoc.linear.ma"
+mldmPath="/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/bandLdm/band_ukb_10k_hm3/"
+## download from https://cnsgenomics.com/data/GCTB/band_ukb_10k_hm3.zip
+mergeFile="multi_band_ukb_hm3.txt"
+
+outFile="lbs-1-591-${gwasFile}"
+chainLength=50000
+burnIn=3000
+outFreq=1000
+
+${gctb} --sbayes C  \
+    --mldm ${mldmPath}/${mergeFile} \
+    --gwas-summary ${gwasPath}/${gwasFile} \
+    --chain-length ${chainLength} \
+    --burn-in ${burnIn}  \
+    --out-freq ${outFreq} \
+    --out   ${outPath}/${outFile} 2>&1 | tee ${outPath}/${outFile}.log
+
+if false then;
+## homePath="/home/yangjianLab/liushouye/"
+homePath="/home/uqsliu28/"
+qsubshcom="${homePath}/softwares/qsubshcom/qsubshcom"
+## scriptPath="${homePath}/projects/annotation/sim/prediction/eqtlComparison/scripts"
+scriptPath="/scratch/90days/uqsliu28/projects/sbayesRC/ldAndMa/sim/out"
+logPath="${scriptPath}/log"
+mkdir -p ${logPath}
+
+scriptName="ldm-gctbsc-band.sh"
+chmod 751 ${scriptPath}/${scriptName}
+qsubName="${scriptName}"
+printLog="${logPath}/${qsubName}-$(date +"%Y-%m-%d-%I-%M-%p").log"
+tmp_cmd="${scriptPath}/${scriptName}  > ${printLog}"
+    ## $qsubshcom "$tmp_cmd" 1 60G  ${qsubName}  100:00:00 "-queue=intel-fat,amd-ep2"
+$qsubshcom "$tmp_cmd" 5 300G  ${qsubName}  100:00:00 "-queue=normal"
+
+fi
+#+end_src
+
+** Perform SbayesRC without annotation using low-rank LD matrix
+*** Do SBayesRC analysis
+#+begin_src bash
+################################################################
+####################### Script begins ##########################
+################################################################
+############################################################
+## runSBayesRC.r
+## Author: Shouye Liu <syliu.xue@foxmail.com>
+## Version: 1.0
+## Date: <2023-01-04 Wed>
+############################################################
+
+library(SBayesRC)
+library(optparse)
+library(tictoc)
+
+tic("Total time for sbayesRC")
+
+##############################################################
+#####         Step 1. Parameter setting option         #######
+##############################################################
+
+option_list = list(
+    make_option(c("--ldPath"), type="character", default=NULL,
+                help="set ld path", metavar="character"),
+    make_option(c("--outPath"), type="character", default=NULL,
+                help="set root path", metavar="character"),
+    make_option(c("--gwasFile"), type="character", default=NULL,
+                help="cojo ma format file", metavar="character"),
+    make_option(c("--threadNum"), action="store", default=10, type='numeric',
+                help="thread number"),
+    make_option(c("--useAnno"), action="store_true", default=TRUE,
+              help = "test the hol")
+
+)
+opt = parse_args(OptionParser(option_list=option_list))
+
+##############################################################
+########            Step 2. parameter setting         ########
+##############################################################
+# opt$gwasPath="/home/uqsliu28/90days/projects/sbayesRC/analysis/height/"
+# opt$ldPath="/home/uqsliu28/projects/sbayesRC/raw/ld/ukb_EUR_hm3/chr22/"
+# opt$outPath="//home/uqsliu28/90days/projects/annotation/real/debug/out/sbrc/"
+# opt$gwasFile = paste0(opt$gwasPath,"/chr22-chr-1-22-Height_UKB_HM3.ma_imp_nor2.ma")
+
+opt$OMP_NUM_THREADS=10
+opt$useAnno=FALSE
+
+mainPath = "/home/uqsliu28/projects/sbayesRC/raw/"
+# GWAS summary data in COJO text format (the only input needed)
+ma_file= opt$gwasFile
+# Output prefix, e.g. "./test"
+out_prefix= opt$outPath
+# LD reference path (download and unzip from Resources section)
+ld_folder= opt$ldPath
+# Functional annotation (download and unzip from Resources section)
+annot= paste0(mainPath,"/anno/","annot_baseline2.2_21.txt")
+# Number of threads to use for multi-thread
+system(paste0("export OMP_NUM_THREADS=",opt$threadNum))
+
+##############################################################
+########          Step 2. SBayesRC analysis           ########
+##############################################################
+
+
+ma_file_name = basename(ma_file)
+maTidyFile = paste0(out_prefix,"/", ma_file_name,"_tidy.ma")
+maImpFile =  paste0(out_prefix,"/",ma_file_name,"_imp.ma")
+maSbrFile = paste0(out_prefix,"/",ma_file_name,"_sbrc")
+
+
+tic("Tidy")
+print("Step 1. Tidy process")
+SBayesRC::tidy(ma_file, ld_folder, maTidyFile )
+toc()
+# Best practice: read the log from this step. If large portion of SNPs were tidied out, it could prompt some problems in your GWAS summary data.
+
+tic("Impute")
+print("Step 2. Impute process")
+print(paste0("LDPath: ",ld_folder))
+SBayesRC::impute(maTidyFile, ld_folder,maImpFile)
+toc()
+
+tic("SBayesRC")
+if(opt$useAnno){
+      print("Step 3. SBayesRC process ")
+      SBayesRC::sbayesrc(maImpFile, ld_folder,maSbrFile, fileAnnot=annot)
+} else {
+      print("Step 3. SBayesC process ")
+      SBayesRC::sbayesrc(maImpFile, ld_folder,maSbrFile,fileAnnot= "")
+}
+toc()
+
+toc()
+################################################################
+####################### Script endsmm ##########################
+################################################################
+#+end_src
+*** Run SBayesRC
+
+#+begin_src bash
+## Step 2. Set cluster parameters and submit the script into cluster
+## Step 1. Basic cluster setting
+## homePath="/home/yangjianLab/liushouye/"
+gwasPath="/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/sim/gcta/"
+ldPath="/home/uqsliu28/projects/sbayesRC/raw/ld/ukb_EUR_hm3/"
+outPath="/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/sim/out/sbayesrc/"
+
+OMP_NUM_THREADS=10
+useAnno=false
+
+homePath="/home/uqsliu28/"
+qsubshcom="${homePath}/softwares/qsubshcom/qsubshcom"
+## scriptPath="${homePath}/projects/annotation/sim/prediction/eqtlComparison/scripts"
+## for bunya 3
+## scriptPath="/home/uqsliu28/projects/sbayesRC/scripts"
+## for delta2
+scriptPath="/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/sim/out/sbayesrc"
+
+logPath="${scriptPath}/log"
+mkdir -p ${logPath}
+
+scriptName="runSBayesRC.r"
+chmod 751 ${scriptPath}/${scriptName}
+
+maFile="train-chr1-22-shuf-300000-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21.assoc.ci.assoc.linear.ma"
+maName=`basename $maFile`
+qsubName="${maName}-${scriptName}"
+printLog="${logPath}/${qsubName}-$(date +"%Y-%m-%d-%I-%M-%p").log"
+tmp_cmd="Rscript ${scriptPath}/${scriptName} --gwasFile ${gwasPath}/${maFile} --ldPath ${ldPath} --outPath ${outPath} --useAnno ${useAnno} --threadNum ${OMP_NUM_THREADS} > ${printLog}"
+
+## $qsubshcom "$tmp_cmd" 1 60G  ${qsubName}  100:00:00 "-queue=intel-fat,amd-ep2"
+$qsubshcom "$tmp_cmd" 1 250G  ${qsubName}  100:00:00 "-queue=normal"
+##################################################################
+##################################################################
 #+end_src

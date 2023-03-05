@@ -3,7 +3,7 @@
 "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
 <head>
-<!-- 2023-03-01 Wed 15:46 -->
+<!-- 2023-03-05 Sun 21:52 -->
 <meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Generate LD matrix and do single trait whole-genome simulation</title>
@@ -201,51 +201,68 @@
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents" role="doc-toc">
 <ul>
-<li><a href="#orgce0f9c8">1. Per LD block LD matrix</a>
+<li><a href="#org438dfcd">1. Per LD block LD matrix</a>
 <ul>
-<li><a href="#org325144e">1.1. Extract snplist from per ld block and generate HM3 data based on snpInfo</a></li>
-<li><a href="#org31fbacf">1.2. Generate LD matrix based on per-block-snplist</a></li>
+<li><a href="#orgfb08ac8">1.1. Extract snplist from per ld block and generate HM3 data based on snpInfo</a></li>
+<li><a href="#org2e3deb0">1.2. Generate LD matrix based on per-block-snplist</a></li>
 </ul>
 </li>
-<li><a href="#org2cea990">2. Simulation</a>
+<li><a href="#org144776f">2. Simulation</a>
 <ul>
-<li><a href="#org4254376">2.1. Testing dataset</a>
+<li><a href="#org558e3fa">2.1. Training and testing dataset</a>
 <ul>
-<li><a href="#org5ea9bcd">2.1.1. Select samples</a></li>
-<li><a href="#orgaaf44e6">2.1.2. Selecting a series of training datasets</a></li>
+<li><a href="#orgcb37c7f">2.1.1. Select samples</a></li>
+<li><a href="#org6a957a4">2.1.2. Selecting a series of training datasets</a></li>
 </ul>
 </li>
-<li><a href="#orge104089">2.2. Generating simulation</a></li>
+<li><a href="#org75a08e4">2.2. Generating single-trait-simulation</a></li>
+</ul>
+</li>
+<li><a href="#orgcb42669">3. Perform analysis</a>
+<ul>
+<li><a href="#org0145de4">3.1. Perform gctb-ldm-SbayesC using band LD matrix</a>
+<ul>
+<li><a href="#org2d8f4f0">3.1.1. Construct GWAS ma format</a></li>
+<li><a href="#org3610a7e">3.1.2. run gctb-ldm-SbayesC</a></li>
+</ul>
+</li>
+<li><a href="#org560e01a">3.2. Perform SbayesRC without annotation using low-rank LD matrix</a>
+<ul>
+<li><a href="#org15e28f0">3.2.1. Do SBayesRC analysis</a></li>
+<li><a href="#orge0919fb">3.2.2. Run SBayesRC</a></li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>
 </div>
 </div>
 
-<div id="outline-container-orgce0f9c8" class="outline-2">
-<h2 id="orgce0f9c8"><span class="section-number-2">1.</span> Per LD block LD matrix</h2>
+<div id="outline-container-org438dfcd" class="outline-2">
+<h2 id="org438dfcd"><span class="section-number-2">1.</span> Per LD block LD matrix</h2>
 <div class="outline-text-2" id="text-1">
 </div>
-<div id="outline-container-org325144e" class="outline-3">
-<h3 id="org325144e"><span class="section-number-3">1.1.</span> Extract snplist from per ld block and generate HM3 data based on snpInfo</h3>
+<div id="outline-container-orgfb08ac8" class="outline-3">
+<h3 id="orgfb08ac8"><span class="section-number-3">1.1.</span> Extract snplist from per ld block and generate HM3 data based on snpInfo</h3>
 <div class="outline-text-3" id="text-1-1">
 <div class="org-src-container">
 <pre class="src src-R"><span style="color: #a9a1e1;">library</span>(data.table)
-mainPath = <span style="color: #98be65;">"/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/ldblock/"</span>
-ldbinfoFileSuffix = <span style="color: #98be65;">"chr-1-22-ukbV3_eur_unrel_n20k_hm3.eigen.ldblock.info"</span>
-snpinfoFileSuffix = <span style="color: #98be65;">"chr-1-22-ukbV3_eur_unrel_n20k_hm3.eigen.ldblock.snp.info"</span>
-ldbinfo = fread( paste0(mainPath,ldbinfoFileSuffix))
-snpinfo = fread( paste0(mainPath,snpinfoFileSuffix))
-lbs = unique(ldbinfo$ldBlockID)
+mainPath = <span style="color: #98be65;">"/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/ldblockComm/"</span>
+rawDatPath = <span style="color: #98be65;">"/home/uqsliu28//projects/annotation//dataRaw/ukbGeno/"</span>
+ldbinfoFileSuffix = <span style="color: #98be65;">"chr1-22-ukbEURu_imp_v3_HM3_maf01.eigen.ldblock.info"</span>
+snpinfoFileSuffix = <span style="color: #98be65;">"chr1-22-ukbEURu_imp_v3_HM3_maf01.eigen.ldblock.snp.info"</span>
+ldbinfo = fread( paste0(rawDatPath,ldbinfoFileSuffix))
+snpinfo = fread( paste0(rawDatPath,snpinfoFileSuffix))
+lbs = unique(ldbinfo$LDBLOCK)
 <span style="color: #51afef;">for</span>(i <span style="color: #51afef;">in</span> lbs){
-  snps = ldbinfo[which(ldbinfo$ldBlockID == i),]
+  snps = ldbinfo[which(ldbinfo$LDBLOCK == i),]
   snpNumInLbs = unique(snps$NumSnpInLdBlock)
   snplist = snps$snpInLdBlock
-  outFile = paste0(mainPath,<span style="color: #98be65;">"/snplist/"</span>,<span style="color: #98be65;">"ukbV3_eur_unrel_n20k_hm3-ldm-block-"</span>,i,<span style="color: #98be65;">""</span>)
+  outFile = paste0(mainPath,<span style="color: #98be65;">"/snplist/"</span>,<span style="color: #98be65;">"chr1-22-ukbEURu_imp_v3_HM3_maf01-ldm-block-"</span>,i,<span style="color: #98be65;">".snplist"</span>)
   fwrite(data.frame(snplist),file = outFile,col.names = <span style="color: #ECBE7B;">FALSE</span>)
 }
 
-outFile = paste0(mainPath,<span style="color: #98be65;">"/snplist/"</span>,<span style="color: #98be65;">"ukbV3_eur_unrel_n20k_hm3.snplists"</span>)
+outFile = paste0(mainPath,<span style="color: #98be65;">"/snplist/"</span>,<span style="color: #98be65;">"chr1-22-ukbEURu_imp_v3_HM3_maf01"</span>)
 fwrite(data.frame(snpinfo$ID),file = outFile,col.names = <span style="color: #ECBE7B;">FALSE</span>)
 
 <span style="color: #5B6268;">## </span><span style="color: #5B6268;">## Use plink to extract HM3</span>
@@ -266,18 +283,19 @@ fwrite(data.frame(snpinfo$ID),file = outFile,col.names = <span style="color: #EC
 </div>
 </div>
 </div>
-<div id="outline-container-org31fbacf" class="outline-3">
-<h3 id="org31fbacf"><span class="section-number-3">1.2.</span> Generate LD matrix based on per-block-snplist</h3>
+<div id="outline-container-org2e3deb0" class="outline-3">
+<h3 id="org2e3deb0"><span class="section-number-3">1.2.</span> Generate LD matrix based on per-block-snplist</h3>
 <div class="outline-text-3" id="text-1-2">
 <div class="org-src-container">
-<pre class="src src-bash"><span style="color: #dcaeea;">gctb</span>=<span style="color: #98be65;">"/home/uqsliu28/softwares/sbayese/gctb-genesvd0215"</span>
+<pre class="src src-bash"><span style="color: #dcaeea;">gctb</span>=<span style="color: #98be65;">"/home/uqsliu28/softwares/gctb/gctb"</span>
 
-<span style="color: #dcaeea;">rawDatPath</span>=<span style="color: #98be65;">"/home/uqsliu28/90days/projects/annotation/real/debug/data/"</span>
-<span style="color: #dcaeea;">outPath</span>=<span style="color: #98be65;">"/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/ldblock"</span>
-<span style="color: #dcaeea;">snpinfo</span>=<span style="color: #98be65;">"ukbV3_eur_unrel_n20k_hm3-ldm-block-</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{TASK_ID}</span><span style="color: #98be65;">"</span>
+<span style="color: #dcaeea;">rawDatPath</span>=<span style="color: #98be65;">"/home/uqsliu28//projects/annotation//dataRaw/ukbGeno/"</span>
+<span style="color: #dcaeea;">outPath</span>=<span style="color: #98be65;">"/home/uqsliu28/90days/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/ldblockComm/"</span>
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">TASK_ID=1</span>
+<span style="color: #dcaeea;">snpinfo</span>=<span style="color: #98be65;">"chr1-22-ukbEURu_imp_v3_HM3_maf01-ldm-block-</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{TASK_ID}</span><span style="color: #98be65;">.snplist"</span>
 
-<span style="color: #dcaeea;">bfileSuffix</span>=<span style="color: #98be65;">"ukbV3_eur_unrel_n20k_hm3"</span>
-<span style="color: #dcaeea;">outFile</span>=<span style="color: #98be65;">"ukbV3_eur_unrel_n20k_hm3-ldm-block-</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{TASK_ID}</span><span style="color: #98be65;">.txt"</span>
+<span style="color: #dcaeea;">bfileSuffix</span>=<span style="color: #98be65;">"ukbEURu_imp_v3_HM3_maf01"</span>
+<span style="color: #dcaeea;">outFile</span>=<span style="color: #98be65;">"chr1-22-ukbEURu_imp_v3_HM3_maf01-ldm-block-</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{TASK_ID}</span><span style="color: #98be65;">"</span>
 
 $<span style="color: #51afef;">{</span><span style="color: #dcaeea;">gctb</span><span style="color: #51afef;">}</span> --bfile $<span style="color: #51afef;">{</span><span style="color: #dcaeea;">rawDatPath</span><span style="color: #51afef;">}</span>/$<span style="color: #51afef;">{</span><span style="color: #dcaeea;">bfileSuffix</span><span style="color: #51afef;">}</span> <span style="color: #98be65;">\</span>
     --make-full-ldm <span style="color: #98be65;">\</span>
@@ -289,10 +307,11 @@ $<span style="color: #51afef;">{</span><span style="color: #dcaeea;">gctb</span>
 <span style="color: #5B6268;">################################################################</span>
 <span style="color: #5B6268;">## </span><span style="color: #5B6268;">Step 1. Basic cluster setting</span>
 <span style="color: #5B6268;">## </span><span style="color: #5B6268;">homePath="/home/yangjianLab/liushouye/"</span>
+<span style="color: #51afef;">if </span><span style="color: #c678dd;">false</span>; <span style="color: #51afef;">then</span>
 <span style="color: #dcaeea;">homePath</span>=<span style="color: #98be65;">"/home/uqsliu28/"</span>
 <span style="color: #dcaeea;">qsubshcom</span>=<span style="color: #98be65;">"</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{homePath}</span><span style="color: #98be65;">/softwares/qsubshcom/qsubshcom"</span>
 <span style="color: #5B6268;">## </span><span style="color: #5B6268;">scriptPath="${homePath}/projects/annotation/sim/prediction/eqtlComparison/scripts"</span>
-<span style="color: #dcaeea;">scriptPath</span>=<span style="color: #98be65;">"/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/ldblock"</span>
+<span style="color: #dcaeea;">scriptPath</span>=<span style="color: #98be65;">"/scratch/90days/uqsliu28/projects/sbayesRC/ldAndMa/ldblockComm/ldm/"</span>
 <span style="color: #dcaeea;">logPath</span>=<span style="color: #98be65;">"</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{scriptPath}</span><span style="color: #98be65;">/log"</span>
 <span style="color: #ECBE7B;">mkdir</span> -p $<span style="color: #51afef;">{</span><span style="color: #dcaeea;">logPath</span><span style="color: #51afef;">}</span>
 
@@ -303,22 +322,25 @@ $<span style="color: #51afef;">{</span><span style="color: #dcaeea;">gctb</span>
 <span style="color: #dcaeea;">tmp_cmd</span>=<span style="color: #98be65;">"</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{scriptPath}</span><span style="color: #98be65;">/</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{scriptName}</span><span style="color: #98be65;">  &gt; </span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{printLog}</span><span style="color: #98be65;">"</span>
 <span style="color: #5B6268;">## </span><span style="color: #5B6268;">$qsubshcom "$tmp_cmd" 1 60G  ${qsubName}  100:00:00 "-queue=intel-fat,amd-ep2"</span>
 $<span style="color: #dcaeea;">qsubshcom</span> <span style="color: #98be65;">"</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">tmp_cmd</span><span style="color: #98be65;">"</span> <span style="color: #da8548; font-weight: bold;">1</span> 100G  $<span style="color: #51afef;">{</span><span style="color: #dcaeea;">qsubName</span><span style="color: #51afef;">}</span>  100:00:00 <span style="color: #98be65;">"-queue=normal -array=1-591"</span>
+
+<span style="color: #51afef;">fi</span>
+
 </pre>
 </div>
 </div>
 </div>
 </div>
 
-<div id="outline-container-org2cea990" class="outline-2">
-<h2 id="org2cea990"><span class="section-number-2">2.</span> Simulation</h2>
+<div id="outline-container-org144776f" class="outline-2">
+<h2 id="org144776f"><span class="section-number-2">2.</span> Simulation</h2>
 <div class="outline-text-2" id="text-2">
 </div>
-<div id="outline-container-org4254376" class="outline-3">
-<h3 id="org4254376"><span class="section-number-3">2.1.</span> Testing dataset</h3>
+<div id="outline-container-org558e3fa" class="outline-3">
+<h3 id="org558e3fa"><span class="section-number-3">2.1.</span> Training and testing dataset</h3>
 <div class="outline-text-3" id="text-2-1">
 </div>
-<div id="outline-container-org5ea9bcd" class="outline-4">
-<h4 id="org5ea9bcd"><span class="section-number-4">2.1.1.</span> Select samples</h4>
+<div id="outline-container-orgcb37c7f" class="outline-4">
+<h4 id="orgcb37c7f"><span class="section-number-4">2.1.1.</span> Select samples</h4>
 <div class="outline-text-4" id="text-2-1-1">
 <div class="org-src-container">
 <pre class="src src-bash"><span style="color: #c678dd;">options</span><span style="color: #51afef;">(</span><span style="color: #dcaeea;">scipen</span>=<span style="color: #da8548; font-weight: bold;">999</span><span style="color: #51afef;">)</span>
@@ -355,8 +377,8 @@ samsLeft &lt;- fam<span style="color: #51afef;">[</span>,c<span style="color: #c
 </div>
 </div>
 </div>
-<div id="outline-container-orgaaf44e6" class="outline-4">
-<h4 id="orgaaf44e6"><span class="section-number-4">2.1.2.</span> Selecting a series of training datasets</h4>
+<div id="outline-container-org6a957a4" class="outline-4">
+<h4 id="org6a957a4"><span class="section-number-4">2.1.2.</span> Selecting a series of training datasets</h4>
 <div class="outline-text-4" id="text-2-1-2">
 <div class="org-src-container">
 <pre class="src src-bash"><span style="color: #5B6268;">####################################################################</span>
@@ -427,8 +449,8 @@ $<span style="color: #dcaeea;">qsubshcom</span> <span style="color: #98be65;">"<
 </div>
 </div>
 </div>
-<div id="outline-container-orge104089" class="outline-3">
-<h3 id="orge104089"><span class="section-number-3">2.2.</span> Generating simulation</h3>
+<div id="outline-container-org75a08e4" class="outline-3">
+<h3 id="org75a08e4"><span class="section-number-3">2.2.</span> Generating single-trait-simulation</h3>
 <div class="outline-text-3" id="text-2-2">
 <div class="org-src-container">
 <pre class="src src-R"><span style="color: #5B6268;">####################################################################</span>
@@ -443,7 +465,7 @@ gcta64 = <span style="color: #98be65;">"/home/uqsliu28/softwares/gcta/gcta64"</s
 plink19 = <span style="color: #98be65;">"/home/uqsliu28/softwares/plink/plink19"</span>
 
 rawDataPath <span style="color: #a9a1e1;">&lt;-</span> paste0( <span style="color: #98be65;">"/scratch/90days/uqsliu28/projects/sbayesRC/ldAndMa/sim/data/"</span>)
-outPath = <span style="color: #98be65;">"/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/sim/gcta/"</span>
+outPath = <span style="color: #98be65;">"/scratch/90days/uqsliu28/projects/sbayesRC/ldAndMa/sim/gcta/"</span>
 
 rawBimFileSuffix <span style="color: #a9a1e1;">&lt;-</span> paste0(<span style="color: #98be65;">"train-chr1-22-shuf-300000-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21"</span> )
 rawBimFile <span style="color: #a9a1e1;">&lt;-</span> paste0(rawDataPath,rawBimFileSuffix,<span style="color: #98be65;">".bim"</span>)
@@ -471,17 +493,309 @@ gctaMlm <span style="color: #a9a1e1;">&lt;-</span> paste0(gcta64,<span style="co
                   )
 system(gctaMlm)
 
-<span style="color: #5B6268;">## </span><span style="color: #5B6268;">Step 3. extract summary data</span>
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">Step 3. Calculate allele frequency</span>
+plinkFreq <span style="color: #a9a1e1;">&lt;-</span> paste0(plink19,<span style="color: #98be65;">" --bfile "</span>,rawDataPath,rawBimFileSuffix,
+                    <span style="color: #98be65;">" --freq "</span>,
+                    <span style="color: #98be65;">" --out "</span>, rawDataPath,rawBimFileSuffix
+                    )
+
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">Step 4. extract summary data</span>
 plinkGWAS <span style="color: #a9a1e1;">&lt;-</span> paste0(plink19,<span style="color: #98be65;">" --bfile "</span>,rawDataPath,rawBimFileSuffix,
                     <span style="color: #98be65;">" --pheno "</span>, outPath, rawBimFileSuffix, <span style="color: #98be65;">".sim.phen"</span>,
                     <span style="color: #98be65;">" --linear "</span>,
+                    <span style="color: #98be65;">" --ci 0.95 "</span>,
                     <span style="color: #98be65;">" --out "</span>, outPath, rawBimFileSuffix, <span style="color: #98be65;">".assoc"</span>
                     )
 
 <span style="color: #5B6268;">## </span><span style="color: #5B6268;">run gwas function</span>
 system(plinkGWAS)
-
 </pre>
+</div>
+</div>
+</div>
+</div>
+<div id="outline-container-orgcb42669" class="outline-2">
+<h2 id="orgcb42669"><span class="section-number-2">3.</span> Perform analysis</h2>
+<div class="outline-text-2" id="text-3">
+</div>
+<div id="outline-container-org0145de4" class="outline-3">
+<h3 id="org0145de4"><span class="section-number-3">3.1.</span> Perform gctb-ldm-SbayesC using band LD matrix</h3>
+<div class="outline-text-3" id="text-3-1">
+</div>
+<div id="outline-container-org2d8f4f0" class="outline-4">
+<h4 id="org2d8f4f0"><span class="section-number-4">3.1.1.</span> Construct GWAS ma format</h4>
+<div class="outline-text-4" id="text-3-1-1">
+<div class="org-src-container">
+<pre class="src src-R"><span style="color: #a9a1e1;">library</span>(data.table)
+<span style="color: #5B6268;">#############################################</span>
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">Change chromosome into ld block id</span>
+<span style="color: #5B6268;">#############################################</span>
+mainPath = <span style="color: #98be65;">"/scratch/90days/uqsliu28/projects/sbayesRC/ldAndMa/ldblock/ldm/"</span>
+<span style="color: #51afef;">for</span>(i <span style="color: #51afef;">in</span> <span style="color: #da8548; font-weight: bold;">1</span>:<span style="color: #da8548; font-weight: bold;">591</span>){
+  ldmInfoFile = paste0(mainPath,<span style="color: #98be65;">"ukbV3_eur_unrel_n20k_hm3-ldm-block-"</span>,i,<span style="color: #98be65;">".txt.ldm.full.info"</span>)
+  system(paste0(<span style="color: #98be65;">"cp "</span>, ldmInfoFile, <span style="color: #98be65;">" "</span>, ldmInfoFile, <span style="color: #98be65;">".bak"</span>))
+  ldmInfo = fread(ldmInfoFile,header = <span style="color: #ECBE7B;">TRUE</span>)
+  <span style="color: #5B6268;">## </span><span style="color: #5B6268;">fwrite(ldmInfo,file = paste0(ldmInfoFile,".bak"),sep = "\t")</span>
+  <span style="color: #5B6268;">## </span><span style="color: #5B6268;">Chnange chromosome into ld block id</span>
+  ldmInfo$Chrom = i
+  fwrite(ldmInfo,file = paste0(ldmInfoFile), sep = <span style="color: #98be65;">"\t"</span>)
+}
+<span style="color: #5B6268;">#############################################</span>
+<span style="color: #5B6268;">#### </span><span style="color: #5B6268;">Convert plink result into ma format</span>
+<span style="color: #5B6268;">#############################################</span>
+<span style="color: #5B6268;">###</span>
+rawDatPath <span style="color: #a9a1e1;">&lt;-</span> paste0( <span style="color: #98be65;">"/scratch/90days/uqsliu28/projects/sbayesRC/ldAndMa/sim/data/"</span>)
+outPath = <span style="color: #98be65;">"/scratch/90days/uqsliu28/projects/sbayesRC/ldAndMa/sim/gcta/"</span>
+
+rawFrqFile <span style="color: #a9a1e1;">&lt;-</span> paste0(rawDatPath,<span style="color: #98be65;">"train-chr1-22-shuf-300000-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21.frq"</span> )
+freq =fread(rawFrqFile)
+
+assocFile=paste0(outPath,<span style="color: #98be65;">"train-chr1-22-shuf-300000-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21.assoc.ci.assoc.linear"</span> )
+assoc = fread(assocFile)
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">find common snp</span>
+
+com_snp = intersect(assoc$SNP, freq$SNP)
+<span style="color: #a9a1e1;">message</span>(length(com_snp), <span style="color: #98be65;">" SNPs in common with LD information"</span>)
+
+idx1 = match(com_snp, assoc$SNP)
+assocCom = assoc[idx1]
+
+idx2 = match(com_snp, freq$SNP)
+freqCom = freq[idx2]
+
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">check allele flip</span>
+bA1A1 = (freqCom$A1 == assocCom$A1)
+bA1A2 = (assocCom$A1 ==  freqCom$A2 )
+bAll = bA1A1 | bA1A2
+<span style="color: #a9a1e1;">message</span>(sum(bAll), <span style="color: #98be65;">" SNPs have consistent alleles (A1, A2) between the summary data and freq file"</span>)
+
+assocCom[, FRQ_ref:=freq$MAF] <span style="color: #5B6268;">## </span><span style="color: #5B6268;">add new column</span>
+assocCom[, A1_ref:=freq$A1] <span style="color: #5B6268;">## </span><span style="color: #5B6268;">add A1</span>
+assocCom[, A2_ref:=freq$A2] <span style="color: #5B6268;">## </span><span style="color: #5B6268;">add A2</span>
+assocCom[, A2:=freq$A2] <span style="color: #5B6268;">## </span><span style="color: #5B6268;">add A2</span>
+
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">flip allele frequency</span>
+assocCom[bA1A2,A2:= A1_ref]
+assocCom[bA1A2, FRQ_ref:=<span style="color: #da8548; font-weight: bold;">1</span>-FRQ_ref]
+<span style="color: #a9a1e1;">message</span>(sum(bA1A2), <span style="color: #98be65;">" SNPs flipped alleles. and use allele frequency from freq file"</span>)
+
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">assocCombine =  merge(bim, assoc, by=c("CHR","SNP","BP","A1"),all = FALSE)</span>
+maCols = c(<span style="color: #98be65;">"SNP"</span>, <span style="color: #98be65;">"A1"</span>, <span style="color: #98be65;">"A2"</span>,   <span style="color: #98be65;">"FRQ_ref"</span>,  <span style="color: #98be65;">"BETA"</span>, <span style="color: #98be65;">"SE"</span>,  <span style="color: #98be65;">"P"</span>,  <span style="color: #98be65;">"NMISS"</span>)
+maHeader = c(<span style="color: #98be65;">"SNP"</span>, <span style="color: #98be65;">"A1"</span>, <span style="color: #98be65;">"A2"</span>,   <span style="color: #98be65;">"freq"</span>,  <span style="color: #98be65;">"b"</span>, <span style="color: #98be65;">"se"</span>,  <span style="color: #98be65;">"p"</span>,  <span style="color: #98be65;">"N"</span>)
+maDat = assocCom[,..maCols]
+names(maDat) <span style="color: #a9a1e1;">&lt;-</span> maHeader
+
+fwrite(maDat,file = paste0(assocFile,<span style="color: #98be65;">".ma"</span>),sep = <span style="color: #98be65;">"\t"</span>)
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-org3610a7e" class="outline-4">
+<h4 id="org3610a7e"><span class="section-number-4">3.1.2.</span> run gctb-ldm-SbayesC</h4>
+<div class="outline-text-4" id="text-3-1-2">
+</div>
+<ol class="org-ol">
+<li><a id="orge10cfb7"></a>Using band LD matrix<br />
+<div class="outline-text-5" id="text-3-1-2-1">
+<div class="org-src-container">
+<pre class="src src-bash"><span style="color: #dcaeea;">homePath</span>=<span style="color: #98be65;">"/home/uqsliu28/"</span>
+<span style="color: #dcaeea;">gctb</span>=<span style="color: #98be65;">"/home/uqsliu28/softwares/gctb/gctb"</span>
+<span style="color: #dcaeea;">outPath</span>=<span style="color: #98be65;">"/scratch/90days/uqsliu28/projects/sbayesRC/ldAndMa/sim/out/"</span>
+<span style="color: #dcaeea;">maPath</span>=<span style="color: #98be65;">"/scratch/90days/uqsliu28/projects/sbayesRC/ldAndMa/sim/gcta/"</span>
+<span style="color: #5B6268;">#</span><span style="color: #5B6268;">TASK_ID=22</span>
+<span style="color: #dcaeea;">ldPath</span>=<span style="color: #98be65;">"/scratch/90days/uqsliu28/projects/sbayesRC/ldAndMa/ldblock.bak/ldm/"</span>
+<span style="color: #dcaeea;">gwasPath</span>=<span style="color: #98be65;">"/scratch/90days/uqsliu28/projects/sbayesRC/ldAndMa/sim/gcta/"</span>
+<span style="color: #dcaeea;">gwasFile</span>=<span style="color: #98be65;">"train-chr1-22-shuf-300000-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21.assoc.ci.assoc.linear.ma"</span>
+<span style="color: #dcaeea;">mldmPath</span>=<span style="color: #98be65;">"/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/bandLdm/band_ukb_10k_hm3/"</span>
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">download from https://cnsgenomics.com/data/GCTB/band_ukb_10k_hm3.zip</span>
+<span style="color: #dcaeea;">mergeFile</span>=<span style="color: #98be65;">"multi_band_ukb_hm3.txt"</span>
+
+<span style="color: #dcaeea;">outFile</span>=<span style="color: #98be65;">"lbs-1-591-</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{gwasFile}</span><span style="color: #98be65;">"</span>
+<span style="color: #dcaeea;">chainLength</span>=<span style="color: #da8548; font-weight: bold;">50000</span>
+<span style="color: #dcaeea;">burnIn</span>=<span style="color: #da8548; font-weight: bold;">3000</span>
+<span style="color: #dcaeea;">outFreq</span>=<span style="color: #da8548; font-weight: bold;">1000</span>
+
+$<span style="color: #51afef;">{</span><span style="color: #dcaeea;">gctb</span><span style="color: #51afef;">}</span> --sbayes C  <span style="color: #98be65;">\</span>
+    --mldm $<span style="color: #51afef;">{</span><span style="color: #dcaeea;">mldmPath</span><span style="color: #51afef;">}</span>/$<span style="color: #51afef;">{</span><span style="color: #dcaeea;">mergeFile</span><span style="color: #51afef;">}</span> <span style="color: #98be65;">\</span>
+    --gwas-summary $<span style="color: #51afef;">{</span><span style="color: #dcaeea;">gwasPath</span><span style="color: #51afef;">}</span>/$<span style="color: #51afef;">{</span><span style="color: #dcaeea;">gwasFile</span><span style="color: #51afef;">}</span> <span style="color: #98be65;">\</span>
+    --chain-length $<span style="color: #51afef;">{</span><span style="color: #dcaeea;">chainLength</span><span style="color: #51afef;">}</span> <span style="color: #98be65;">\</span>
+    --burn-in $<span style="color: #51afef;">{</span><span style="color: #dcaeea;">burnIn</span><span style="color: #51afef;">}</span>  <span style="color: #98be65;">\</span>
+    --out-freq $<span style="color: #51afef;">{</span><span style="color: #dcaeea;">outFreq</span><span style="color: #51afef;">}</span> <span style="color: #98be65;">\</span>
+    --out   $<span style="color: #51afef;">{</span><span style="color: #dcaeea;">outPath</span><span style="color: #51afef;">}</span>/$<span style="color: #51afef;">{</span><span style="color: #dcaeea;">outFile</span><span style="color: #51afef;">}</span> <span style="color: #da8548; font-weight: bold;">2</span>&gt;&amp;<span style="color: #da8548; font-weight: bold;">1</span> | tee $<span style="color: #51afef;">{</span><span style="color: #dcaeea;">outPath</span><span style="color: #51afef;">}</span>/$<span style="color: #51afef;">{</span><span style="color: #dcaeea;">outFile</span><span style="color: #51afef;">}</span>.log
+
+<span style="color: #51afef;">if </span><span style="color: #c678dd;">false</span> then;
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">homePath="/home/yangjianLab/liushouye/"</span>
+<span style="color: #dcaeea;">homePath</span>=<span style="color: #98be65;">"/home/uqsliu28/"</span>
+<span style="color: #dcaeea;">qsubshcom</span>=<span style="color: #98be65;">"</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{homePath}</span><span style="color: #98be65;">/softwares/qsubshcom/qsubshcom"</span>
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">scriptPath="${homePath}/projects/annotation/sim/prediction/eqtlComparison/scripts"</span>
+<span style="color: #dcaeea;">scriptPath</span>=<span style="color: #98be65;">"/scratch/90days/uqsliu28/projects/sbayesRC/ldAndMa/sim/out"</span>
+<span style="color: #dcaeea;">logPath</span>=<span style="color: #98be65;">"</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{scriptPath}</span><span style="color: #98be65;">/log"</span>
+<span style="color: #ECBE7B;">mkdir</span> -p $<span style="color: #51afef;">{</span><span style="color: #dcaeea;">logPath</span><span style="color: #51afef;">}</span>
+
+<span style="color: #dcaeea;">scriptName</span>=<span style="color: #98be65;">"ldm-gctbsc-band.sh"</span>
+<span style="color: #ECBE7B;">chmod</span> <span style="color: #da8548; font-weight: bold;">751</span> $<span style="color: #51afef;">{</span><span style="color: #dcaeea;">scriptPath</span><span style="color: #51afef;">}</span>/$<span style="color: #51afef;">{</span><span style="color: #dcaeea;">scriptName</span><span style="color: #51afef;">}</span>
+<span style="color: #dcaeea;">qsubName</span>=<span style="color: #98be65;">"</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{scriptName}</span><span style="color: #98be65;">"</span>
+<span style="color: #dcaeea;">printLog</span>=<span style="color: #98be65;">"</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{logPath}</span><span style="color: #98be65;">/</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{qsubName}</span><span style="color: #98be65;">-</span><span style="color: #51afef; font-weight: bold;">$(</span><span style="color: #51afef; font-weight: bold;">date</span><span style="color: #51afef; font-weight: bold;"> +"%Y-%m-%d-%I-%M-%p")</span><span style="color: #98be65;">.log"</span>
+<span style="color: #dcaeea;">tmp_cmd</span>=<span style="color: #98be65;">"</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{scriptPath}</span><span style="color: #98be65;">/</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{scriptName}</span><span style="color: #98be65;">  &gt; </span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{printLog}</span><span style="color: #98be65;">"</span>
+    <span style="color: #5B6268;">## </span><span style="color: #5B6268;">$qsubshcom "$tmp_cmd" 1 60G  ${qsubName}  100:00:00 "-queue=intel-fat,amd-ep2"</span>
+$<span style="color: #dcaeea;">qsubshcom</span> <span style="color: #98be65;">"</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">tmp_cmd</span><span style="color: #98be65;">"</span> <span style="color: #da8548; font-weight: bold;">5</span> 300G  $<span style="color: #51afef;">{</span><span style="color: #dcaeea;">qsubName</span><span style="color: #51afef;">}</span>  100:00:00 <span style="color: #98be65;">"-queue=normal"</span>
+
+<span style="color: #51afef;">fi</span>
+</pre>
+</div>
+</div>
+</li>
+</ol>
+</div>
+</div>
+
+<div id="outline-container-org560e01a" class="outline-3">
+<h3 id="org560e01a"><span class="section-number-3">3.2.</span> Perform SbayesRC without annotation using low-rank LD matrix</h3>
+<div class="outline-text-3" id="text-3-2">
+</div>
+<div id="outline-container-org15e28f0" class="outline-4">
+<h4 id="org15e28f0"><span class="section-number-4">3.2.1.</span> Do SBayesRC analysis</h4>
+<div class="outline-text-4" id="text-3-2-1">
+<div class="org-src-container">
+<pre class="src src-bash"><span style="color: #5B6268;">################################################################</span>
+<span style="color: #5B6268;">####################### </span><span style="color: #5B6268;">Script begins ##########################</span>
+<span style="color: #5B6268;">################################################################</span>
+<span style="color: #5B6268;">############################################################</span>
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">runSBayesRC.r</span>
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">Author: Shouye Liu <a href="mailto:syliu.xue%40foxmail.com">&lt;syliu.xue@foxmail.com&gt;</a></span>
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">Version: 1.0</span>
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">Date: &lt;2023-01-04 Wed&gt;</span>
+<span style="color: #5B6268;">############################################################</span>
+
+<span style="color: #c678dd;">library</span><span style="color: #51afef;">(</span>SBayesRC<span style="color: #51afef;">)</span>
+<span style="color: #c678dd;">library</span><span style="color: #51afef;">(</span>optparse<span style="color: #51afef;">)</span>
+<span style="color: #c678dd;">library</span><span style="color: #51afef;">(</span>tictoc<span style="color: #51afef;">)</span>
+
+<span style="color: #c678dd;">tic</span><span style="color: #51afef;">(</span><span style="color: #98be65;">"Total time for sbayesRC"</span><span style="color: #51afef;">)</span>
+
+<span style="color: #5B6268;">##############################################################</span>
+<span style="color: #5B6268;">#####         </span><span style="color: #5B6268;">Step 1. Parameter setting option         #######</span>
+<span style="color: #5B6268;">##############################################################</span>
+
+<span style="color: #dcaeea;">option_list</span> = list<span style="color: #51afef;">(</span>
+    make_option<span style="color: #c678dd;">(</span>c<span style="color: #98be65;">(</span><span style="color: #98be65;">"--ldPath"</span><span style="color: #98be65;">)</span>, <span style="color: #dcaeea;">type</span>=<span style="color: #98be65;">"character"</span>, <span style="color: #dcaeea;">default</span>=NULL,
+                <span style="color: #dcaeea;">help</span>=<span style="color: #98be65;">"set ld path"</span>, <span style="color: #dcaeea;">metavar</span>=<span style="color: #98be65;">"character"</span><span style="color: #c678dd;">)</span>,
+    make_option<span style="color: #c678dd;">(</span>c<span style="color: #98be65;">(</span><span style="color: #98be65;">"--outPath"</span><span style="color: #98be65;">)</span>, <span style="color: #dcaeea;">type</span>=<span style="color: #98be65;">"character"</span>, <span style="color: #dcaeea;">default</span>=NULL,
+                <span style="color: #dcaeea;">help</span>=<span style="color: #98be65;">"set root path"</span>, <span style="color: #dcaeea;">metavar</span>=<span style="color: #98be65;">"character"</span><span style="color: #c678dd;">)</span>,
+    make_option<span style="color: #c678dd;">(</span>c<span style="color: #98be65;">(</span><span style="color: #98be65;">"--gwasFile"</span><span style="color: #98be65;">)</span>, <span style="color: #dcaeea;">type</span>=<span style="color: #98be65;">"character"</span>, <span style="color: #dcaeea;">default</span>=NULL,
+                <span style="color: #dcaeea;">help</span>=<span style="color: #98be65;">"cojo ma format file"</span>, <span style="color: #dcaeea;">metavar</span>=<span style="color: #98be65;">"character"</span><span style="color: #c678dd;">)</span>,
+    make_option<span style="color: #c678dd;">(</span>c<span style="color: #98be65;">(</span><span style="color: #98be65;">"--threadNum"</span><span style="color: #98be65;">)</span>, <span style="color: #dcaeea;">action</span>=<span style="color: #98be65;">"store"</span>, <span style="color: #dcaeea;">default</span>=10, <span style="color: #dcaeea;">type</span>=<span style="color: #98be65;">'numeric'</span>,
+                <span style="color: #dcaeea;">help</span>=<span style="color: #98be65;">"thread number"</span><span style="color: #c678dd;">)</span>,
+    make_option<span style="color: #c678dd;">(</span>c<span style="color: #98be65;">(</span><span style="color: #98be65;">"--useAnno"</span><span style="color: #98be65;">)</span>, <span style="color: #dcaeea;">action</span>=<span style="color: #98be65;">"store_true"</span>, <span style="color: #dcaeea;">default</span>=TRUE,
+              <span style="color: #dcaeea;">help</span> = <span style="color: #98be65;">"test the hol"</span><span style="color: #c678dd;">)</span>
+
+<span style="color: #51afef;">)</span>
+<span style="color: #dcaeea;">opt</span> = parse_args<span style="color: #51afef;">(</span>OptionParser<span style="color: #c678dd;">(</span><span style="color: #dcaeea;">option_list</span>=option_list<span style="color: #c678dd;">)</span><span style="color: #51afef;">)</span>
+
+<span style="color: #5B6268;">##############################################################</span>
+<span style="color: #5B6268;">########            </span><span style="color: #5B6268;">Step 2. parameter setting         ########</span>
+<span style="color: #5B6268;">##############################################################</span>
+<span style="color: #5B6268;"># </span><span style="color: #5B6268;">opt$gwasPath="/home/uqsliu28/90days/projects/sbayesRC/analysis/height/"</span>
+<span style="color: #5B6268;"># </span><span style="color: #5B6268;">opt$ldPath="/home/uqsliu28/projects/sbayesRC/raw/ld/ukb_EUR_hm3/chr22/"</span>
+<span style="color: #5B6268;"># </span><span style="color: #5B6268;">opt$outPath="//home/uqsliu28/90days/projects/annotation/real/debug/out/sbrc/"</span>
+<span style="color: #5B6268;"># </span><span style="color: #5B6268;">opt$gwasFile = paste0(opt$gwasPath,"/chr22-chr-1-22-Height_UKB_HM3.ma_imp_nor2.ma")</span>
+
+opt$<span style="color: #dcaeea;">OMP_NUM_THREADS</span>=<span style="color: #da8548; font-weight: bold;">10</span>
+opt$<span style="color: #dcaeea;">useAnno</span>=FALSE
+
+<span style="color: #dcaeea;">mainPath</span> = <span style="color: #98be65;">"/home/uqsliu28/projects/sbayesRC/raw/"</span>
+<span style="color: #5B6268;"># </span><span style="color: #5B6268;">GWAS summary data in COJO text format (the only input needed)</span>
+<span style="color: #dcaeea;">ma_file</span>= opt$<span style="color: #dcaeea;">gwasFile</span>
+<span style="color: #5B6268;"># </span><span style="color: #5B6268;">Output prefix, e.g. "./test"</span>
+<span style="color: #dcaeea;">out_prefix</span>= opt$<span style="color: #dcaeea;">outPath</span>
+<span style="color: #5B6268;"># </span><span style="color: #5B6268;">LD reference path (download and unzip from Resources section)</span>
+<span style="color: #dcaeea;">ld_folder</span>= opt$<span style="color: #dcaeea;">ldPath</span>
+<span style="color: #5B6268;"># </span><span style="color: #5B6268;">Functional annotation (download and unzip from Resources section)</span>
+<span style="color: #dcaeea;">annot</span>= paste0<span style="color: #51afef;">(</span>mainPath,<span style="color: #98be65;">"/anno/"</span>,<span style="color: #98be65;">"annot_baseline2.2_21.txt"</span><span style="color: #51afef;">)</span>
+<span style="color: #5B6268;"># </span><span style="color: #5B6268;">Number of threads to use for multi-thread</span>
+<span style="color: #c678dd;">system</span><span style="color: #51afef;">(</span>paste0<span style="color: #c678dd;">(</span><span style="color: #98be65;">"export OMP_NUM_THREADS="</span>,opt$<span style="color: #dcaeea;">threadNum</span><span style="color: #c678dd;">)</span><span style="color: #51afef;">)</span>
+
+<span style="color: #5B6268;">##############################################################</span>
+<span style="color: #5B6268;">########          </span><span style="color: #5B6268;">Step 2. SBayesRC analysis           ########</span>
+<span style="color: #5B6268;">##############################################################</span>
+
+
+<span style="color: #dcaeea;">ma_file_name</span> = basename<span style="color: #51afef;">(</span>ma_file<span style="color: #51afef;">)</span>
+<span style="color: #dcaeea;">maTidyFile</span> = paste0<span style="color: #51afef;">(</span>out_prefix,<span style="color: #98be65;">"/"</span>, ma_file_name,<span style="color: #98be65;">"_tidy.ma"</span><span style="color: #51afef;">)</span>
+<span style="color: #dcaeea;">maImpFile</span> =  paste0<span style="color: #51afef;">(</span>out_prefix,<span style="color: #98be65;">"/"</span>,ma_file_name,<span style="color: #98be65;">"_imp.ma"</span><span style="color: #51afef;">)</span>
+<span style="color: #dcaeea;">maSbrFile</span> = paste0<span style="color: #51afef;">(</span>out_prefix,<span style="color: #98be65;">"/"</span>,ma_file_name,<span style="color: #98be65;">"_sbrc"</span><span style="color: #51afef;">)</span>
+
+
+<span style="color: #c678dd;">tic</span><span style="color: #51afef;">(</span><span style="color: #98be65;">"Tidy"</span><span style="color: #51afef;">)</span>
+<span style="color: #c678dd;">print</span><span style="color: #51afef;">(</span><span style="color: #98be65;">"Step 1. Tidy process"</span><span style="color: #51afef;">)</span>
+SBayesRC::tidy<span style="color: #51afef;">(</span>ma_file, ld_folder, maTidyFile <span style="color: #51afef;">)</span>
+<span style="color: #c678dd;">toc</span><span style="color: #51afef;">()</span>
+<span style="color: #5B6268;"># </span><span style="color: #5B6268;">Best practice: read the log from this step. If large portion of SNPs were tidied out, it could prompt some problems in your GWAS summary data.</span>
+
+<span style="color: #c678dd;">tic</span><span style="color: #51afef;">(</span><span style="color: #98be65;">"Impute"</span><span style="color: #51afef;">)</span>
+<span style="color: #c678dd;">print</span><span style="color: #51afef;">(</span><span style="color: #98be65;">"Step 2. Impute process"</span><span style="color: #51afef;">)</span>
+<span style="color: #c678dd;">print</span><span style="color: #51afef;">(</span>paste0<span style="color: #c678dd;">(</span><span style="color: #98be65;">"LDPath: "</span>,ld_folder<span style="color: #c678dd;">)</span><span style="color: #51afef;">)</span>
+SBayesRC::impute<span style="color: #51afef;">(</span>maTidyFile, ld_folder,maImpFile<span style="color: #51afef;">)</span>
+<span style="color: #c678dd;">toc</span><span style="color: #51afef;">()</span>
+
+<span style="color: #c678dd;">tic</span><span style="color: #51afef;">(</span><span style="color: #98be65;">"SBayesRC"</span><span style="color: #51afef;">)</span>
+<span style="color: #51afef;">if</span><span style="color: #51afef;">(</span>opt$<span style="color: #dcaeea;">useAnno</span><span style="color: #51afef;">){</span>
+      <span style="color: #c678dd;">print</span><span style="color: #c678dd;">(</span><span style="color: #98be65;">"Step 3. SBayesRC process "</span><span style="color: #c678dd;">)</span>
+      SBayesRC::sbayesrc<span style="color: #c678dd;">(</span>maImpFile, ld_folder,maSbrFile, <span style="color: #dcaeea;">fileAnnot</span>=annot<span style="color: #c678dd;">)</span>
+<span style="color: #51afef;">}</span> <span style="color: #51afef;">else</span> <span style="color: #51afef;">{</span>
+      <span style="color: #c678dd;">print</span><span style="color: #c678dd;">(</span><span style="color: #98be65;">"Step 3. SBayesC process "</span><span style="color: #c678dd;">)</span>
+      SBayesRC::sbayesrc<span style="color: #c678dd;">(</span>maImpFile, ld_folder,maSbrFile,<span style="color: #dcaeea;">fileAnnot</span>= <span style="color: #98be65;">""</span><span style="color: #c678dd;">)</span>
+<span style="color: #51afef;">}</span>
+<span style="color: #c678dd;">toc</span><span style="color: #51afef;">()</span>
+
+<span style="color: #c678dd;">toc</span><span style="color: #51afef;">()</span>
+<span style="color: #5B6268;">################################################################</span>
+<span style="color: #5B6268;">####################### </span><span style="color: #5B6268;">Script endsmm ##########################</span>
+<span style="color: #5B6268;">################################################################</span>
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-orge0919fb" class="outline-4">
+<h4 id="orge0919fb"><span class="section-number-4">3.2.2.</span> Run SBayesRC</h4>
+<div class="outline-text-4" id="text-3-2-2">
+<div class="org-src-container">
+<pre class="src src-bash"><span style="color: #5B6268;">## </span><span style="color: #5B6268;">Step 2. Set cluster parameters and submit the script into cluster</span>
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">Step 1. Basic cluster setting</span>
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">homePath="/home/yangjianLab/liushouye/"</span>
+<span style="color: #dcaeea;">gwasPath</span>=<span style="color: #98be65;">"/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/sim/gcta/"</span>
+<span style="color: #dcaeea;">ldPath</span>=<span style="color: #98be65;">"/home/uqsliu28/projects/sbayesRC/raw/ld/ukb_EUR_hm3/"</span>
+<span style="color: #dcaeea;">outPath</span>=<span style="color: #98be65;">"/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/sim/out/sbayesrc/"</span>
+
+<span style="color: #dcaeea;">OMP_NUM_THREADS</span>=<span style="color: #da8548; font-weight: bold;">10</span>
+<span style="color: #dcaeea;">useAnno</span>=false
+
+<span style="color: #dcaeea;">homePath</span>=<span style="color: #98be65;">"/home/uqsliu28/"</span>
+<span style="color: #dcaeea;">qsubshcom</span>=<span style="color: #98be65;">"</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{homePath}</span><span style="color: #98be65;">/softwares/qsubshcom/qsubshcom"</span>
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">scriptPath="${homePath}/projects/annotation/sim/prediction/eqtlComparison/scripts"</span>
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">for bunya 3</span>
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">scriptPath="/home/uqsliu28/projects/sbayesRC/scripts"</span>
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">for delta2</span>
+<span style="color: #dcaeea;">scriptPath</span>=<span style="color: #98be65;">"/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/sim/out/sbayesrc"</span>
+
+<span style="color: #dcaeea;">logPath</span>=<span style="color: #98be65;">"</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{scriptPath}</span><span style="color: #98be65;">/log"</span>
+<span style="color: #ECBE7B;">mkdir</span> -p $<span style="color: #51afef;">{</span><span style="color: #dcaeea;">logPath</span><span style="color: #51afef;">}</span>
+
+<span style="color: #dcaeea;">scriptName</span>=<span style="color: #98be65;">"runSBayesRC.r"</span>
+<span style="color: #ECBE7B;">chmod</span> <span style="color: #da8548; font-weight: bold;">751</span> $<span style="color: #51afef;">{</span><span style="color: #dcaeea;">scriptPath</span><span style="color: #51afef;">}</span>/$<span style="color: #51afef;">{</span><span style="color: #dcaeea;">scriptName</span><span style="color: #51afef;">}</span>
+
+<span style="color: #dcaeea;">maFile</span>=<span style="color: #98be65;">"train-chr1-22-shuf-300000-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21.assoc.ci.assoc.linear.ma"</span>
+<span style="color: #dcaeea;">maName</span>=<span style="color: #51afef; font-weight: bold;">`basename $maFile`</span>
+<span style="color: #dcaeea;">qsubName</span>=<span style="color: #98be65;">"</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{maName}</span><span style="color: #98be65;">-</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{scriptName}</span><span style="color: #98be65;">"</span>
+<span style="color: #dcaeea;">printLog</span>=<span style="color: #98be65;">"</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{logPath}</span><span style="color: #98be65;">/</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{qsubName}</span><span style="color: #98be65;">-</span><span style="color: #51afef; font-weight: bold;">$(</span><span style="color: #51afef; font-weight: bold;">date</span><span style="color: #51afef; font-weight: bold;"> +"%Y-%m-%d-%I-%M-%p")</span><span style="color: #98be65;">.log"</span>
+<span style="color: #dcaeea;">tmp_cmd</span>=<span style="color: #98be65;">"Rscript </span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{scriptPath}</span><span style="color: #98be65;">/</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{scriptName}</span><span style="color: #98be65;"> --gwasFile </span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{gwasPath}</span><span style="color: #98be65;">/</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{maFile}</span><span style="color: #98be65;"> --ldPath </span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{ldPath}</span><span style="color: #98be65;"> --outPath </span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{outPath}</span><span style="color: #98be65;"> --useAnno </span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{useAnno}</span><span style="color: #98be65;"> --threadNum </span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{OMP_NUM_THREADS}</span><span style="color: #98be65;"> &gt; </span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{printLog}</span><span style="color: #98be65;">"</span>
+
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">$qsubshcom "$tmp_cmd" 1 60G  ${qsubName}  100:00:00 "-queue=intel-fat,amd-ep2"</span>
+$<span style="color: #dcaeea;">qsubshcom</span> <span style="color: #98be65;">"</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">tmp_cmd</span><span style="color: #98be65;">"</span> <span style="color: #da8548; font-weight: bold;">1</span> 250G  $<span style="color: #51afef;">{</span><span style="color: #dcaeea;">qsubName</span><span style="color: #51afef;">}</span>  100:00:00 <span style="color: #98be65;">"-queue=normal"</span>
+<span style="color: #5B6268;">##################################################################</span>
+<span style="color: #5B6268;">##################################################################</span>
+</pre>
+</div>
 </div>
 </div>
 </div>
@@ -490,7 +804,7 @@ system(plinkGWAS)
 <div id="postamble" class="status">
 <p class="date">Date: 2021-03-01</p>
 <p class="author">Author: Liu, Shouye</p>
-<p class="date">Created: 2023-03-01 Wed 15:46</p>
+<p class="date">Created: 2023-03-05 Sun 21:52</p>
 </div>
 </body>
 </html>
