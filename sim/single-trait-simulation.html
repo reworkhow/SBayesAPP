@@ -3,7 +3,7 @@
 "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
 <head>
-<!-- 2023-03-05 Sun 21:52 -->
+<!-- 2023-04-06 Thu 15:07 -->
 <meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Generate LD matrix and do single trait whole-genome simulation</title>
@@ -201,49 +201,60 @@
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents" role="doc-toc">
 <ul>
-<li><a href="#org438dfcd">1. Per LD block LD matrix</a>
+<li><a href="#orge47489b">1. Per LD block LD matrix</a>
 <ul>
-<li><a href="#orgfb08ac8">1.1. Extract snplist from per ld block and generate HM3 data based on snpInfo</a></li>
-<li><a href="#org2e3deb0">1.2. Generate LD matrix based on per-block-snplist</a></li>
+<li><a href="#org9b0ee12">1.1. Extract snplist from per ld block and generate HM3 data based on snpInfo</a></li>
+<li><a href="#org1d45cbe">1.2. Generate LD matrix based on per-block-snplist</a></li>
 </ul>
 </li>
-<li><a href="#org144776f">2. Simulation</a>
+<li><a href="#org78e9ed7">2. Simulation</a>
 <ul>
-<li><a href="#org558e3fa">2.1. Training and testing dataset</a>
+<li><a href="#org9a1b6df">2.1. Training and testing dataset</a>
 <ul>
-<li><a href="#orgcb37c7f">2.1.1. Select samples</a></li>
-<li><a href="#org6a957a4">2.1.2. Selecting a series of training datasets</a></li>
+<li><a href="#org87397db">2.1.1. Select samples</a></li>
+<li><a href="#org0185d5c">2.1.2. Selecting a series of training datasets</a></li>
 </ul>
 </li>
-<li><a href="#org75a08e4">2.2. Generating single-trait-simulation</a></li>
+<li><a href="#orga3552a7">2.2. single-trait-simulation</a></li>
+<li><a href="#orgbd9559a">2.3. Bivariate trait simulation</a>
+<ul>
+<li><a href="#org6602815">2.3.1. Perform simulation</a></li>
 </ul>
 </li>
-<li><a href="#orgcb42669">3. Perform analysis</a>
-<ul>
-<li><a href="#org0145de4">3.1. Perform gctb-ldm-SbayesC using band LD matrix</a>
-<ul>
-<li><a href="#org2d8f4f0">3.1.1. Construct GWAS ma format</a></li>
-<li><a href="#org3610a7e">3.1.2. run gctb-ldm-SbayesC</a></li>
 </ul>
 </li>
-<li><a href="#org560e01a">3.2. Perform SbayesRC without annotation using low-rank LD matrix</a>
+<li><a href="#org9a4c587">3. Perform analysis</a>
 <ul>
-<li><a href="#org15e28f0">3.2.1. Do SBayesRC analysis</a></li>
-<li><a href="#orge0919fb">3.2.2. Run SBayesRC</a></li>
+<li><a href="#org6981d3e">3.1. Perform gctb-ldm-SbayesC using band LD matrix</a>
+<ul>
+<li><a href="#org4cd413e">3.1.1. Construct GWAS ma format</a></li>
+<li><a href="#orga440a54">3.1.2. run gctb-ldm-SbayesC</a>
+<ul>
+<li><a href="#orgc2c16cd">3.1.2.1. Using band LD matrix</a></li>
 </ul>
 </li>
+</ul>
+</li>
+<li><a href="#orgbd36b81">3.2. Perform SbayesRC without annotation using low-rank LD matrix</a>
+<ul>
+<li><a href="#org0338e59">3.2.1. Do SBayesRC analysis</a></li>
+<li><a href="#org982af02">3.2.2. Run SBayesRC</a></li>
+</ul>
+</li>
+<li><a href="#orga0f54ab">3.3. Prediction</a></li>
 </ul>
 </li>
 </ul>
 </div>
 </div>
 
-<div id="outline-container-org438dfcd" class="outline-2">
-<h2 id="org438dfcd"><span class="section-number-2">1.</span> Per LD block LD matrix</h2>
+
+<div id="outline-container-orge47489b" class="outline-2">
+<h2 id="orge47489b"><span class="section-number-2">1.</span> Per LD block LD matrix</h2>
 <div class="outline-text-2" id="text-1">
 </div>
-<div id="outline-container-orgfb08ac8" class="outline-3">
-<h3 id="orgfb08ac8"><span class="section-number-3">1.1.</span> Extract snplist from per ld block and generate HM3 data based on snpInfo</h3>
+<div id="outline-container-org9b0ee12" class="outline-3">
+<h3 id="org9b0ee12"><span class="section-number-3">1.1.</span> Extract snplist from per ld block and generate HM3 data based on snpInfo</h3>
 <div class="outline-text-3" id="text-1-1">
 <div class="org-src-container">
 <pre class="src src-R"><span style="color: #a9a1e1;">library</span>(data.table)
@@ -254,8 +265,25 @@ snpinfoFileSuffix = <span style="color: #98be65;">"chr1-22-ukbEURu_imp_v3_HM3_ma
 ldbinfo = fread( paste0(rawDatPath,ldbinfoFileSuffix))
 snpinfo = fread( paste0(rawDatPath,snpinfoFileSuffix))
 lbs = unique(ldbinfo$LDBLOCK)
+snpDup = ldbinfo$snpInLdBlock[duplicated(ldbinfo$snpInLdBlock)]
+<span style="color: #a9a1e1;">message</span>(<span style="color: #98be65;">"there are total "</span>, length(snpDup),<span style="color: #98be65;">" snp duplicated."</span>)
+
+snpInfoDup = snpinfo[snpinfo$ID <span style="color: #a9a1e1;">%in%</span> snpDup,]
+lbsSnpDup = merge(snpInfoDup, ldbinfo, by.x = <span style="color: #98be65;">"ID"</span>, by.y = <span style="color: #98be65;">"snpInLdBlock"</span>)
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">decide which SNPs are located a given LD block based on [,)</span>
+removedIdx <span style="color: #a9a1e1;">&lt;-</span> c()
+<span style="color: #51afef;">for</span>(snp <span style="color: #51afef;">in</span> snpDup){
+  dup = lbsSnpDup[which(lbsSnpDup$ID == snp),]
+  removedLbs = max(dup$LDBLOCK)
+  idx = which(ldbinfo$LDBLOCK == removedLbs &amp; ldbinfo$snpInLdBlock == snp)
+  removedIdx <span style="color: #a9a1e1;">&lt;-</span> c(removedIdx, idx)
+}
+
+ldbinfoUniq = ldbinfo[- removedIdx,]
+
+
 <span style="color: #51afef;">for</span>(i <span style="color: #51afef;">in</span> lbs){
-  snps = ldbinfo[which(ldbinfo$LDBLOCK == i),]
+  snps = ldbinfoUniq[which(ldbinfoUniq$LDBLOCK == i),]
   snpNumInLbs = unique(snps$NumSnpInLdBlock)
   snplist = snps$snpInLdBlock
   outFile = paste0(mainPath,<span style="color: #98be65;">"/snplist/"</span>,<span style="color: #98be65;">"chr1-22-ukbEURu_imp_v3_HM3_maf01-ldm-block-"</span>,i,<span style="color: #98be65;">".snplist"</span>)
@@ -283,8 +311,8 @@ fwrite(data.frame(snpinfo$ID),file = outFile,col.names = <span style="color: #EC
 </div>
 </div>
 </div>
-<div id="outline-container-org2e3deb0" class="outline-3">
-<h3 id="org2e3deb0"><span class="section-number-3">1.2.</span> Generate LD matrix based on per-block-snplist</h3>
+<div id="outline-container-org1d45cbe" class="outline-3">
+<h3 id="org1d45cbe"><span class="section-number-3">1.2.</span> Generate LD matrix based on per-block-snplist</h3>
 <div class="outline-text-3" id="text-1-2">
 <div class="org-src-container">
 <pre class="src src-bash"><span style="color: #dcaeea;">gctb</span>=<span style="color: #98be65;">"/home/uqsliu28/softwares/gctb/gctb"</span>
@@ -331,16 +359,16 @@ $<span style="color: #dcaeea;">qsubshcom</span> <span style="color: #98be65;">"<
 </div>
 </div>
 
-<div id="outline-container-org144776f" class="outline-2">
-<h2 id="org144776f"><span class="section-number-2">2.</span> Simulation</h2>
+<div id="outline-container-org78e9ed7" class="outline-2">
+<h2 id="org78e9ed7"><span class="section-number-2">2.</span> Simulation</h2>
 <div class="outline-text-2" id="text-2">
 </div>
-<div id="outline-container-org558e3fa" class="outline-3">
-<h3 id="org558e3fa"><span class="section-number-3">2.1.</span> Training and testing dataset</h3>
+<div id="outline-container-org9a1b6df" class="outline-3">
+<h3 id="org9a1b6df"><span class="section-number-3">2.1.</span> Training and testing dataset</h3>
 <div class="outline-text-3" id="text-2-1">
 </div>
-<div id="outline-container-orgcb37c7f" class="outline-4">
-<h4 id="orgcb37c7f"><span class="section-number-4">2.1.1.</span> Select samples</h4>
+<div id="outline-container-org87397db" class="outline-4">
+<h4 id="org87397db"><span class="section-number-4">2.1.1.</span> Select samples</h4>
 <div class="outline-text-4" id="text-2-1-1">
 <div class="org-src-container">
 <pre class="src src-bash"><span style="color: #c678dd;">options</span><span style="color: #51afef;">(</span><span style="color: #dcaeea;">scipen</span>=<span style="color: #da8548; font-weight: bold;">999</span><span style="color: #51afef;">)</span>
@@ -377,8 +405,8 @@ samsLeft &lt;- fam<span style="color: #51afef;">[</span>,c<span style="color: #c
 </div>
 </div>
 </div>
-<div id="outline-container-org6a957a4" class="outline-4">
-<h4 id="org6a957a4"><span class="section-number-4">2.1.2.</span> Selecting a series of training datasets</h4>
+<div id="outline-container-org0185d5c" class="outline-4">
+<h4 id="org0185d5c"><span class="section-number-4">2.1.2.</span> Selecting a series of training datasets</h4>
 <div class="outline-text-4" id="text-2-1-2">
 <div class="org-src-container">
 <pre class="src src-bash"><span style="color: #5B6268;">####################################################################</span>
@@ -449,8 +477,8 @@ $<span style="color: #dcaeea;">qsubshcom</span> <span style="color: #98be65;">"<
 </div>
 </div>
 </div>
-<div id="outline-container-org75a08e4" class="outline-3">
-<h3 id="org75a08e4"><span class="section-number-3">2.2.</span> Generating single-trait-simulation</h3>
+<div id="outline-container-orga3552a7" class="outline-3">
+<h3 id="orga3552a7"><span class="section-number-3">2.2.</span> single-trait-simulation</h3>
 <div class="outline-text-3" id="text-2-2">
 <div class="org-src-container">
 <pre class="src src-R"><span style="color: #5B6268;">####################################################################</span>
@@ -509,21 +537,223 @@ plinkGWAS <span style="color: #a9a1e1;">&lt;-</span> paste0(plink19,<span style=
 
 <span style="color: #5B6268;">## </span><span style="color: #5B6268;">run gwas function</span>
 system(plinkGWAS)
+
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-orgbd9559a" class="outline-3">
+<h3 id="orgbd9559a"><span class="section-number-3">2.3.</span> Bivariate trait simulation</h3>
+<div class="outline-text-3" id="text-2-3">
+</div>
+<div id="outline-container-org6602815" class="outline-4">
+<h4 id="org6602815"><span class="section-number-4">2.3.1.</span> Perform simulation</h4>
+<div class="outline-text-4" id="text-2-3-1">
+<div class="org-src-container">
+<pre class="src src-R"><span style="color: #5B6268;">###############################################</span>
+<span style="color: #5B6268;">#### </span><span style="color: #5B6268;">Step 1. generate generate effect size ####</span>
+<span style="color: #5B6268;">###############################################</span>
+<span style="color: #a9a1e1;">library</span>(MASS)
+<span style="color: #a9a1e1;">options</span>(scipen=<span style="color: #da8548; font-weight: bold;">999</span>)
+<span style="color: #a9a1e1;">library</span>(data.table)
+set.seed(<span style="color: #da8548; font-weight: bold;">1234</span>)
+MainPath <span style="color: #a9a1e1;">&lt;-</span> <span style="color: #98be65;">"/home/uqsliu28/projects/annotation/"</span>
+gcta64 = <span style="color: #98be65;">"/home/uqsliu28/softwares/gcta/gcta64"</span>
+plink19 = <span style="color: #98be65;">"/home/uqsliu28/softwares/plink/plink19"</span>
+
+rawDataPath <span style="color: #a9a1e1;">&lt;-</span> paste0( <span style="color: #98be65;">"/scratch/90days/uqsliu28/projects/sbayesRC/ldAndMa/sim/data/"</span>)
+outPath = <span style="color: #98be65;">"/scratch/90days/uqsliu28/projects/sbayesRC/ldAndMa/sim/gcta/"</span>
+
+rawBimFileSuffix <span style="color: #a9a1e1;">&lt;-</span> paste0(<span style="color: #98be65;">"train-chr1-22-shuf-300000-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21"</span> )
+rawBimFile <span style="color: #a9a1e1;">&lt;-</span> paste0(rawDataPath,rawBimFileSuffix,<span style="color: #98be65;">".bim"</span>)
+bim <span style="color: #a9a1e1;">&lt;-</span> fread(rawBimFile)
+names(bim) <span style="color: #a9a1e1;">&lt;-</span> c(<span style="color: #98be65;">"CHR"</span>,<span style="color: #98be65;">"SNP"</span>,<span style="color: #98be65;">"POS"</span>,<span style="color: #98be65;">"CM"</span>,<span style="color: #98be65;">"A1"</span>,<span style="color: #98be65;">"A2 "</span>)
+<span style="color: #5B6268;">### </span><span style="color: #5B6268;">Step 1.1. generate causal snplists, here we set h2snp as 1 so that phenotypic values simulated from GCTA will be X* beta</span>
+repNum = <span style="color: #da8548; font-weight: bold;">1</span>
+h2snp = <span style="color: #da8548; font-weight: bold;">1</span>
+sams <span style="color: #a9a1e1;">&lt;-</span> c(<span style="color: #da8548; font-weight: bold;">10</span>) * <span style="color: #da8548; font-weight: bold;">1000</span>
+sigmaSq = h2snp / sams
+samsLeft <span style="color: #a9a1e1;">&lt;-</span> bim
+tmp <span style="color: #a9a1e1;">&lt;-</span> samsLeft[sample(.N,sams)]
+
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">Step 1.2 simulate bivariate marker effect based on bivariate normal distribution</span>
+mu = c(<span style="color: #da8548; font-weight: bold;">0</span>,<span style="color: #da8548; font-weight: bold;">0</span>)
+covMat = matrix(c(<span style="color: #da8548; font-weight: bold;">1</span>, <span style="color: #da8548; font-weight: bold;">0.54</span>, <span style="color: #da8548; font-weight: bold;">0.54</span>, <span style="color: #da8548; font-weight: bold;">1</span>), ncol = <span style="color: #da8548; font-weight: bold;">2</span>)
+
+bivBeta <span style="color: #a9a1e1;">&lt;-</span> mvrnorm(n = sams, mu = mu, Sigma = covMat)
+
+
+tmp$beta1 = bivBeta[,<span style="color: #da8548; font-weight: bold;">1</span>]
+tmp$beta2 = bivBeta[,<span style="color: #da8548; font-weight: bold;">2</span>]
+
+causalSnplistFile1 = paste0(outPath,rawBimFileSuffix,<span style="color: #98be65;">"-trait-1-causal.snplist"</span>)
+fwrite(data.frame(tmp[,c(<span style="color: #98be65;">"SNP"</span>,<span style="color: #98be65;">"beta1"</span>)]),file=causalSnplistFile1,col.names = <span style="color: #ECBE7B;">FALSE</span>, sep = <span style="color: #98be65;">"\t"</span>)
+
+causalSnplistFile2 = paste0(outPath,rawBimFileSuffix,<span style="color: #98be65;">"-trait-2-causal.snplist"</span>)
+fwrite(data.frame(tmp[,c(<span style="color: #98be65;">"SNP"</span>,<span style="color: #98be65;">"beta2"</span>)]),file=causalSnplistFile2,col.names = <span style="color: #ECBE7B;">FALSE</span>, sep = <span style="color: #98be65;">"\t"</span>)
+
+causalsnpsFile = paste0(outPath,rawBimFileSuffix,<span style="color: #98be65;">".caus"</span>)
+fwrite(data.frame(tmp[,c(<span style="color: #98be65;">"SNP"</span>)]),file=causalsnpsFile,col.names = <span style="color: #ECBE7B;">FALSE</span>, sep = <span style="color: #98be65;">"\t"</span>)
+
+
+<span style="color: #5B6268;">##  </span><span style="color: #5B6268;">Calculate allele frequency</span>
+plinkFreq <span style="color: #a9a1e1;">&lt;-</span> paste0(plink19,<span style="color: #98be65;">" --bfile "</span>,rawDataPath,rawBimFileSuffix,
+                    <span style="color: #98be65;">" --freq "</span>,
+                    <span style="color: #98be65;">" --out "</span>, rawDataPath,rawBimFileSuffix
+                    )
+system(plinkFreq)
+
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">Step 1.3 select bfile subset based on caucal snplist, please note here we assume causal SNPs have effect on both traits.</span>
+plinkF <span style="color: #a9a1e1;">&lt;-</span> paste0(plink19,<span style="color: #98be65;">" --bfile "</span>,rawDataPath,rawBimFileSuffix,
+                    <span style="color: #98be65;">" --extract "</span>, causalsnpsFile,
+                    <span style="color: #98be65;">" --make-bed "</span>,
+                    <span style="color: #98be65;">"--threads 100 "</span>,
+                    <span style="color: #98be65;">" --out "</span>,causalsnpsFile
+                    )
+system(plinkF)
+
+<span style="color: #5B6268;">### </span><span style="color: #5B6268;">Step 1.4. calcualte geno*beta</span>
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">for trait 1</span>
+gctaMlm <span style="color: #a9a1e1;">&lt;-</span> paste0(gcta64,<span style="color: #98be65;">" --bfile "</span>,causalsnpsFile,
+                  <span style="color: #98be65;">" --simu-qt "</span>,
+                  <span style="color: #98be65;">" --simu-causal-loci "</span>, causalSnplistFile1,
+                  <span style="color: #98be65;">" --simu-hsq "</span>,h2snp,
+                  <span style="color: #98be65;">" --simu-rep "</span>, repNum,
+                  <span style="color: #98be65;">" --thread-num 100"</span>,
+                  <span style="color: #98be65;">" --out "</span>, causalsnpsFile, <span style="color: #98be65;">"-trait-1.gcta"</span>
+                  )
+system(gctaMlm)
+
+<span style="color: #5B6268;">### </span><span style="color: #5B6268;">for trait 2.</span>
+gctaMlm <span style="color: #a9a1e1;">&lt;-</span> paste0(gcta64,<span style="color: #98be65;">" --bfile "</span>,causalsnpsFile,
+                  <span style="color: #98be65;">" --simu-qt "</span>,
+                  <span style="color: #98be65;">" --simu-causal-loci "</span>, causalSnplistFile2,
+                  <span style="color: #98be65;">" --simu-hsq "</span>,h2snp,
+                  <span style="color: #98be65;">" --simu-rep "</span>, repNum,
+                  <span style="color: #98be65;">" --thread-num 100"</span>,
+                  <span style="color: #98be65;">" --out "</span>, causalsnpsFile, <span style="color: #98be65;">"-trait-2.gcta"</span>
+                  )
+system(gctaMlm)
+
+<span style="color: #5B6268;">###############################################</span>
+<span style="color: #5B6268;">#### </span><span style="color: #5B6268;">Step 2. generate residual  ####</span>
+<span style="color: #5B6268;">###############################################</span>
+h21 = <span style="color: #da8548; font-weight: bold;">0.7</span>
+h22 = <span style="color: #da8548; font-weight: bold;">0.3</span>
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">Step 2.1  dealing with beta</span>
+trait1 = fread(paste0(causalsnpsFile, <span style="color: #98be65;">"-trait-1.gcta.phen"</span>))
+trait2 = fread(paste0(causalsnpsFile, <span style="color: #98be65;">"-trait-2.gcta.phen"</span>))
+names(trait1) <span style="color: #a9a1e1;">&lt;-</span> c(<span style="color: #98be65;">"FID"</span>,<span style="color: #98be65;">"IID"</span>,<span style="color: #98be65;">"beta"</span>)
+names(trait2) <span style="color: #a9a1e1;">&lt;-</span> c(<span style="color: #98be65;">"FID"</span>,<span style="color: #98be65;">"IID"</span>,<span style="color: #98be65;">"beta"</span>)
+trait1[, betaS:= beta/sd(beta) * sqrt(h21)]
+trait2[, betaS:= beta/sd(beta) * sqrt(h22)]
+
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">Step 2.2 simulate bivariate residual effect based on bivariate normal distribution</span>
+mu = c(<span style="color: #da8548; font-weight: bold;">0</span>,<span style="color: #da8548; font-weight: bold;">0</span>)
+covMat = matrix(c(<span style="color: #da8548; font-weight: bold;">0.3</span>, <span style="color: #da8548; font-weight: bold;">0.235</span>, <span style="color: #da8548; font-weight: bold;">0.235</span>, <span style="color: #da8548; font-weight: bold;">0.8</span>), ncol = <span style="color: #da8548; font-weight: bold;">2</span>)
+indis = <span style="color: #da8548; font-weight: bold;">300</span> * <span style="color: #da8548; font-weight: bold;">1000</span>
+
+bivRes <span style="color: #a9a1e1;">&lt;-</span> mvrnorm(n = indis, mu = mu, Sigma = covMat)
+
+trait1$res = bivRes[,<span style="color: #da8548; font-weight: bold;">1</span>]
+trait2$res = bivRes[,<span style="color: #da8548; font-weight: bold;">2</span>]
+
+trait1[,resS:= res/sd(res) * sqrt(<span style="color: #da8548; font-weight: bold;">1</span>- h21)]
+trait2[,resS:= res/sd(res) * sqrt(<span style="color: #da8548; font-weight: bold;">1</span>- h22)]
+
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">Step 2.3 phenotype</span>
+trait1[,y:= betaS + resS]
+trait2[,y:=betaS + resS]
+
+trait1[,yS:=(y-mean(y))/sd(y)]
+trait2[,yS:=(y-mean(y))/sd(y)]
+
+traitphenFile1 = paste0(causalsnpsFile, <span style="color: #98be65;">"-trait-1.gcta.phen.plink"</span>)
+fwrite(data.frame(trait1[,c(<span style="color: #98be65;">"FID"</span>,<span style="color: #98be65;">"IID"</span>,<span style="color: #98be65;">"yS"</span>)]),
+       file=traitphenFile1,
+       col.names = <span style="color: #ECBE7B;">FALSE</span>, sep = <span style="color: #98be65;">"\t"</span>)
+
+traitphenFile2 = paste0(causalsnpsFile, <span style="color: #98be65;">"-trait-2.gcta.phen.plink"</span>)
+fwrite(data.frame(trait2[,c(<span style="color: #98be65;">"FID"</span>,<span style="color: #98be65;">"IID"</span>,<span style="color: #98be65;">"yS"</span>)]),
+       file=traitphenFile2,
+       col.names = <span style="color: #ECBE7B;">FALSE</span>, sep = <span style="color: #98be65;">"\t"</span>)
+
+<span style="color: #5B6268;">###############################################</span>
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">Step 3. extract summary data</span>
+<span style="color: #5B6268;">###############################################</span>
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">trait 1</span>
+plinkGWAS <span style="color: #a9a1e1;">&lt;-</span> paste0(plink19,<span style="color: #98be65;">" --bfile "</span>,rawDataPath,rawBimFileSuffix,
+                    <span style="color: #98be65;">" --pheno "</span>, traitphenFile1 ,
+                    <span style="color: #98be65;">" --linear "</span>,
+                    <span style="color: #98be65;">" --ci 0.95 "</span>,
+                    <span style="color: #98be65;">" --out "</span>, traitphenFile1,<span style="color: #98be65;">".ci"</span>
+                    )
+
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">run gwas function</span>
+system(plinkGWAS)
+
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">trait 2</span>
+plinkGWAS <span style="color: #a9a1e1;">&lt;-</span> paste0(plink19,<span style="color: #98be65;">" --bfile "</span>,rawDataPath,rawBimFileSuffix,
+                    <span style="color: #98be65;">" --pheno "</span>, traitphenFile2 ,
+                    <span style="color: #98be65;">" --linear "</span>,
+                    <span style="color: #98be65;">" --ci 0.95 "</span>,
+                    <span style="color: #98be65;">" --out "</span>, traitphenFile2,<span style="color: #98be65;">".ci"</span>
+                    )
+
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">run gwas function</span>
+system(plinkGWAS)
+
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">re-format result into ma format</span>
+
+headerPlink = c(<span style="color: #98be65;">"SNP"</span>,<span style="color: #98be65;">"A1"</span>,<span style="color: #98be65;">"A2"</span>,<span style="color: #98be65;">"MAF"</span>,<span style="color: #98be65;">"BETA"</span>,<span style="color: #98be65;">"SE"</span>,<span style="color: #98be65;">"P"</span>,<span style="color: #98be65;">"N"</span>)
+headerMa = c(<span style="color: #98be65;">"SNP"</span>,<span style="color: #98be65;">"A1"</span>,<span style="color: #98be65;">"A2"</span>,<span style="color: #98be65;">"freq"</span>,<span style="color: #98be65;">"b"</span>,<span style="color: #98be65;">"se"</span>,<span style="color: #98be65;">"p"</span>,<span style="color: #98be65;">"N"</span>)
+
+freqFile = <span style="color: #98be65;">"train-chr1-22-shuf-300000-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21.frq"</span>
+
+bivTraitFile1 = paste0(traitphenFile1,<span style="color: #98be65;">".ci"</span>,<span style="color: #98be65;">".assoc.linear"</span>)
+bivTraitFile2 = paste0(traitphenFile2,<span style="color: #98be65;">".ci"</span>,<span style="color: #98be65;">".assoc.linear"</span>)
+
+bivTrait1 = fread(bivTraitFile1)
+bivTrait2 = fread(bivTraitFile2)
+freq = fread(paste0(rawDataPath, freqFile))
+
+
+bivTraitAll1 = merge(bivTrait1,freq, by = c(<span style="color: #98be65;">"SNP"</span>,<span style="color: #98be65;">"A1"</span>,<span style="color: #98be65;">"CHR"</span>))
+bivTraitAll2 = merge(bivTrait2,freq, by = c(<span style="color: #98be65;">"SNP"</span>,<span style="color: #98be65;">"A1"</span>,<span style="color: #98be65;">"CHR"</span>))
+
+bivTraitAll1$N = <span style="color: #da8548; font-weight: bold;">300000</span>
+bivTraitAll2$N = <span style="color: #da8548; font-weight: bold;">300000</span>
+
+bivTraitMa1 = bivTraitAll1[,..headerPlink]
+bivTraitMa2 = bivTraitAll2[,..headerPlink]
+
+names(bivTraitMa1 ) = headerMa
+names(bivTraitMa2 ) = headerMa
+
+fwrite(bivTraitMa1,
+       file= paste0(bivTraitFile1,<span style="color: #98be65;">".ma"</span>),
+       col.names = <span style="color: #ECBE7B;">TRUE</span>,sep = <span style="color: #98be65;">"\t"</span>)
+
+fwrite(bivTraitMa2,
+       file= paste0(bivTraitFile2,<span style="color: #98be65;">".ma"</span>),
+       col.names = <span style="color: #ECBE7B;">TRUE</span>,sep = <span style="color: #98be65;">"\t"</span>)
+
 </pre>
 </div>
 </div>
 </div>
 </div>
-<div id="outline-container-orgcb42669" class="outline-2">
-<h2 id="orgcb42669"><span class="section-number-2">3.</span> Perform analysis</h2>
+</div>
+<div id="outline-container-org9a4c587" class="outline-2">
+<h2 id="org9a4c587"><span class="section-number-2">3.</span> Perform analysis</h2>
 <div class="outline-text-2" id="text-3">
 </div>
-<div id="outline-container-org0145de4" class="outline-3">
-<h3 id="org0145de4"><span class="section-number-3">3.1.</span> Perform gctb-ldm-SbayesC using band LD matrix</h3>
+<div id="outline-container-org6981d3e" class="outline-3">
+<h3 id="org6981d3e"><span class="section-number-3">3.1.</span> Perform gctb-ldm-SbayesC using band LD matrix</h3>
 <div class="outline-text-3" id="text-3-1">
 </div>
-<div id="outline-container-org2d8f4f0" class="outline-4">
-<h4 id="org2d8f4f0"><span class="section-number-4">3.1.1.</span> Construct GWAS ma format</h4>
+<div id="outline-container-org4cd413e" class="outline-4">
+<h4 id="org4cd413e"><span class="section-number-4">3.1.1.</span> Construct GWAS ma format</h4>
 <div class="outline-text-4" id="text-3-1-1">
 <div class="org-src-container">
 <pre class="src src-R"><span style="color: #a9a1e1;">library</span>(data.table)
@@ -590,12 +820,12 @@ fwrite(maDat,file = paste0(assocFile,<span style="color: #98be65;">".ma"</span>)
 </div>
 </div>
 </div>
-<div id="outline-container-org3610a7e" class="outline-4">
-<h4 id="org3610a7e"><span class="section-number-4">3.1.2.</span> run gctb-ldm-SbayesC</h4>
+<div id="outline-container-orga440a54" class="outline-4">
+<h4 id="orga440a54"><span class="section-number-4">3.1.2.</span> run gctb-ldm-SbayesC</h4>
 <div class="outline-text-4" id="text-3-1-2">
 </div>
-<ol class="org-ol">
-<li><a id="orge10cfb7"></a>Using band LD matrix<br />
+<div id="outline-container-orgc2c16cd" class="outline-5">
+<h5 id="orgc2c16cd"><span class="section-number-5">3.1.2.1.</span> Using band LD matrix</h5>
 <div class="outline-text-5" id="text-3-1-2-1">
 <div class="org-src-container">
 <pre class="src src-bash"><span style="color: #dcaeea;">homePath</span>=<span style="color: #98be65;">"/home/uqsliu28/"</span>
@@ -644,17 +874,16 @@ $<span style="color: #dcaeea;">qsubshcom</span> <span style="color: #98be65;">"<
 </pre>
 </div>
 </div>
-</li>
-</ol>
+</div>
 </div>
 </div>
 
-<div id="outline-container-org560e01a" class="outline-3">
-<h3 id="org560e01a"><span class="section-number-3">3.2.</span> Perform SbayesRC without annotation using low-rank LD matrix</h3>
+<div id="outline-container-orgbd36b81" class="outline-3">
+<h3 id="orgbd36b81"><span class="section-number-3">3.2.</span> Perform SbayesRC without annotation using low-rank LD matrix</h3>
 <div class="outline-text-3" id="text-3-2">
 </div>
-<div id="outline-container-org15e28f0" class="outline-4">
-<h4 id="org15e28f0"><span class="section-number-4">3.2.1.</span> Do SBayesRC analysis</h4>
+<div id="outline-container-org0338e59" class="outline-4">
+<h4 id="org0338e59"><span class="section-number-4">3.2.1.</span> Do SBayesRC analysis</h4>
 <div class="outline-text-4" id="text-3-2-1">
 <div class="org-src-container">
 <pre class="src src-bash"><span style="color: #5B6268;">################################################################</span>
@@ -756,8 +985,8 @@ SBayesRC::impute<span style="color: #51afef;">(</span>maTidyFile, ld_folder,maIm
 </div>
 </div>
 </div>
-<div id="outline-container-orge0919fb" class="outline-4">
-<h4 id="orge0919fb"><span class="section-number-4">3.2.2.</span> Run SBayesRC</h4>
+<div id="outline-container-org982af02" class="outline-4">
+<h4 id="org982af02"><span class="section-number-4">3.2.2.</span> Run SBayesRC</h4>
 <div class="outline-text-4" id="text-3-2-2">
 <div class="org-src-container">
 <pre class="src src-bash"><span style="color: #5B6268;">## </span><span style="color: #5B6268;">Step 2. Set cluster parameters and submit the script into cluster</span>
@@ -799,12 +1028,148 @@ $<span style="color: #dcaeea;">qsubshcom</span> <span style="color: #98be65;">"<
 </div>
 </div>
 </div>
+
+<div id="outline-container-orga0f54ab" class="outline-3">
+<h3 id="orga0f54ab"><span class="section-number-3">3.3.</span> Prediction</h3>
+<div class="outline-text-3" id="text-3-3">
+<div class="org-src-container">
+<pre class="src src-R"><span style="color: #a9a1e1;">rm</span>(list = ls())
+<span style="color: #a9a1e1;">library</span>(data.table)
+<span style="color: #a9a1e1;">library</span>(ggplot2)
+<span style="color: #a9a1e1;">library</span>(SBayesE)
+<span style="color: #a9a1e1;">library</span>(latex2exp)
+
+datPath = <span style="color: #98be65;">"/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/sim/"</span>
+betaTrueFileName = <span style="color: #98be65;">"train-chr1-22-shuf-300000-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21.sim.par"</span>
+betaEstFileName = <span style="color: #98be65;">"smt-bayes-results.ma"</span>
+validBfileName = <span style="color: #98be65;">"valid-chr1-22-shuf-48501-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21"</span>
+trainBfileName = <span style="color: #98be65;">"train-chr1-22-shuf-300000-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21"</span>
+
+betaTrueFile = paste0(datPath, <span style="color: #98be65;">"/gcta/"</span>,betaTrueFileName)
+betaEstFile = paste0(datPath,<span style="color: #98be65;">"/smt/"</span>,betaEstFileName)
+trainBfile = paste0(datPath, <span style="color: #98be65;">"/data/"</span>, trainBfileName)
+validBfile = paste0(datPath, <span style="color: #98be65;">"/data/"</span>, validBfileName)
+
+
+betaEstRaw = fread(betaEstFile)
+
+betaTrueRaw = fread(betaTrueFile)
+names(betaTrueRaw) <span style="color: #a9a1e1;">&lt;-</span> c(<span style="color: #98be65;">"SNP"</span>, <span style="color: #98be65;">"RefAllele"</span>, <span style="color: #98be65;">"Frequency"</span>, <span style="color: #98be65;">"Effect"</span>)
+
+famTrain = fread(paste0(trainBfile, <span style="color: #98be65;">".bim"</span>) )
+names(famTrain) <span style="color: #a9a1e1;">&lt;-</span> c(<span style="color: #98be65;">"CHR"</span>,<span style="color: #98be65;">"SNP"</span>,<span style="color: #98be65;">"POS"</span>,<span style="color: #98be65;">"CM"</span>,<span style="color: #98be65;">"A1"</span>,<span style="color: #98be65;">"A2"</span>)
+
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">merge</span>
+betaTrue = merge(betaTrueRaw, famTrain, by = <span style="color: #98be65;">"SNP"</span>)
+
+bimValid = fread(paste0(validBfile,<span style="color: #98be65;">".bim"</span>))
+names(bimValid) <span style="color: #a9a1e1;">&lt;-</span> c(<span style="color: #98be65;">"CHR"</span>,<span style="color: #98be65;">"SNP"</span>,<span style="color: #98be65;">"POS"</span>,<span style="color: #98be65;">"CM"</span>,<span style="color: #98be65;">"A1"</span>,<span style="color: #98be65;">"A2"</span>)
+snpIdx = Reduce(intersect, list(bimValid$SNP, betaTrue$SNP, betaEstRaw$Name) )
+
+
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">do QC process for beta true effect</span>
+ma_val2 = betaTrue[match(snpIdx,betaTrue$SNP),]
+genoInfo = bimValid[match(snpIdx,bimValid$SNP),]
+
+idx = match(ma_val2$SNP, snpIdx)
+<span style="color: #a9a1e1;">message</span>(length(idx), <span style="color: #98be65;">" SNPs in common between GWAS summary and LD"</span>)
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">Check the consistency of alleles (A1, A2)</span>
+bA1A1 = (ma_val2$A1 == genoInfo$A1) &amp; (ma_val2$A2 == genoInfo$A2 )
+bA1A2 = (ma_val2$A1 ==  genoInfo$A2 ) &amp; (ma_val2$A2 == genoInfo$A1)
+bAll = bA1A1 | bA1A2
+<span style="color: #a9a1e1;">message</span>(sum(bAll), <span style="color: #98be65;">" SNPs have consistent alleles (A1, A2) between training and validation dataset"</span>)
+
+<span style="color: #5B6268;"># </span><span style="color: #5B6268;">do QC process for beta estimation effect</span>
+ma_val3 = betaEstRaw[match(snpIdx, betaEstRaw$Name)]
+<span style="color: #a9a1e1;">message</span>(length(idx), <span style="color: #98be65;">" SNPs in common between GWAS summary and LD"</span>)
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">Check the consistency of alleles (A1, A2)</span>
+bA1A1 = (ma_val3$A1 == genoInfo$A1) &amp; (ma_val3$A2 == genoInfo$A2 )
+bA1A2 = (ma_val3$A1 ==  genoInfo$A2 ) &amp; (ma_val3$A2 == genoInfo$A1)
+bAll = bA1A1 | bA1A2
+<span style="color: #a9a1e1;">message</span>(sum(bAll), <span style="color: #98be65;">" SNPs have consistent alleles (A1, A2) between training and validation dataset"</span>)
+
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">Now, we need to read genotype from validation dataset</span>
+indNum = <span style="color: #da8548; font-weight: bold;">48501</span>
+ukb <span style="color: #a9a1e1;">&lt;-</span> BGData::as.BGData(BEDMatrix::BEDMatrix(validBfile))
+geno <span style="color: #a9a1e1;">&lt;-</span> as.matrix(ukb@geno)
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">select genotype</span>
+colnames(geno)  <span style="color: #a9a1e1;">&lt;-</span> gsub(<span style="color: #98be65;">"(.+)_(.+)"</span>,<span style="color: #98be65;">"\\1"</span>,colnames(geno))
+geno <span style="color: #a9a1e1;">&lt;-</span> geno[,match(snpIdx,colnames(geno))]
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">select phenotype</span>
+selectedIndName <span style="color: #a9a1e1;">&lt;-</span> sample(rownames(geno),indNum)
+geno <span style="color: #a9a1e1;">&lt;-</span> geno[match(selectedIndName,rownames(geno)),]
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">extract genotype information</span>
+genoMap <span style="color: #a9a1e1;">&lt;-</span> ukb@map[ ukb@map$snp_id <span style="color: #a9a1e1;">%in%</span> snpIdx ,]
+rownames(genoMap) <span style="color: #a9a1e1;">&lt;-</span> gsub(<span style="color: #98be65;">"(.+)_(.+)"</span>,<span style="color: #98be65;">"\\1"</span>,rownames(genoMap) )
+genoInfo <span style="color: #a9a1e1;">&lt;-</span> BGData::BGData(geno = geno, map = genoMap)
+freq  <span style="color: #a9a1e1;">&lt;-</span> BGData::summarize(X = BGData::geno(genoInfo) )
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">add additional attributes</span>
+genoInfo@map$freq_na      <span style="color: #a9a1e1;">&lt;-</span> freq$freq_na
+genoInfo@map$sd           <span style="color: #a9a1e1;">&lt;-</span> freq$sd
+genoInfo@map$allele_freq  <span style="color: #a9a1e1;">&lt;-</span> freq$allele_freq
+genoInfo@map$na           <span style="color: #a9a1e1;">&lt;-</span> colSums(is.na(geno))
+snp2pq                    <span style="color: #a9a1e1;">&lt;-</span> <span style="color: #da8548; font-weight: bold;">2</span> * freq$allele_freq * ( <span style="color: #da8548; font-weight: bold;">1</span>- freq$allele_freq)
+names(snp2pq)             <span style="color: #a9a1e1;">&lt;-</span> snpIdx
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">finally, center and standardize the data</span>
+W <span style="color: #a9a1e1;">&lt;-</span> BGData::preprocess(geno, center = <span style="color: #ECBE7B;">TRUE</span>, scale = <span style="color: #ECBE7B;">TRUE</span>,impute = <span style="color: #ECBE7B;">TRUE</span>)
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">W &lt;- apply(W, 2, function(x){ (x-mean(x))/sd(x) })</span>
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">W &lt;- apply(W, 2, function(x){ x-mean(x) })</span>
+print(paste0(<span style="color: #98be65;">"REAL genotype is used "</span>, <span style="color: #98be65;">"(N = "</span>,indNum,<span style="color: #98be65;">")"</span>))
+
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">calculate</span>
+X <span style="color: #a9a1e1;">&lt;-</span>  W[,match(snpIdx,colnames(W))]
+
+betaTrueEffect = ma_val2$Effect
+betaEstEffect = ma_val3$A1Effect
+
+gVal <span style="color: #a9a1e1;">&lt;-</span> X <span style="color: #a9a1e1;">%*%</span> betaTrueEffect
+estVal = X <span style="color: #a9a1e1;">%*%</span> betaEstEffect
+
+<span style="color: #a9a1e1;">message</span>(<span style="color: #98be65;">"Correlation between true and estimated genetic effect: "</span>,cor(betaTrueEffect,betaEstEffect))
+
+<span style="color: #a9a1e1;">message</span>(<span style="color: #98be65;">"Prediction R2 between true and estimated genetic effect: "</span>, cor(gVal, estVal))
+
+dat = data.frame(betaTrue = betaTrueEffect,
+                 betaMean = betaEstEffect)
+
+mycolors = c(<span style="color: #98be65;">"#56B4E9"</span> )
+ggplot(dat, aes(betaTrue,betaMean)) + geom_point(color = mycolors) +
+  scale_color_manual(values=mycolors) +
+ ggtitle(<span style="color: #98be65;">"Scatter Plot: True vs. Estimated Effects"</span>) +
+theme_geometry(dat$betaTrue,
+               dat$betaMean,
+               color = <span style="color: #98be65;">"grey"</span>,
+               xlab=TeX(<span style="color: #98be65;">"$\\beta_{true}$"</span>),
+               ylab=  TeX(<span style="color: #98be65;">"$\\beta_{Mean}$"</span>)) +
+theme(plot.title = element_text(hjust = <span style="color: #da8548; font-weight: bold;">0.5</span>))
+
+dat = data.frame(gVal = gVal,
+                 estVal = estVal)
+
+ggplot(dat, aes(gVal,estVal)) + geom_point(color = mycolors) +
+ ggtitle(paste0(<span style="color: #98be65;">"Scatter Plot"</span>  ) ) +
+   scale_color_manual(values=mycolors) +
+theme_geometry(dat$gVal,
+               dat$estVal,
+               color = <span style="color: #98be65;">"grey"</span>,
+               xlab= TeX(<span style="color: #98be65;">"$X_{valid}\\beta_{true}$"</span>),
+               ylab=   TeX(<span style="color: #98be65;">"$X_{valid}\\beta_{Mean}$"</span>)) +
+theme(plot.title = element_text(hjust = <span style="color: #da8548; font-weight: bold;">0.5</span>))
+
+
+
+
+
+</pre>
+</div>
+</div>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="date">Date: 2021-03-01</p>
 <p class="author">Author: Liu, Shouye</p>
-<p class="date">Created: 2023-03-05 Sun 21:52</p>
+<p class="date">Created: 2023-04-06 Thu 15:07</p>
 </div>
 </body>
 </html>

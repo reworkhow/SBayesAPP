@@ -4,6 +4,21 @@
 #+date: 2021-03-01
 #+author: Liu, Shouye
 #+STARTUP: overview
+#+LATEX_CLASS: article
+#+LATEX_CLASS_OPTIONS: [a4paper]
+#+LaTex_HEADER: \usepackage[ruled,vlined,boxed, commentsnumbered,norelsize,linesnumbered]{algorithm2e}
+#+LaTex_HEADER: \usepackage{xcolor}
+#+LaTex_HEADER: \usepackage{amsmath}
+#+LaTex_HEADER: \usepackage[margin=0.5in]{geometry} % set the margin of document
+#+LaTex_HEADER: \hypersetup{ colorlinks=true, linkcolor=violet }
+# begin laber submatrix command:
+#+LaTex_HEADER: \usepackage{tikz}
+#+LaTex_HEADER: \usetikzlibrary{matrix,decorations.pathreplacing, calc, positioning}
+#+LaTex_HEADER: \usepackage{nicematrix}
+# end laber submatrix command:
+#+OPTIONS: num:t toc:t H:4
+#+OPTIONS: ^:nil
+
 
 * Per LD block LD matrix
 ** Extract snplist from per ld block and generate HM3 data based on snpInfo
@@ -16,8 +31,25 @@ snpinfoFileSuffix = "chr1-22-ukbEURu_imp_v3_HM3_maf01.eigen.ldblock.snp.info"
 ldbinfo = fread( paste0(rawDatPath,ldbinfoFileSuffix))
 snpinfo = fread( paste0(rawDatPath,snpinfoFileSuffix))
 lbs = unique(ldbinfo$LDBLOCK)
+snpDup = ldbinfo$snpInLdBlock[duplicated(ldbinfo$snpInLdBlock)]
+message("there are total ", length(snpDup)," snp duplicated.")
+
+snpInfoDup = snpinfo[snpinfo$ID %in% snpDup,]
+lbsSnpDup = merge(snpInfoDup, ldbinfo, by.x = "ID", by.y = "snpInLdBlock")
+## decide which SNPs are located a given LD block based on [,)
+removedIdx <- c()
+for(snp in snpDup){
+  dup = lbsSnpDup[which(lbsSnpDup$ID == snp),]
+  removedLbs = max(dup$LDBLOCK)
+  idx = which(ldbinfo$LDBLOCK == removedLbs & ldbinfo$snpInLdBlock == snp)
+  removedIdx <- c(removedIdx, idx)
+}
+
+ldbinfoUniq = ldbinfo[- removedIdx,]
+
+
 for(i in lbs){
-  snps = ldbinfo[which(ldbinfo$LDBLOCK == i),]
+  snps = ldbinfoUniq[which(ldbinfoUniq$LDBLOCK == i),]
   snpNumInLbs = unique(snps$NumSnpInLdBlock)
   snplist = snps$snpInLdBlock
   outFile = paste0(mainPath,"/snplist/","chr1-22-ukbEURu_imp_v3_HM3_maf01-ldm-block-",i,".snplist")
@@ -185,7 +217,7 @@ fi
 ##################################################################
 ##################################################################
 #+end_src
-** Generating single-trait-simulation
+** single-trait-simulation
 #+begin_src R
 ####################################################################
 #### Author: Shouye Liu
@@ -243,6 +275,199 @@ plinkGWAS <- paste0(plink19," --bfile ",rawDataPath,rawBimFileSuffix,
 
 ## run gwas function
 system(plinkGWAS)
+
+#+end_src
+** Bivariate trait simulation
+*** Perform simulation
+#+begin_src R
+###############################################
+#### Step 1. generate generate effect size ####
+###############################################
+library(MASS)
+options(scipen=999)
+library(data.table)
+set.seed(1234)
+MainPath <- "/home/uqsliu28/projects/annotation/"
+gcta64 = "/home/uqsliu28/softwares/gcta/gcta64"
+plink19 = "/home/uqsliu28/softwares/plink/plink19"
+
+rawDataPath <- paste0( "/scratch/90days/uqsliu28/projects/sbayesRC/ldAndMa/sim/data/")
+outPath = "/scratch/90days/uqsliu28/projects/sbayesRC/ldAndMa/sim/gcta/"
+
+rawBimFileSuffix <- paste0("train-chr1-22-shuf-300000-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21" )
+rawBimFile <- paste0(rawDataPath,rawBimFileSuffix,".bim")
+bim <- fread(rawBimFile)
+names(bim) <- c("CHR","SNP","POS","CM","A1","A2 ")
+### Step 1.1. generate causal snplists, here we set h2snp as 1 so that phenotypic values simulated from GCTA will be X* beta
+repNum = 1
+h2snp = 1
+sams <- c(10) * 1000
+sigmaSq = h2snp / sams
+samsLeft <- bim
+tmp <- samsLeft[sample(.N,sams)]
+
+## Step 1.2 simulate bivariate marker effect based on bivariate normal distribution
+mu = c(0,0)
+covMat = matrix(c(1, 0.54, 0.54, 1), ncol = 2)
+
+bivBeta <- mvrnorm(n = sams, mu = mu, Sigma = covMat)
+
+
+tmp$beta1 = bivBeta[,1]
+tmp$beta2 = bivBeta[,2]
+
+causalSnplistFile1 = paste0(outPath,rawBimFileSuffix,"-trait-1-causal.snplist")
+fwrite(data.frame(tmp[,c("SNP","beta1")]),file=causalSnplistFile1,col.names = FALSE, sep = "\t")
+
+causalSnplistFile2 = paste0(outPath,rawBimFileSuffix,"-trait-2-causal.snplist")
+fwrite(data.frame(tmp[,c("SNP","beta2")]),file=causalSnplistFile2,col.names = FALSE, sep = "\t")
+
+causalsnpsFile = paste0(outPath,rawBimFileSuffix,".caus")
+fwrite(data.frame(tmp[,c("SNP")]),file=causalsnpsFile,col.names = FALSE, sep = "\t")
+
+
+##  Calculate allele frequency
+plinkFreq <- paste0(plink19," --bfile ",rawDataPath,rawBimFileSuffix,
+                    " --freq ",
+                    " --out ", rawDataPath,rawBimFileSuffix
+                    )
+system(plinkFreq)
+
+## Step 1.3 select bfile subset based on caucal snplist, please note here we assume causal SNPs have effect on both traits.
+plinkF <- paste0(plink19," --bfile ",rawDataPath,rawBimFileSuffix,
+                    " --extract ", causalsnpsFile,
+                    " --make-bed ",
+                    "--threads 100 ",
+                    " --out ",causalsnpsFile
+                    )
+system(plinkF)
+
+### Step 1.4. calcualte geno*beta
+## for trait 1
+gctaMlm <- paste0(gcta64," --bfile ",causalsnpsFile,
+                  " --simu-qt ",
+                  " --simu-causal-loci ", causalSnplistFile1,
+                  " --simu-hsq ",h2snp,
+                  " --simu-rep ", repNum,
+                  " --thread-num 100",
+                  " --out ", causalsnpsFile, "-trait-1.gcta"
+                  )
+system(gctaMlm)
+
+### for trait 2.
+gctaMlm <- paste0(gcta64," --bfile ",causalsnpsFile,
+                  " --simu-qt ",
+                  " --simu-causal-loci ", causalSnplistFile2,
+                  " --simu-hsq ",h2snp,
+                  " --simu-rep ", repNum,
+                  " --thread-num 100",
+                  " --out ", causalsnpsFile, "-trait-2.gcta"
+                  )
+system(gctaMlm)
+
+###############################################
+#### Step 2. generate residual  ####
+###############################################
+h21 = 0.7
+h22 = 0.3
+## Step 2.1  dealing with beta
+trait1 = fread(paste0(causalsnpsFile, "-trait-1.gcta.phen"))
+trait2 = fread(paste0(causalsnpsFile, "-trait-2.gcta.phen"))
+names(trait1) <- c("FID","IID","beta")
+names(trait2) <- c("FID","IID","beta")
+trait1[, betaS:= beta/sd(beta) * sqrt(h21)]
+trait2[, betaS:= beta/sd(beta) * sqrt(h22)]
+
+## Step 2.2 simulate bivariate residual effect based on bivariate normal distribution
+mu = c(0,0)
+covMat = matrix(c(0.3, 0.235, 0.235, 0.8), ncol = 2)
+indis = 300 * 1000
+
+bivRes <- mvrnorm(n = indis, mu = mu, Sigma = covMat)
+
+trait1$res = bivRes[,1]
+trait2$res = bivRes[,2]
+
+trait1[,resS:= res/sd(res) * sqrt(1- h21)]
+trait2[,resS:= res/sd(res) * sqrt(1- h22)]
+
+## Step 2.3 phenotype
+trait1[,y:= betaS + resS]
+trait2[,y:=betaS + resS]
+
+trait1[,yS:=(y-mean(y))/sd(y)]
+trait2[,yS:=(y-mean(y))/sd(y)]
+
+traitphenFile1 = paste0(causalsnpsFile, "-trait-1.gcta.phen.plink")
+fwrite(data.frame(trait1[,c("FID","IID","yS")]),
+       file=traitphenFile1,
+       col.names = FALSE, sep = "\t")
+
+traitphenFile2 = paste0(causalsnpsFile, "-trait-2.gcta.phen.plink")
+fwrite(data.frame(trait2[,c("FID","IID","yS")]),
+       file=traitphenFile2,
+       col.names = FALSE, sep = "\t")
+
+###############################################
+## Step 3. extract summary data
+###############################################
+## trait 1
+plinkGWAS <- paste0(plink19," --bfile ",rawDataPath,rawBimFileSuffix,
+                    " --pheno ", traitphenFile1 ,
+                    " --linear ",
+                    " --ci 0.95 ",
+                    " --out ", traitphenFile1,".ci"
+                    )
+
+## run gwas function
+system(plinkGWAS)
+
+## trait 2
+plinkGWAS <- paste0(plink19," --bfile ",rawDataPath,rawBimFileSuffix,
+                    " --pheno ", traitphenFile2 ,
+                    " --linear ",
+                    " --ci 0.95 ",
+                    " --out ", traitphenFile2,".ci"
+                    )
+
+## run gwas function
+system(plinkGWAS)
+
+## re-format result into ma format
+
+headerPlink = c("SNP","A1","A2","MAF","BETA","SE","P","N")
+headerMa = c("SNP","A1","A2","freq","b","se","p","N")
+
+freqFile = "train-chr1-22-shuf-300000-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21.frq"
+
+bivTraitFile1 = paste0(traitphenFile1,".ci",".assoc.linear")
+bivTraitFile2 = paste0(traitphenFile2,".ci",".assoc.linear")
+
+bivTrait1 = fread(bivTraitFile1)
+bivTrait2 = fread(bivTraitFile2)
+freq = fread(paste0(rawDataPath, freqFile))
+
+
+bivTraitAll1 = merge(bivTrait1,freq, by = c("SNP","A1","CHR"))
+bivTraitAll2 = merge(bivTrait2,freq, by = c("SNP","A1","CHR"))
+
+bivTraitAll1$N = 300000
+bivTraitAll2$N = 300000
+
+bivTraitMa1 = bivTraitAll1[,..headerPlink]
+bivTraitMa2 = bivTraitAll2[,..headerPlink]
+
+names(bivTraitMa1 ) = headerMa
+names(bivTraitMa2 ) = headerMa
+
+fwrite(bivTraitMa1,
+       file= paste0(bivTraitFile1,".ma"),
+       col.names = TRUE,sep = "\t")
+
+fwrite(bivTraitMa2,
+       file= paste0(bivTraitFile2,".ma"),
+       col.names = TRUE,sep = "\t")
+
 #+end_src
 * Perform analysis
 ** Perform gctb-ldm-SbayesC using band LD matrix
@@ -457,7 +682,6 @@ toc()
 ################################################################
 #+end_src
 *** Run SBayesRC
-
 #+begin_src bash
 ## Step 2. Set cluster parameters and submit the script into cluster
 ## Step 1. Basic cluster setting
@@ -493,4 +717,135 @@ tmp_cmd="Rscript ${scriptPath}/${scriptName} --gwasFile ${gwasPath}/${maFile} --
 $qsubshcom "$tmp_cmd" 1 250G  ${qsubName}  100:00:00 "-queue=normal"
 ##################################################################
 ##################################################################
+#+end_src
+
+** Prediction
+#+begin_src R
+rm(list = ls())
+library(data.table)
+library(ggplot2)
+library(SBayesE)
+library(latex2exp)
+
+datPath = "/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/sim/"
+betaTrueFileName = "train-chr1-22-shuf-300000-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21.sim.par"
+betaEstFileName = "smt-bayes-results.ma"
+validBfileName = "valid-chr1-22-shuf-48501-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21"
+trainBfileName = "train-chr1-22-shuf-300000-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21"
+
+betaTrueFile = paste0(datPath, "/gcta/",betaTrueFileName)
+betaEstFile = paste0(datPath,"/smt/",betaEstFileName)
+trainBfile = paste0(datPath, "/data/", trainBfileName)
+validBfile = paste0(datPath, "/data/", validBfileName)
+
+
+betaEstRaw = fread(betaEstFile)
+
+betaTrueRaw = fread(betaTrueFile)
+names(betaTrueRaw) <- c("SNP", "RefAllele", "Frequency", "Effect")
+
+famTrain = fread(paste0(trainBfile, ".bim") )
+names(famTrain) <- c("CHR","SNP","POS","CM","A1","A2")
+
+## merge
+betaTrue = merge(betaTrueRaw, famTrain, by = "SNP")
+
+bimValid = fread(paste0(validBfile,".bim"))
+names(bimValid) <- c("CHR","SNP","POS","CM","A1","A2")
+snpIdx = Reduce(intersect, list(bimValid$SNP, betaTrue$SNP, betaEstRaw$Name) )
+
+
+## do QC process for beta true effect
+ma_val2 = betaTrue[match(snpIdx,betaTrue$SNP),]
+genoInfo = bimValid[match(snpIdx,bimValid$SNP),]
+
+idx = match(ma_val2$SNP, snpIdx)
+message(length(idx), " SNPs in common between GWAS summary and LD")
+## Check the consistency of alleles (A1, A2)
+bA1A1 = (ma_val2$A1 == genoInfo$A1) & (ma_val2$A2 == genoInfo$A2 )
+bA1A2 = (ma_val2$A1 ==  genoInfo$A2 ) & (ma_val2$A2 == genoInfo$A1)
+bAll = bA1A1 | bA1A2
+message(sum(bAll), " SNPs have consistent alleles (A1, A2) between training and validation dataset")
+
+# do QC process for beta estimation effect
+ma_val3 = betaEstRaw[match(snpIdx, betaEstRaw$Name)]
+message(length(idx), " SNPs in common between GWAS summary and LD")
+## Check the consistency of alleles (A1, A2)
+bA1A1 = (ma_val3$A1 == genoInfo$A1) & (ma_val3$A2 == genoInfo$A2 )
+bA1A2 = (ma_val3$A1 ==  genoInfo$A2 ) & (ma_val3$A2 == genoInfo$A1)
+bAll = bA1A1 | bA1A2
+message(sum(bAll), " SNPs have consistent alleles (A1, A2) between training and validation dataset")
+
+## Now, we need to read genotype from validation dataset
+indNum = 48501
+ukb <- BGData::as.BGData(BEDMatrix::BEDMatrix(validBfile))
+geno <- as.matrix(ukb@geno)
+## select genotype
+colnames(geno)  <- gsub("(.+)_(.+)","\\1",colnames(geno))
+geno <- geno[,match(snpIdx,colnames(geno))]
+## select phenotype
+selectedIndName <- sample(rownames(geno),indNum)
+geno <- geno[match(selectedIndName,rownames(geno)),]
+## extract genotype information
+genoMap <- ukb@map[ ukb@map$snp_id %in% snpIdx ,]
+rownames(genoMap) <- gsub("(.+)_(.+)","\\1",rownames(genoMap) )
+genoInfo <- BGData::BGData(geno = geno, map = genoMap)
+freq  <- BGData::summarize(X = BGData::geno(genoInfo) )
+## add additional attributes
+genoInfo@map$freq_na      <- freq$freq_na
+genoInfo@map$sd           <- freq$sd
+genoInfo@map$allele_freq  <- freq$allele_freq
+genoInfo@map$na           <- colSums(is.na(geno))
+snp2pq                    <- 2 * freq$allele_freq * ( 1- freq$allele_freq)
+names(snp2pq)             <- snpIdx
+## finally, center and standardize the data
+W <- BGData::preprocess(geno, center = TRUE, scale = TRUE,impute = TRUE)
+## W <- apply(W, 2, function(x){ (x-mean(x))/sd(x) })
+## W <- apply(W, 2, function(x){ x-mean(x) })
+print(paste0("REAL genotype is used ", "(N = ",indNum,")"))
+
+## calculate
+X <-  W[,match(snpIdx,colnames(W))]
+
+betaTrueEffect = ma_val2$Effect
+betaEstEffect = ma_val3$A1Effect
+
+gVal <- X %*% betaTrueEffect
+estVal = X %*% betaEstEffect
+
+message("Correlation between true and estimated genetic effect: ",cor(betaTrueEffect,betaEstEffect))
+
+message("Prediction R2 between true and estimated genetic effect: ", cor(gVal, estVal))
+
+dat = data.frame(betaTrue = betaTrueEffect,
+                 betaMean = betaEstEffect)
+
+mycolors = c("#56B4E9" )
+ggplot(dat, aes(betaTrue,betaMean)) + geom_point(color = mycolors) +
+  scale_color_manual(values=mycolors) +
+ ggtitle("Scatter Plot: True vs. Estimated Effects") +
+theme_geometry(dat$betaTrue,
+               dat$betaMean,
+               color = "grey",
+               xlab=TeX("$\\beta_{true}$"),
+               ylab=  TeX("$\\beta_{Mean}$")) +
+theme(plot.title = element_text(hjust = 0.5))
+
+dat = data.frame(gVal = gVal,
+                 estVal = estVal)
+
+ggplot(dat, aes(gVal,estVal)) + geom_point(color = mycolors) +
+ ggtitle(paste0("Scatter Plot"  ) ) +
+   scale_color_manual(values=mycolors) +
+theme_geometry(dat$gVal,
+               dat$estVal,
+               color = "grey",
+               xlab= TeX("$X_{valid}\\beta_{true}$"),
+               ylab=   TeX("$X_{valid}\\beta_{Mean}$")) +
+theme(plot.title = element_text(hjust = 0.5))
+
+
+
+
+
 #+end_src
