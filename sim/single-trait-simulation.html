@@ -3,7 +3,7 @@
 "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
 <head>
-<!-- 2023-04-06 Thu 15:07 -->
+<!-- 2023-04-09 Sun 17:57 -->
 <meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Generate LD matrix and do single trait whole-genome simulation</title>
@@ -201,47 +201,47 @@
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents" role="doc-toc">
 <ul>
-<li><a href="#orge47489b">1. Per LD block LD matrix</a>
+<li><a href="#org8457d25">1. Per LD block LD matrix</a>
 <ul>
-<li><a href="#org9b0ee12">1.1. Extract snplist from per ld block and generate HM3 data based on snpInfo</a></li>
-<li><a href="#org1d45cbe">1.2. Generate LD matrix based on per-block-snplist</a></li>
+<li><a href="#orgd9e9f9a">1.1. Extract snplist from per ld block and generate HM3 data based on snpInfo</a></li>
+<li><a href="#org6e6973f">1.2. Generate LD matrix based on per-block-snplist</a></li>
 </ul>
 </li>
-<li><a href="#org78e9ed7">2. Simulation</a>
+<li><a href="#orgcceb431">2. Simulation</a>
 <ul>
-<li><a href="#org9a1b6df">2.1. Training and testing dataset</a>
+<li><a href="#org8216ef5">2.1. Training and testing dataset</a>
 <ul>
-<li><a href="#org87397db">2.1.1. Select samples</a></li>
-<li><a href="#org0185d5c">2.1.2. Selecting a series of training datasets</a></li>
+<li><a href="#org2593ee1">2.1.1. Select samples</a></li>
+<li><a href="#orgb105fd1">2.1.2. Selecting a series of training datasets</a></li>
 </ul>
 </li>
-<li><a href="#orga3552a7">2.2. single-trait-simulation</a></li>
-<li><a href="#orgbd9559a">2.3. Bivariate trait simulation</a>
+<li><a href="#orgd550574">2.2. single-trait-simulation</a></li>
+<li><a href="#orgb96977a">2.3. Bivariate trait simulation</a>
 <ul>
-<li><a href="#org6602815">2.3.1. Perform simulation</a></li>
-</ul>
-</li>
-</ul>
-</li>
-<li><a href="#org9a4c587">3. Perform analysis</a>
-<ul>
-<li><a href="#org6981d3e">3.1. Perform gctb-ldm-SbayesC using band LD matrix</a>
-<ul>
-<li><a href="#org4cd413e">3.1.1. Construct GWAS ma format</a></li>
-<li><a href="#orga440a54">3.1.2. run gctb-ldm-SbayesC</a>
-<ul>
-<li><a href="#orgc2c16cd">3.1.2.1. Using band LD matrix</a></li>
+<li><a href="#orgb237e5c">2.3.1. Perform simulation</a></li>
 </ul>
 </li>
 </ul>
 </li>
-<li><a href="#orgbd36b81">3.2. Perform SbayesRC without annotation using low-rank LD matrix</a>
+<li><a href="#orgdf9e8ba">3. Perform analysis</a>
 <ul>
-<li><a href="#org0338e59">3.2.1. Do SBayesRC analysis</a></li>
-<li><a href="#org982af02">3.2.2. Run SBayesRC</a></li>
+<li><a href="#org724dd75">3.1. Perform gctb-ldm-SbayesC using band LD matrix</a>
+<ul>
+<li><a href="#org4c2fa3c">3.1.1. Construct GWAS ma format</a></li>
+<li><a href="#orgf90f615">3.1.2. run gctb-ldm-SbayesC</a>
+<ul>
+<li><a href="#org9239473">3.1.2.1. Using band LD matrix</a></li>
 </ul>
 </li>
-<li><a href="#orga0f54ab">3.3. Prediction</a></li>
+</ul>
+</li>
+<li><a href="#org5fd26e7">3.2. Perform SbayesRC without annotation using low-rank LD matrix</a>
+<ul>
+<li><a href="#orge5a6ec6">3.2.1. Do SBayesRC analysis</a></li>
+<li><a href="#org886a766">3.2.2. Run SBayesRC</a></li>
+</ul>
+</li>
+<li><a href="#org26ad160">3.3. Prediction</a></li>
 </ul>
 </li>
 </ul>
@@ -249,12 +249,12 @@
 </div>
 
 
-<div id="outline-container-orge47489b" class="outline-2">
-<h2 id="orge47489b"><span class="section-number-2">1.</span> Per LD block LD matrix</h2>
+<div id="outline-container-org8457d25" class="outline-2">
+<h2 id="org8457d25"><span class="section-number-2">1.</span> Per LD block LD matrix</h2>
 <div class="outline-text-2" id="text-1">
 </div>
-<div id="outline-container-org9b0ee12" class="outline-3">
-<h3 id="org9b0ee12"><span class="section-number-3">1.1.</span> Extract snplist from per ld block and generate HM3 data based on snpInfo</h3>
+<div id="outline-container-orgd9e9f9a" class="outline-3">
+<h3 id="orgd9e9f9a"><span class="section-number-3">1.1.</span> Extract snplist from per ld block and generate HM3 data based on snpInfo</h3>
 <div class="outline-text-3" id="text-1-1">
 <div class="org-src-container">
 <pre class="src src-R"><span style="color: #a9a1e1;">library</span>(data.table)
@@ -311,8 +311,8 @@ fwrite(data.frame(snpinfo$ID),file = outFile,col.names = <span style="color: #EC
 </div>
 </div>
 </div>
-<div id="outline-container-org1d45cbe" class="outline-3">
-<h3 id="org1d45cbe"><span class="section-number-3">1.2.</span> Generate LD matrix based on per-block-snplist</h3>
+<div id="outline-container-org6e6973f" class="outline-3">
+<h3 id="org6e6973f"><span class="section-number-3">1.2.</span> Generate LD matrix based on per-block-snplist</h3>
 <div class="outline-text-3" id="text-1-2">
 <div class="org-src-container">
 <pre class="src src-bash"><span style="color: #dcaeea;">gctb</span>=<span style="color: #98be65;">"/home/uqsliu28/softwares/gctb/gctb"</span>
@@ -359,16 +359,16 @@ $<span style="color: #dcaeea;">qsubshcom</span> <span style="color: #98be65;">"<
 </div>
 </div>
 
-<div id="outline-container-org78e9ed7" class="outline-2">
-<h2 id="org78e9ed7"><span class="section-number-2">2.</span> Simulation</h2>
+<div id="outline-container-orgcceb431" class="outline-2">
+<h2 id="orgcceb431"><span class="section-number-2">2.</span> Simulation</h2>
 <div class="outline-text-2" id="text-2">
 </div>
-<div id="outline-container-org9a1b6df" class="outline-3">
-<h3 id="org9a1b6df"><span class="section-number-3">2.1.</span> Training and testing dataset</h3>
+<div id="outline-container-org8216ef5" class="outline-3">
+<h3 id="org8216ef5"><span class="section-number-3">2.1.</span> Training and testing dataset</h3>
 <div class="outline-text-3" id="text-2-1">
 </div>
-<div id="outline-container-org87397db" class="outline-4">
-<h4 id="org87397db"><span class="section-number-4">2.1.1.</span> Select samples</h4>
+<div id="outline-container-org2593ee1" class="outline-4">
+<h4 id="org2593ee1"><span class="section-number-4">2.1.1.</span> Select samples</h4>
 <div class="outline-text-4" id="text-2-1-1">
 <div class="org-src-container">
 <pre class="src src-bash"><span style="color: #c678dd;">options</span><span style="color: #51afef;">(</span><span style="color: #dcaeea;">scipen</span>=<span style="color: #da8548; font-weight: bold;">999</span><span style="color: #51afef;">)</span>
@@ -405,8 +405,8 @@ samsLeft &lt;- fam<span style="color: #51afef;">[</span>,c<span style="color: #c
 </div>
 </div>
 </div>
-<div id="outline-container-org0185d5c" class="outline-4">
-<h4 id="org0185d5c"><span class="section-number-4">2.1.2.</span> Selecting a series of training datasets</h4>
+<div id="outline-container-orgb105fd1" class="outline-4">
+<h4 id="orgb105fd1"><span class="section-number-4">2.1.2.</span> Selecting a series of training datasets</h4>
 <div class="outline-text-4" id="text-2-1-2">
 <div class="org-src-container">
 <pre class="src src-bash"><span style="color: #5B6268;">####################################################################</span>
@@ -477,8 +477,8 @@ $<span style="color: #dcaeea;">qsubshcom</span> <span style="color: #98be65;">"<
 </div>
 </div>
 </div>
-<div id="outline-container-orga3552a7" class="outline-3">
-<h3 id="orga3552a7"><span class="section-number-3">2.2.</span> single-trait-simulation</h3>
+<div id="outline-container-orgd550574" class="outline-3">
+<h3 id="orgd550574"><span class="section-number-3">2.2.</span> single-trait-simulation</h3>
 <div class="outline-text-3" id="text-2-2">
 <div class="org-src-container">
 <pre class="src src-R"><span style="color: #5B6268;">####################################################################</span>
@@ -542,12 +542,12 @@ system(plinkGWAS)
 </div>
 </div>
 </div>
-<div id="outline-container-orgbd9559a" class="outline-3">
-<h3 id="orgbd9559a"><span class="section-number-3">2.3.</span> Bivariate trait simulation</h3>
+<div id="outline-container-orgb96977a" class="outline-3">
+<h3 id="orgb96977a"><span class="section-number-3">2.3.</span> Bivariate trait simulation</h3>
 <div class="outline-text-3" id="text-2-3">
 </div>
-<div id="outline-container-org6602815" class="outline-4">
-<h4 id="org6602815"><span class="section-number-4">2.3.1.</span> Perform simulation</h4>
+<div id="outline-container-orgb237e5c" class="outline-4">
+<h4 id="orgb237e5c"><span class="section-number-4">2.3.1.</span> Perform simulation</h4>
 <div class="outline-text-4" id="text-2-3-1">
 <div class="org-src-container">
 <pre class="src src-R"><span style="color: #5B6268;">###############################################</span>
@@ -744,16 +744,16 @@ fwrite(bivTraitMa2,
 </div>
 </div>
 </div>
-<div id="outline-container-org9a4c587" class="outline-2">
-<h2 id="org9a4c587"><span class="section-number-2">3.</span> Perform analysis</h2>
+<div id="outline-container-orgdf9e8ba" class="outline-2">
+<h2 id="orgdf9e8ba"><span class="section-number-2">3.</span> Perform analysis</h2>
 <div class="outline-text-2" id="text-3">
 </div>
-<div id="outline-container-org6981d3e" class="outline-3">
-<h3 id="org6981d3e"><span class="section-number-3">3.1.</span> Perform gctb-ldm-SbayesC using band LD matrix</h3>
+<div id="outline-container-org724dd75" class="outline-3">
+<h3 id="org724dd75"><span class="section-number-3">3.1.</span> Perform gctb-ldm-SbayesC using band LD matrix</h3>
 <div class="outline-text-3" id="text-3-1">
 </div>
-<div id="outline-container-org4cd413e" class="outline-4">
-<h4 id="org4cd413e"><span class="section-number-4">3.1.1.</span> Construct GWAS ma format</h4>
+<div id="outline-container-org4c2fa3c" class="outline-4">
+<h4 id="org4c2fa3c"><span class="section-number-4">3.1.1.</span> Construct GWAS ma format</h4>
 <div class="outline-text-4" id="text-3-1-1">
 <div class="org-src-container">
 <pre class="src src-R"><span style="color: #a9a1e1;">library</span>(data.table)
@@ -820,12 +820,12 @@ fwrite(maDat,file = paste0(assocFile,<span style="color: #98be65;">".ma"</span>)
 </div>
 </div>
 </div>
-<div id="outline-container-orga440a54" class="outline-4">
-<h4 id="orga440a54"><span class="section-number-4">3.1.2.</span> run gctb-ldm-SbayesC</h4>
+<div id="outline-container-orgf90f615" class="outline-4">
+<h4 id="orgf90f615"><span class="section-number-4">3.1.2.</span> run gctb-ldm-SbayesC</h4>
 <div class="outline-text-4" id="text-3-1-2">
 </div>
-<div id="outline-container-orgc2c16cd" class="outline-5">
-<h5 id="orgc2c16cd"><span class="section-number-5">3.1.2.1.</span> Using band LD matrix</h5>
+<div id="outline-container-org9239473" class="outline-5">
+<h5 id="org9239473"><span class="section-number-5">3.1.2.1.</span> Using band LD matrix</h5>
 <div class="outline-text-5" id="text-3-1-2-1">
 <div class="org-src-container">
 <pre class="src src-bash"><span style="color: #dcaeea;">homePath</span>=<span style="color: #98be65;">"/home/uqsliu28/"</span>
@@ -878,12 +878,12 @@ $<span style="color: #dcaeea;">qsubshcom</span> <span style="color: #98be65;">"<
 </div>
 </div>
 
-<div id="outline-container-orgbd36b81" class="outline-3">
-<h3 id="orgbd36b81"><span class="section-number-3">3.2.</span> Perform SbayesRC without annotation using low-rank LD matrix</h3>
+<div id="outline-container-org5fd26e7" class="outline-3">
+<h3 id="org5fd26e7"><span class="section-number-3">3.2.</span> Perform SbayesRC without annotation using low-rank LD matrix</h3>
 <div class="outline-text-3" id="text-3-2">
 </div>
-<div id="outline-container-org0338e59" class="outline-4">
-<h4 id="org0338e59"><span class="section-number-4">3.2.1.</span> Do SBayesRC analysis</h4>
+<div id="outline-container-orge5a6ec6" class="outline-4">
+<h4 id="orge5a6ec6"><span class="section-number-4">3.2.1.</span> Do SBayesRC analysis</h4>
 <div class="outline-text-4" id="text-3-2-1">
 <div class="org-src-container">
 <pre class="src src-bash"><span style="color: #5B6268;">################################################################</span>
@@ -985,8 +985,8 @@ SBayesRC::impute<span style="color: #51afef;">(</span>maTidyFile, ld_folder,maIm
 </div>
 </div>
 </div>
-<div id="outline-container-org982af02" class="outline-4">
-<h4 id="org982af02"><span class="section-number-4">3.2.2.</span> Run SBayesRC</h4>
+<div id="outline-container-org886a766" class="outline-4">
+<h4 id="org886a766"><span class="section-number-4">3.2.2.</span> Run SBayesRC</h4>
 <div class="outline-text-4" id="text-3-2-2">
 <div class="org-src-container">
 <pre class="src src-bash"><span style="color: #5B6268;">## </span><span style="color: #5B6268;">Step 2. Set cluster parameters and submit the script into cluster</span>
@@ -1029,8 +1029,8 @@ $<span style="color: #dcaeea;">qsubshcom</span> <span style="color: #98be65;">"<
 </div>
 </div>
 
-<div id="outline-container-orga0f54ab" class="outline-3">
-<h3 id="orga0f54ab"><span class="section-number-3">3.3.</span> Prediction</h3>
+<div id="outline-container-org26ad160" class="outline-3">
+<h3 id="org26ad160"><span class="section-number-3">3.3.</span> Prediction</h3>
 <div class="outline-text-3" id="text-3-3">
 <div class="org-src-container">
 <pre class="src src-R"><span style="color: #a9a1e1;">rm</span>(list = ls())
@@ -1155,11 +1155,6 @@ theme_geometry(dat$gVal,
                xlab= TeX(<span style="color: #98be65;">"$X_{valid}\\beta_{true}$"</span>),
                ylab=   TeX(<span style="color: #98be65;">"$X_{valid}\\beta_{Mean}$"</span>)) +
 theme(plot.title = element_text(hjust = <span style="color: #da8548; font-weight: bold;">0.5</span>))
-
-
-
-
-
 </pre>
 </div>
 </div>
@@ -1169,7 +1164,7 @@ theme(plot.title = element_text(hjust = <span style="color: #da8548; font-weight
 <div id="postamble" class="status">
 <p class="date">Date: 2021-03-01</p>
 <p class="author">Author: Liu, Shouye</p>
-<p class="date">Created: 2023-04-06 Thu 15:07</p>
+<p class="date">Created: 2023-04-09 Sun 17:57</p>
 </div>
 </body>
 </html>

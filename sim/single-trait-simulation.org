@@ -725,21 +725,30 @@ rm(list = ls())
 library(data.table)
 library(ggplot2)
 library(SBayesE)
-library(latex2exp)
+## library(latex2exp)
 
-datPath = "/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/sim/"
+datPath = "/home/uqsliu28/projects/sbayesRC/ldAndMa/sim/"
 betaTrueFileName = "train-chr1-22-shuf-300000-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21.sim.par"
 betaEstFileName = "smt-bayes-results.ma"
 validBfileName = "valid-chr1-22-shuf-48501-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21"
 trainBfileName = "train-chr1-22-shuf-300000-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21"
+betaBbrFileName = "train-chr1-22-shuf-300000-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21.assoc.ci.assoc.linear.ma_sbrc.txt"
 
-betaTrueFile = paste0(datPath, "/gcta/",betaTrueFileName)
+betaMarginFileName = "train-chr1-22-shuf-300000-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21.assoc.ci.assoc.linear.ma"
+
+betaTrueFile = paste0(datPath, "/gcta/single/",betaTrueFileName)
+## betaMarginFile = paste0(datPath, "/gcta/single/",betaMarginFileName)
+
 betaEstFile = paste0(datPath,"/smt/",betaEstFileName)
+
 trainBfile = paste0(datPath, "/data/", trainBfileName)
 validBfile = paste0(datPath, "/data/", validBfileName)
 
-
+############################################################
+########## correlation between smt and
+############################################################
 betaEstRaw = fread(betaEstFile)
+## betaMarRaw = fread(betaMarginFile)
 
 betaTrueRaw = fread(betaTrueFile)
 names(betaTrueRaw) <- c("SNP", "RefAllele", "Frequency", "Effect")
@@ -752,18 +761,44 @@ betaTrue = merge(betaTrueRaw, famTrain, by = "SNP")
 
 bimValid = fread(paste0(validBfile,".bim"))
 names(bimValid) <- c("CHR","SNP","POS","CM","A1","A2")
-snpIdx = Reduce(intersect, list(bimValid$SNP, betaTrue$SNP, betaEstRaw$Name) )
 
+bimTrain = fread(paste0(trainBfile,".bim"))
+names(bimTrain) <- c("CHR","SNP","POS","CM","A1","A2")
+
+snpIdx = Reduce(intersect, list(bimValid$SNP, betaTrue$SNP, betaEstRaw$Name) )
+snpIdxTrain = Reduce(intersect, list(snpIdx,bimTrain$SNP ) )
 
 ## do QC process for beta true effect
 ma_val2 = betaTrue[match(snpIdx,betaTrue$SNP),]
 genoInfo = bimValid[match(snpIdx,bimValid$SNP),]
+genoInfoTrain = bimTrain[match(snpIdx,bimTrain$SNP),]
+
+## check allele flip between train and bim file
+bA1A1 = (genoInfo$A1 == genoInfoTrain$A1)
+bA1A2 = (genoInfo$A1 ==  genoInfoTrain$A2 )
+bAll = bA1A1 | bA1A2
+sum(bA1A1)
+## [1] 9029
+sum(bA1A2)
+## [1] 0
+
+## check allele flip between beta true and marginal effect
+## ma_valMar = betaMarRaw[match(snpIdx,betaMarRaw$SNP),]
+
+## ## check allele flip between train and bim file
+## bA1A1 = (ma_valMar$A1 == genoInfo$A1)
+## bA1A2 = (ma_valMar$A1 ==  genoInfo$A2 )
+## bAll = bA1A1 | bA1A2
+## sum(bA1A1)
+## ## [1] 9029
+## sum(bA1A2)
+
 
 idx = match(ma_val2$SNP, snpIdx)
 message(length(idx), " SNPs in common between GWAS summary and LD")
 ## Check the consistency of alleles (A1, A2)
-bA1A1 = (ma_val2$A1 == genoInfo$A1) & (ma_val2$A2 == genoInfo$A2 )
-bA1A2 = (ma_val2$A1 ==  genoInfo$A2 ) & (ma_val2$A2 == genoInfo$A1)
+bA1A1 = (ma_val2$RefAllele == genoInfo$A1)
+bA1A2 = (ma_val2$RefAllele ==  genoInfo$A2 )
 bAll = bA1A1 | bA1A2
 message(sum(bAll), " SNPs have consistent alleles (A1, A2) between training and validation dataset")
 
@@ -775,6 +810,15 @@ bA1A1 = (ma_val3$A1 == genoInfo$A1) & (ma_val3$A2 == genoInfo$A2 )
 bA1A2 = (ma_val3$A1 ==  genoInfo$A2 ) & (ma_val3$A2 == genoInfo$A1)
 bAll = bA1A1 | bA1A2
 message(sum(bAll), " SNPs have consistent alleles (A1, A2) between training and validation dataset")
+### allele flip
+##  ma_val3[bA1A2]
+##       ID      Name Chrom Position A1 A2 A1Freq     A1Effect SE PIP
+## 1: 98843 rs7561434     0        0  A  G 0.4999 1.250239e-05  0   0
+## ma_val2[bA1A2]
+##         SNP RefAllele Frequency     Effect CHR POS       CM A1 A2
+## 1: rs7561434         G  0.500086 0.00358294   2   0 34062843  G  A
+ma_val3[bA1A2,BETAF:= - A1Effect]
+ma_val3[bA1A1,BETAF:= A1Effect]
 
 ## Now, we need to read genotype from validation dataset
 indNum = 48501
@@ -808,17 +852,61 @@ print(paste0("REAL genotype is used ", "(N = ",indNum,")"))
 X <-  W[,match(snpIdx,colnames(W))]
 
 betaTrueEffect = ma_val2$Effect
-betaEstEffect = ma_val3$A1Effect
+betaEstEffect = ma_val3$BETAF
 
 gVal <- X %*% betaTrueEffect
 estVal = X %*% betaEstEffect
 
 message("Correlation between true and estimated genetic effect: ",cor(betaTrueEffect,betaEstEffect))
+message("Correlation between true and estimated genetic effect: ",cor(betaTrueEffect, ma_val3$A1Effect))
+## Correlation between true and estimated genetic effect: 0.319570150414059
+
 
 message("Prediction R2 between true and estimated genetic effect: ", cor(gVal, estVal))
+## Prediction R2 between true and estimated genetic effect: 0.321346618304841
 
 dat = data.frame(betaTrue = betaTrueEffect,
                  betaMean = betaEstEffect)
+
+#######################################################
+###### SBayesRC results
+#######################################################
+betaEstSbrFile = paste0(datPath,"/out/sbayesrc/single/",betaBbrFileName)
+betaEstSbrRaw = fread(betaEstSbrFile)
+
+snpIdxSbr = Reduce(intersect, list(betaEstSbrRaw$SNP,snpIdx) )
+## > str(snpIdxSbr)
+## chr [1:9029] "rs2235536" "rs2840528" "rs6683974" "rs2483274" "rs6703610" ...
+## > str(snpIdx)
+## chr [1:9029] "rs2235536" "rs2840528" "rs6683974" "rs2483274" "rs6703610" ...
+## same snpIdx
+ma_val4 = betaEstSbrRaw[match(snpIdx, betaEstSbrRaw$SNP)]
+
+## check allele flip
+## Check the consistency of alleles (A1, A2)
+bA1A1 = (ma_val4$A1 == genoInfo$A1)
+bA1A2 = (ma_val4$A1 ==  genoInfo$A2 )
+bAll = bA1A1 | bA1A2
+message(sum(bAll), " SNPs have consistent alleles (A1, A2) between training and validation dataset")
+
+ma_val4[bA1A2,BETAF:= - BETA]
+ma_val4[bA1A1,BETAF:= BETA]
+
+betaEstEffectSbr = ma_val4$BETAF
+
+estValSbr = X %*% betaEstEffectSbr
+
+message("Correlation between true and estimated genetic effect: ",cor(betaTrueEffect,betaEstEffectSbr))
+## Correlation between true and estimated genetic effect: 0.318533521299413
+message("Correlation between true and estimated genetic effect(not flip allele effect): ",cor(betaTrueEffect, ma_val4$BETA))
+## Correlation between true and estimated genetic effect: 0.58774477265263
+message("Prediction R2 between true and estimated genetic effect: ", cor(gVal, estValSbr))
+## Prediction R2 between true and estimated genetic effect: 0.319583753762207
+
+
+#######################################################
+###### end
+#######################################################
 
 mycolors = c("#56B4E9" )
 ggplot(dat, aes(betaTrue,betaMean)) + geom_point(color = mycolors) +
@@ -843,9 +931,4 @@ theme_geometry(dat$gVal,
                xlab= TeX("$X_{valid}\\beta_{true}$"),
                ylab=   TeX("$X_{valid}\\beta_{Mean}$")) +
 theme(plot.title = element_text(hjust = 0.5))
-
-
-
-
-
 #+end_src
