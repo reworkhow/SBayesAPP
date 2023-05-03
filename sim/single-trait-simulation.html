@@ -3,7 +3,7 @@
 "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
 <head>
-<!-- 2023-04-09 Sun 17:57 -->
+<!-- 2023-05-03 Wed 10:04 -->
 <meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Generate LD matrix and do single trait whole-genome simulation</title>
@@ -201,47 +201,53 @@
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents" role="doc-toc">
 <ul>
-<li><a href="#org8457d25">1. Per LD block LD matrix</a>
+<li><a href="#org7c9b466">1. Per LD block LD matrix</a>
 <ul>
-<li><a href="#orgd9e9f9a">1.1. Extract snplist from per ld block and generate HM3 data based on snpInfo</a></li>
-<li><a href="#org6e6973f">1.2. Generate LD matrix based on per-block-snplist</a></li>
+<li><a href="#org15136e9">1.1. Extract snplist from per ld block and generate HM3 data based on snpInfo</a></li>
+<li><a href="#org24adbb2">1.2. Generate LD matrix based on per-block-snplist</a></li>
 </ul>
 </li>
-<li><a href="#orgcceb431">2. Simulation</a>
+<li><a href="#orga914e02">2. Simulation</a>
 <ul>
-<li><a href="#org8216ef5">2.1. Training and testing dataset</a>
+<li><a href="#org4486a06">2.1. Training and testing dataset</a>
 <ul>
-<li><a href="#org2593ee1">2.1.1. Select samples</a></li>
-<li><a href="#orgb105fd1">2.1.2. Selecting a series of training datasets</a></li>
+<li><a href="#org1ffe312">2.1.1. Select samples</a></li>
+<li><a href="#org35ae575">2.1.2. Selecting a series of training datasets</a></li>
 </ul>
 </li>
-<li><a href="#orgd550574">2.2. single-trait-simulation</a></li>
-<li><a href="#orgb96977a">2.3. Bivariate trait simulation</a>
+<li><a href="#orgb377437">2.2. single-trait-simulation</a></li>
+<li><a href="#org14bb653">2.3. Bivariate trait simulation</a>
 <ul>
-<li><a href="#orgb237e5c">2.3.1. Perform simulation</a></li>
-</ul>
-</li>
-</ul>
-</li>
-<li><a href="#orgdf9e8ba">3. Perform analysis</a>
-<ul>
-<li><a href="#org724dd75">3.1. Perform gctb-ldm-SbayesC using band LD matrix</a>
-<ul>
-<li><a href="#org4c2fa3c">3.1.1. Construct GWAS ma format</a></li>
-<li><a href="#orgf90f615">3.1.2. run gctb-ldm-SbayesC</a>
-<ul>
-<li><a href="#org9239473">3.1.2.1. Using band LD matrix</a></li>
+<li><a href="#org11d309e">2.3.1. Perform simulation</a></li>
 </ul>
 </li>
 </ul>
 </li>
-<li><a href="#org5fd26e7">3.2. Perform SbayesRC without annotation using low-rank LD matrix</a>
+<li><a href="#org82d12c5">3. Perform analysis</a>
 <ul>
-<li><a href="#orge5a6ec6">3.2.1. Do SBayesRC analysis</a></li>
-<li><a href="#org886a766">3.2.2. Run SBayesRC</a></li>
+<li><a href="#orga428a52">3.1. Perform gctb-ldm-SbayesC using band LD matrix</a>
+<ul>
+<li><a href="#orgfa841af">3.1.1. Construct GWAS ma format</a></li>
+<li><a href="#orgf06a7b9">3.1.2. run gctb-ldm-SbayesC</a>
+<ul>
+<li><a href="#org6c514ad">3.1.2.1. Using band LD matrix</a></li>
 </ul>
 </li>
-<li><a href="#org26ad160">3.3. Prediction</a></li>
+</ul>
+</li>
+<li><a href="#orgef9ad43">3.2. Perform SbayesRC without annotation using low-rank LD matrix</a>
+<ul>
+<li><a href="#org6c5614f">3.2.1. Do SBayesRC analysis</a></li>
+<li><a href="#org646f587">3.2.2. Run SBayesRC</a></li>
+</ul>
+</li>
+<li><a href="#orgc4e41a9">3.3. Prediction</a>
+<ul>
+<li><a href="#org8382a11">3.3.1. calPRS.r</a></li>
+<li><a href="#orgd6bade8">3.3.2. run single trait</a></li>
+<li><a href="#org4bde79a">3.3.3. run bivariate trait</a></li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>
@@ -249,12 +255,12 @@
 </div>
 
 
-<div id="outline-container-org8457d25" class="outline-2">
-<h2 id="org8457d25"><span class="section-number-2">1.</span> Per LD block LD matrix</h2>
+<div id="outline-container-org7c9b466" class="outline-2">
+<h2 id="org7c9b466"><span class="section-number-2">1.</span> Per LD block LD matrix</h2>
 <div class="outline-text-2" id="text-1">
 </div>
-<div id="outline-container-orgd9e9f9a" class="outline-3">
-<h3 id="orgd9e9f9a"><span class="section-number-3">1.1.</span> Extract snplist from per ld block and generate HM3 data based on snpInfo</h3>
+<div id="outline-container-org15136e9" class="outline-3">
+<h3 id="org15136e9"><span class="section-number-3">1.1.</span> Extract snplist from per ld block and generate HM3 data based on snpInfo</h3>
 <div class="outline-text-3" id="text-1-1">
 <div class="org-src-container">
 <pre class="src src-R"><span style="color: #a9a1e1;">library</span>(data.table)
@@ -311,8 +317,8 @@ fwrite(data.frame(snpinfo$ID),file = outFile,col.names = <span style="color: #EC
 </div>
 </div>
 </div>
-<div id="outline-container-org6e6973f" class="outline-3">
-<h3 id="org6e6973f"><span class="section-number-3">1.2.</span> Generate LD matrix based on per-block-snplist</h3>
+<div id="outline-container-org24adbb2" class="outline-3">
+<h3 id="org24adbb2"><span class="section-number-3">1.2.</span> Generate LD matrix based on per-block-snplist</h3>
 <div class="outline-text-3" id="text-1-2">
 <div class="org-src-container">
 <pre class="src src-bash"><span style="color: #dcaeea;">gctb</span>=<span style="color: #98be65;">"/home/uqsliu28/softwares/gctb/gctb"</span>
@@ -359,16 +365,16 @@ $<span style="color: #dcaeea;">qsubshcom</span> <span style="color: #98be65;">"<
 </div>
 </div>
 
-<div id="outline-container-orgcceb431" class="outline-2">
-<h2 id="orgcceb431"><span class="section-number-2">2.</span> Simulation</h2>
+<div id="outline-container-orga914e02" class="outline-2">
+<h2 id="orga914e02"><span class="section-number-2">2.</span> Simulation</h2>
 <div class="outline-text-2" id="text-2">
 </div>
-<div id="outline-container-org8216ef5" class="outline-3">
-<h3 id="org8216ef5"><span class="section-number-3">2.1.</span> Training and testing dataset</h3>
+<div id="outline-container-org4486a06" class="outline-3">
+<h3 id="org4486a06"><span class="section-number-3">2.1.</span> Training and testing dataset</h3>
 <div class="outline-text-3" id="text-2-1">
 </div>
-<div id="outline-container-org2593ee1" class="outline-4">
-<h4 id="org2593ee1"><span class="section-number-4">2.1.1.</span> Select samples</h4>
+<div id="outline-container-org1ffe312" class="outline-4">
+<h4 id="org1ffe312"><span class="section-number-4">2.1.1.</span> Select samples</h4>
 <div class="outline-text-4" id="text-2-1-1">
 <div class="org-src-container">
 <pre class="src src-bash"><span style="color: #c678dd;">options</span><span style="color: #51afef;">(</span><span style="color: #dcaeea;">scipen</span>=<span style="color: #da8548; font-weight: bold;">999</span><span style="color: #51afef;">)</span>
@@ -405,8 +411,8 @@ samsLeft &lt;- fam<span style="color: #51afef;">[</span>,c<span style="color: #c
 </div>
 </div>
 </div>
-<div id="outline-container-orgb105fd1" class="outline-4">
-<h4 id="orgb105fd1"><span class="section-number-4">2.1.2.</span> Selecting a series of training datasets</h4>
+<div id="outline-container-org35ae575" class="outline-4">
+<h4 id="org35ae575"><span class="section-number-4">2.1.2.</span> Selecting a series of training datasets</h4>
 <div class="outline-text-4" id="text-2-1-2">
 <div class="org-src-container">
 <pre class="src src-bash"><span style="color: #5B6268;">####################################################################</span>
@@ -477,8 +483,8 @@ $<span style="color: #dcaeea;">qsubshcom</span> <span style="color: #98be65;">"<
 </div>
 </div>
 </div>
-<div id="outline-container-orgd550574" class="outline-3">
-<h3 id="orgd550574"><span class="section-number-3">2.2.</span> single-trait-simulation</h3>
+<div id="outline-container-orgb377437" class="outline-3">
+<h3 id="orgb377437"><span class="section-number-3">2.2.</span> single-trait-simulation</h3>
 <div class="outline-text-3" id="text-2-2">
 <div class="org-src-container">
 <pre class="src src-R"><span style="color: #5B6268;">####################################################################</span>
@@ -542,12 +548,12 @@ system(plinkGWAS)
 </div>
 </div>
 </div>
-<div id="outline-container-orgb96977a" class="outline-3">
-<h3 id="orgb96977a"><span class="section-number-3">2.3.</span> Bivariate trait simulation</h3>
+<div id="outline-container-org14bb653" class="outline-3">
+<h3 id="org14bb653"><span class="section-number-3">2.3.</span> Bivariate trait simulation</h3>
 <div class="outline-text-3" id="text-2-3">
 </div>
-<div id="outline-container-orgb237e5c" class="outline-4">
-<h4 id="orgb237e5c"><span class="section-number-4">2.3.1.</span> Perform simulation</h4>
+<div id="outline-container-org11d309e" class="outline-4">
+<h4 id="org11d309e"><span class="section-number-4">2.3.1.</span> Perform simulation</h4>
 <div class="outline-text-4" id="text-2-3-1">
 <div class="org-src-container">
 <pre class="src src-R"><span style="color: #5B6268;">###############################################</span>
@@ -744,16 +750,16 @@ fwrite(bivTraitMa2,
 </div>
 </div>
 </div>
-<div id="outline-container-orgdf9e8ba" class="outline-2">
-<h2 id="orgdf9e8ba"><span class="section-number-2">3.</span> Perform analysis</h2>
+<div id="outline-container-org82d12c5" class="outline-2">
+<h2 id="org82d12c5"><span class="section-number-2">3.</span> Perform analysis</h2>
 <div class="outline-text-2" id="text-3">
 </div>
-<div id="outline-container-org724dd75" class="outline-3">
-<h3 id="org724dd75"><span class="section-number-3">3.1.</span> Perform gctb-ldm-SbayesC using band LD matrix</h3>
+<div id="outline-container-orga428a52" class="outline-3">
+<h3 id="orga428a52"><span class="section-number-3">3.1.</span> Perform gctb-ldm-SbayesC using band LD matrix</h3>
 <div class="outline-text-3" id="text-3-1">
 </div>
-<div id="outline-container-org4c2fa3c" class="outline-4">
-<h4 id="org4c2fa3c"><span class="section-number-4">3.1.1.</span> Construct GWAS ma format</h4>
+<div id="outline-container-orgfa841af" class="outline-4">
+<h4 id="orgfa841af"><span class="section-number-4">3.1.1.</span> Construct GWAS ma format</h4>
 <div class="outline-text-4" id="text-3-1-1">
 <div class="org-src-container">
 <pre class="src src-R"><span style="color: #a9a1e1;">library</span>(data.table)
@@ -820,12 +826,12 @@ fwrite(maDat,file = paste0(assocFile,<span style="color: #98be65;">".ma"</span>)
 </div>
 </div>
 </div>
-<div id="outline-container-orgf90f615" class="outline-4">
-<h4 id="orgf90f615"><span class="section-number-4">3.1.2.</span> run gctb-ldm-SbayesC</h4>
+<div id="outline-container-orgf06a7b9" class="outline-4">
+<h4 id="orgf06a7b9"><span class="section-number-4">3.1.2.</span> run gctb-ldm-SbayesC</h4>
 <div class="outline-text-4" id="text-3-1-2">
 </div>
-<div id="outline-container-org9239473" class="outline-5">
-<h5 id="org9239473"><span class="section-number-5">3.1.2.1.</span> Using band LD matrix</h5>
+<div id="outline-container-org6c514ad" class="outline-5">
+<h5 id="org6c514ad"><span class="section-number-5">3.1.2.1.</span> Using band LD matrix</h5>
 <div class="outline-text-5" id="text-3-1-2-1">
 <div class="org-src-container">
 <pre class="src src-bash"><span style="color: #dcaeea;">homePath</span>=<span style="color: #98be65;">"/home/uqsliu28/"</span>
@@ -878,12 +884,12 @@ $<span style="color: #dcaeea;">qsubshcom</span> <span style="color: #98be65;">"<
 </div>
 </div>
 
-<div id="outline-container-org5fd26e7" class="outline-3">
-<h3 id="org5fd26e7"><span class="section-number-3">3.2.</span> Perform SbayesRC without annotation using low-rank LD matrix</h3>
+<div id="outline-container-orgef9ad43" class="outline-3">
+<h3 id="orgef9ad43"><span class="section-number-3">3.2.</span> Perform SbayesRC without annotation using low-rank LD matrix</h3>
 <div class="outline-text-3" id="text-3-2">
 </div>
-<div id="outline-container-orge5a6ec6" class="outline-4">
-<h4 id="orge5a6ec6"><span class="section-number-4">3.2.1.</span> Do SBayesRC analysis</h4>
+<div id="outline-container-org6c5614f" class="outline-4">
+<h4 id="org6c5614f"><span class="section-number-4">3.2.1.</span> Do SBayesRC analysis</h4>
 <div class="outline-text-4" id="text-3-2-1">
 <div class="org-src-container">
 <pre class="src src-bash"><span style="color: #5B6268;">################################################################</span>
@@ -985,8 +991,8 @@ SBayesRC::impute<span style="color: #51afef;">(</span>maTidyFile, ld_folder,maIm
 </div>
 </div>
 </div>
-<div id="outline-container-org886a766" class="outline-4">
-<h4 id="org886a766"><span class="section-number-4">3.2.2.</span> Run SBayesRC</h4>
+<div id="outline-container-org646f587" class="outline-4">
+<h4 id="org646f587"><span class="section-number-4">3.2.2.</span> Run SBayesRC</h4>
 <div class="outline-text-4" id="text-3-2-2">
 <div class="org-src-container">
 <pre class="src src-bash"><span style="color: #5B6268;">## </span><span style="color: #5B6268;">Step 2. Set cluster parameters and submit the script into cluster</span>
@@ -1029,133 +1035,223 @@ $<span style="color: #dcaeea;">qsubshcom</span> <span style="color: #98be65;">"<
 </div>
 </div>
 
-<div id="outline-container-org26ad160" class="outline-3">
-<h3 id="org26ad160"><span class="section-number-3">3.3.</span> Prediction</h3>
+<div id="outline-container-orgc4e41a9" class="outline-3">
+<h3 id="orgc4e41a9"><span class="section-number-3">3.3.</span> Prediction</h3>
 <div class="outline-text-3" id="text-3-3">
+</div>
+<div id="outline-container-org8382a11" class="outline-4">
+<h4 id="org8382a11"><span class="section-number-4">3.3.1.</span> calPRS.r</h4>
+<div class="outline-text-4" id="text-3-3-1">
 <div class="org-src-container">
 <pre class="src src-R"><span style="color: #a9a1e1;">rm</span>(list = ls())
+<span style="color: #a9a1e1;">options</span>(scipen=<span style="color: #da8548; font-weight: bold;">999</span>)
 <span style="color: #a9a1e1;">library</span>(data.table)
-<span style="color: #a9a1e1;">library</span>(ggplot2)
-<span style="color: #a9a1e1;">library</span>(SBayesE)
-<span style="color: #a9a1e1;">library</span>(latex2exp)
+<span style="color: #a9a1e1;">library</span>(optparse)
+<span style="color: #5B6268;">##############################################################</span>
+<span style="color: #5B6268;">#####         </span><span style="color: #5B6268;">Step 1. Parameter setting option         #######</span>
+<span style="color: #5B6268;">##############################################################</span>
+option_list = list(
+  <span style="color: #5B6268;">##  </span><span style="color: #5B6268;">type</span>
+  make_option(c(<span style="color: #98be65;">"--type"</span>), action=<span style="color: #98be65;">"store"</span>, default=<span style="color: #98be65;">""</span>, type=<span style="color: #98be65;">'character'</span>,
+              help=<span style="color: #98be65;">""</span>),
+  make_option(c(<span style="color: #98be65;">"--outPath"</span>), type=<span style="color: #98be65;">"character"</span>, default=<span style="color: #ECBE7B;">NULL</span>,
+              help=<span style="color: #98be65;">"set train path"</span>, metavar=<span style="color: #98be65;">"character"</span>),
+  <span style="color: #5B6268;">## </span><span style="color: #5B6268;">various files</span>
+  make_option(c(<span style="color: #98be65;">"--parFile"</span>), type=<span style="color: #98be65;">"character"</span>, default=<span style="color: #ECBE7B;">NULL</span>,
+              help=<span style="color: #98be65;">"set par"</span>, metavar=<span style="color: #98be65;">"character"</span>),
+  make_option(c(<span style="color: #98be65;">"--sbrFile"</span>), type=<span style="color: #98be65;">"character"</span>, default=<span style="color: #ECBE7B;">NULL</span>,
+              help=<span style="color: #98be65;">"set sbr"</span>, metavar=<span style="color: #98be65;">"character"</span>),
+  make_option(c(<span style="color: #98be65;">"--smtFile"</span>), type=<span style="color: #98be65;">"character"</span>, default=<span style="color: #ECBE7B;">NULL</span>,
+              help=<span style="color: #98be65;">"set smt"</span>, metavar=<span style="color: #98be65;">"character"</span>),
+  make_option(c(<span style="color: #98be65;">"--resFile"</span>), type=<span style="color: #98be65;">"character"</span>, default=<span style="color: #ECBE7B;">NULL</span>,
+              help=<span style="color: #98be65;">"set res"</span>, metavar=<span style="color: #98be65;">"character"</span>)
+)
+opt = parse_args(OptionParser(option_list=option_list))
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">library(latex2exp)</span>
+<span style="color: #51afef;">if</span>(<span style="color: #ECBE7B;">FALSE</span>) {
+  smtFile = <span style="color: #98be65;">"/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/sim/smt/maFile4MT_ST/b1_ma_MT.ma"</span>
+  parFile = <span style="color: #98be65;">"/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/sim/gcta/bivariate/train-chr1-22-shuf-300000-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21.caus-trait-1.gcta.par"</span>
+  sbrFile = <span style="color: #98be65;">"/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/sim/out/sbayesrc/bivariate/train-chr1-22-shuf-300000-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21.caus-trait-1.gcta.phen.plink.ci.assoc.linear.ma_sbrc.txt"</span>
+  resultFile = <span style="color: #98be65;">"/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/sim/prediction/bivariate/results/prsFile.txt"</span>
+} <span style="color: #51afef;">else</span> {
 
-datPath = <span style="color: #98be65;">"/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/sim/"</span>
-betaTrueFileName = <span style="color: #98be65;">"train-chr1-22-shuf-300000-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21.sim.par"</span>
-betaEstFileName = <span style="color: #98be65;">"smt-bayes-results.ma"</span>
-validBfileName = <span style="color: #98be65;">"valid-chr1-22-shuf-48501-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21"</span>
-trainBfileName = <span style="color: #98be65;">"train-chr1-22-shuf-300000-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21"</span>
+}
+plink2= <span style="color: #98be65;">"/home/uqsliu28//softwares/plink/plink2"</span>
+validBfile = <span style="color: #98be65;">"/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/sim/data/valid-chr1-22-shuf-48501-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21"</span>
+outPath = opt$outPath
+resultFile = opt$resFile
 
-betaTrueFile = paste0(datPath, <span style="color: #98be65;">"/gcta/"</span>,betaTrueFileName)
-betaEstFile = paste0(datPath,<span style="color: #98be65;">"/smt/"</span>,betaEstFileName)
-trainBfile = paste0(datPath, <span style="color: #98be65;">"/data/"</span>, trainBfileName)
-validBfile = paste0(datPath, <span style="color: #98be65;">"/data/"</span>, validBfileName)
+prsParFile = paste0(outPath,<span style="color: #98be65;">"/"</span>,basename(opt$parFile))
+prsSbrFile = paste0(outPath,<span style="color: #98be65;">"/"</span>,basename(opt$sbrFile))
+prsSmtFile = paste0(outPath,<span style="color: #98be65;">"/"</span>,basename(opt$smtFile))
+<span style="color: #5B6268;">#####################################</span>
+<span style="color: #5B6268;">### </span><span style="color: #5B6268;">betaTrue</span>
+validCMD = paste0(plink2,
+                  <span style="color: #98be65;">" --bfile "</span>, validBfile,
+                  <span style="color: #98be65;">" --score "</span>, opt$parFile, <span style="color: #98be65;">" 1 2 4 header cols=+scoresums  center "</span>,
+                  <span style="color: #98be65;">" --out "</span>, prsParFile
+                  )
+system(validCMD)
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">sbayesrc result</span>
+validCMD = paste0(plink2,
+                  <span style="color: #98be65;">" --bfile "</span>, validBfile,
+                  <span style="color: #98be65;">" --score "</span>, opt$sbrFile, <span style="color: #98be65;">" 1 2 5 header cols=+scoresums  center "</span>,
+                  <span style="color: #98be65;">" --out "</span>, prsSbrFile
+                  )
+system(validCMD)
+<span style="color: #5B6268;">### </span><span style="color: #5B6268;">smt result</span>
+validCMD = paste0(plink2,
+                  <span style="color: #98be65;">" --bfile "</span>, validBfile,
+                  <span style="color: #98be65;">" --score "</span>, opt$smtFile, <span style="color: #98be65;">" 2 5 8 header cols=+scoresums  center "</span>,
+                  <span style="color: #98be65;">" --out "</span>, prsSmtFile
+                  )
+system(validCMD)
+
+prsPar <span style="color: #a9a1e1;">&lt;-</span> fread(paste0(prsParFile,<span style="color: #98be65;">".sscore"</span>))
+colnames(prsPar) <span style="color: #a9a1e1;">&lt;-</span> c(<span style="color: #98be65;">"FID"</span>, <span style="color: #98be65;">"IID"</span>,<span style="color: #98be65;">"ALLELE_CT"</span>, <span style="color: #98be65;">"NAMED_ALLELE_DOSAGE_SUM"</span>,<span style="color: #98be65;">"SCORE1_AVG"</span>, <span style="color: #98be65;">"Par"</span>)
+
+prsSbr <span style="color: #a9a1e1;">&lt;-</span>fread(paste0(prsSbrFile,<span style="color: #98be65;">".sscore"</span>) )
+colnames(prsSbr) <span style="color: #a9a1e1;">&lt;-</span> c(<span style="color: #98be65;">"FID"</span>, <span style="color: #98be65;">"IID"</span>,<span style="color: #98be65;">"ALLELE_CT"</span>, <span style="color: #98be65;">"NAMED_ALLELE_DOSAGE_SUM"</span>,<span style="color: #98be65;">"SCORE1_AVG"</span>, <span style="color: #98be65;">"Sbr"</span>)
+
+prsSmt <span style="color: #a9a1e1;">&lt;-</span>fread(paste0(prsSmtFile,<span style="color: #98be65;">".sscore"</span>))
+colnames(prsSmt) <span style="color: #a9a1e1;">&lt;-</span> c(<span style="color: #98be65;">"FID"</span>, <span style="color: #98be65;">"IID"</span>,<span style="color: #98be65;">"ALLELE_CT"</span>, <span style="color: #98be65;">"NAMED_ALLELE_DOSAGE_SUM"</span>,<span style="color: #98be65;">"SCORE1_AVG"</span>, <span style="color: #98be65;">"Smt"</span>)
+
+ merge(merge(phenotype, covariates, by=c(<span style="color: #98be65;">"FID"</span>, <span style="color: #98be65;">"IID"</span>)), indlist, by=c(<span style="color: #98be65;">"FID"</span>,<span style="color: #98be65;">"IID"</span>))
 
 
-betaEstRaw = fread(betaEstFile)
+prsTotal <span style="color: #a9a1e1;">&lt;-</span> merge(
+                  merge(prsPar[,c(<span style="color: #98be65;">"FID"</span>,<span style="color: #98be65;">"IID"</span>, <span style="color: #98be65;">"Par"</span>)],
+                        prsSbr[,c(<span style="color: #98be65;">"FID"</span>,<span style="color: #98be65;">"IID"</span>, <span style="color: #98be65;">"Sbr"</span>)],
+                        by=c(<span style="color: #98be65;">"FID"</span>, <span style="color: #98be65;">"IID"</span>)),
+                  prsSmt[,c(<span style="color: #98be65;">"FID"</span>,<span style="color: #98be65;">"IID"</span>, <span style="color: #98be65;">"Smt"</span>)],
+                   by=c(<span style="color: #98be65;">"FID"</span>, <span style="color: #98be65;">"IID"</span>))
 
-betaTrueRaw = fread(betaTrueFile)
-names(betaTrueRaw) <span style="color: #a9a1e1;">&lt;-</span> c(<span style="color: #98be65;">"SNP"</span>, <span style="color: #98be65;">"RefAllele"</span>, <span style="color: #98be65;">"Frequency"</span>, <span style="color: #98be65;">"Effect"</span>)
+dat <span style="color: #a9a1e1;">&lt;-</span> data.frame(type = opt$type,
+                  corSbr = cor(prsTotal$Par,prsTotal$Sbr)^<span style="color: #da8548; font-weight: bold;">2</span>,
+                  corSmt = cor(prsTotal$Par,prsTotal$Smt)^<span style="color: #da8548; font-weight: bold;">2</span>)
 
-famTrain = fread(paste0(trainBfile, <span style="color: #98be65;">".bim"</span>) )
-names(famTrain) <span style="color: #a9a1e1;">&lt;-</span> c(<span style="color: #98be65;">"CHR"</span>,<span style="color: #98be65;">"SNP"</span>,<span style="color: #98be65;">"POS"</span>,<span style="color: #98be65;">"CM"</span>,<span style="color: #98be65;">"A1"</span>,<span style="color: #98be65;">"A2"</span>)
-
-<span style="color: #5B6268;">## </span><span style="color: #5B6268;">merge</span>
-betaTrue = merge(betaTrueRaw, famTrain, by = <span style="color: #98be65;">"SNP"</span>)
-
-bimValid = fread(paste0(validBfile,<span style="color: #98be65;">".bim"</span>))
-names(bimValid) <span style="color: #a9a1e1;">&lt;-</span> c(<span style="color: #98be65;">"CHR"</span>,<span style="color: #98be65;">"SNP"</span>,<span style="color: #98be65;">"POS"</span>,<span style="color: #98be65;">"CM"</span>,<span style="color: #98be65;">"A1"</span>,<span style="color: #98be65;">"A2"</span>)
-snpIdx = Reduce(intersect, list(bimValid$SNP, betaTrue$SNP, betaEstRaw$Name) )
-
-
-<span style="color: #5B6268;">## </span><span style="color: #5B6268;">do QC process for beta true effect</span>
-ma_val2 = betaTrue[match(snpIdx,betaTrue$SNP),]
-genoInfo = bimValid[match(snpIdx,bimValid$SNP),]
-
-idx = match(ma_val2$SNP, snpIdx)
-<span style="color: #a9a1e1;">message</span>(length(idx), <span style="color: #98be65;">" SNPs in common between GWAS summary and LD"</span>)
-<span style="color: #5B6268;">## </span><span style="color: #5B6268;">Check the consistency of alleles (A1, A2)</span>
-bA1A1 = (ma_val2$A1 == genoInfo$A1) &amp; (ma_val2$A2 == genoInfo$A2 )
-bA1A2 = (ma_val2$A1 ==  genoInfo$A2 ) &amp; (ma_val2$A2 == genoInfo$A1)
-bAll = bA1A1 | bA1A2
-<span style="color: #a9a1e1;">message</span>(sum(bAll), <span style="color: #98be65;">" SNPs have consistent alleles (A1, A2) between training and validation dataset"</span>)
-
-<span style="color: #5B6268;"># </span><span style="color: #5B6268;">do QC process for beta estimation effect</span>
-ma_val3 = betaEstRaw[match(snpIdx, betaEstRaw$Name)]
-<span style="color: #a9a1e1;">message</span>(length(idx), <span style="color: #98be65;">" SNPs in common between GWAS summary and LD"</span>)
-<span style="color: #5B6268;">## </span><span style="color: #5B6268;">Check the consistency of alleles (A1, A2)</span>
-bA1A1 = (ma_val3$A1 == genoInfo$A1) &amp; (ma_val3$A2 == genoInfo$A2 )
-bA1A2 = (ma_val3$A1 ==  genoInfo$A2 ) &amp; (ma_val3$A2 == genoInfo$A1)
-bAll = bA1A1 | bA1A2
-<span style="color: #a9a1e1;">message</span>(sum(bAll), <span style="color: #98be65;">" SNPs have consistent alleles (A1, A2) between training and validation dataset"</span>)
-
-<span style="color: #5B6268;">## </span><span style="color: #5B6268;">Now, we need to read genotype from validation dataset</span>
-indNum = <span style="color: #da8548; font-weight: bold;">48501</span>
-ukb <span style="color: #a9a1e1;">&lt;-</span> BGData::as.BGData(BEDMatrix::BEDMatrix(validBfile))
-geno <span style="color: #a9a1e1;">&lt;-</span> as.matrix(ukb@geno)
-<span style="color: #5B6268;">## </span><span style="color: #5B6268;">select genotype</span>
-colnames(geno)  <span style="color: #a9a1e1;">&lt;-</span> gsub(<span style="color: #98be65;">"(.+)_(.+)"</span>,<span style="color: #98be65;">"\\1"</span>,colnames(geno))
-geno <span style="color: #a9a1e1;">&lt;-</span> geno[,match(snpIdx,colnames(geno))]
-<span style="color: #5B6268;">## </span><span style="color: #5B6268;">select phenotype</span>
-selectedIndName <span style="color: #a9a1e1;">&lt;-</span> sample(rownames(geno),indNum)
-geno <span style="color: #a9a1e1;">&lt;-</span> geno[match(selectedIndName,rownames(geno)),]
-<span style="color: #5B6268;">## </span><span style="color: #5B6268;">extract genotype information</span>
-genoMap <span style="color: #a9a1e1;">&lt;-</span> ukb@map[ ukb@map$snp_id <span style="color: #a9a1e1;">%in%</span> snpIdx ,]
-rownames(genoMap) <span style="color: #a9a1e1;">&lt;-</span> gsub(<span style="color: #98be65;">"(.+)_(.+)"</span>,<span style="color: #98be65;">"\\1"</span>,rownames(genoMap) )
-genoInfo <span style="color: #a9a1e1;">&lt;-</span> BGData::BGData(geno = geno, map = genoMap)
-freq  <span style="color: #a9a1e1;">&lt;-</span> BGData::summarize(X = BGData::geno(genoInfo) )
-<span style="color: #5B6268;">## </span><span style="color: #5B6268;">add additional attributes</span>
-genoInfo@map$freq_na      <span style="color: #a9a1e1;">&lt;-</span> freq$freq_na
-genoInfo@map$sd           <span style="color: #a9a1e1;">&lt;-</span> freq$sd
-genoInfo@map$allele_freq  <span style="color: #a9a1e1;">&lt;-</span> freq$allele_freq
-genoInfo@map$na           <span style="color: #a9a1e1;">&lt;-</span> colSums(is.na(geno))
-snp2pq                    <span style="color: #a9a1e1;">&lt;-</span> <span style="color: #da8548; font-weight: bold;">2</span> * freq$allele_freq * ( <span style="color: #da8548; font-weight: bold;">1</span>- freq$allele_freq)
-names(snp2pq)             <span style="color: #a9a1e1;">&lt;-</span> snpIdx
-<span style="color: #5B6268;">## </span><span style="color: #5B6268;">finally, center and standardize the data</span>
-W <span style="color: #a9a1e1;">&lt;-</span> BGData::preprocess(geno, center = <span style="color: #ECBE7B;">TRUE</span>, scale = <span style="color: #ECBE7B;">TRUE</span>,impute = <span style="color: #ECBE7B;">TRUE</span>)
-<span style="color: #5B6268;">## </span><span style="color: #5B6268;">W &lt;- apply(W, 2, function(x){ (x-mean(x))/sd(x) })</span>
-<span style="color: #5B6268;">## </span><span style="color: #5B6268;">W &lt;- apply(W, 2, function(x){ x-mean(x) })</span>
-print(paste0(<span style="color: #98be65;">"REAL genotype is used "</span>, <span style="color: #98be65;">"(N = "</span>,indNum,<span style="color: #98be65;">")"</span>))
-
-<span style="color: #5B6268;">## </span><span style="color: #5B6268;">calculate</span>
-X <span style="color: #a9a1e1;">&lt;-</span>  W[,match(snpIdx,colnames(W))]
-
-betaTrueEffect = ma_val2$Effect
-betaEstEffect = ma_val3$A1Effect
-
-gVal <span style="color: #a9a1e1;">&lt;-</span> X <span style="color: #a9a1e1;">%*%</span> betaTrueEffect
-estVal = X <span style="color: #a9a1e1;">%*%</span> betaEstEffect
-
-<span style="color: #a9a1e1;">message</span>(<span style="color: #98be65;">"Correlation between true and estimated genetic effect: "</span>,cor(betaTrueEffect,betaEstEffect))
-
-<span style="color: #a9a1e1;">message</span>(<span style="color: #98be65;">"Prediction R2 between true and estimated genetic effect: "</span>, cor(gVal, estVal))
-
-dat = data.frame(betaTrue = betaTrueEffect,
-                 betaMean = betaEstEffect)
-
-mycolors = c(<span style="color: #98be65;">"#56B4E9"</span> )
-ggplot(dat, aes(betaTrue,betaMean)) + geom_point(color = mycolors) +
-  scale_color_manual(values=mycolors) +
- ggtitle(<span style="color: #98be65;">"Scatter Plot: True vs. Estimated Effects"</span>) +
-theme_geometry(dat$betaTrue,
-               dat$betaMean,
-               color = <span style="color: #98be65;">"grey"</span>,
-               xlab=TeX(<span style="color: #98be65;">"$\\beta_{true}$"</span>),
-               ylab=  TeX(<span style="color: #98be65;">"$\\beta_{Mean}$"</span>)) +
-theme(plot.title = element_text(hjust = <span style="color: #da8548; font-weight: bold;">0.5</span>))
-
-dat = data.frame(gVal = gVal,
-                 estVal = estVal)
-
-ggplot(dat, aes(gVal,estVal)) + geom_point(color = mycolors) +
- ggtitle(paste0(<span style="color: #98be65;">"Scatter Plot"</span>  ) ) +
-   scale_color_manual(values=mycolors) +
-theme_geometry(dat$gVal,
-               dat$estVal,
-               color = <span style="color: #98be65;">"grey"</span>,
-               xlab= TeX(<span style="color: #98be65;">"$X_{valid}\\beta_{true}$"</span>),
-               ylab=   TeX(<span style="color: #98be65;">"$X_{valid}\\beta_{Mean}$"</span>)) +
-theme(plot.title = element_text(hjust = <span style="color: #da8548; font-weight: bold;">0.5</span>))
+write.table(dat, file = resultFile,col.names = <span style="color: #ECBE7B;">FALSE</span>,row.names = <span style="color: #ECBE7B;">FALSE</span>, sep = <span style="color: #98be65;">"\t"</span>, append = T)
 </pre>
+</div>
+</div>
+</div>
+<div id="outline-container-orgd6bade8" class="outline-4">
+<h4 id="orgd6bade8"><span class="section-number-4">3.3.2.</span> run single trait</h4>
+<div class="outline-text-4" id="text-3-3-2">
+<div class="org-src-container">
+<pre class="src src-bash"><span style="color: #5B6268;">## </span><span style="color: #5B6268;">homePath="/home/yangjianLab/liushouye/"</span>
+<span style="color: #dcaeea;">sbrPath</span>=<span style="color: #98be65;">"/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/sim/out/sbayesrc/single/"</span>
+<span style="color: #dcaeea;">smtPath</span>=<span style="color: #98be65;">"/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/sim/out/smt/"</span>
+<span style="color: #dcaeea;">parPath</span>=<span style="color: #98be65;">"/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/sim/gcta/single/"</span>
+<span style="color: #dcaeea;">resPath</span>=<span style="color: #98be65;">"/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/sim/prediction/single/results/"</span>
+<span style="color: #dcaeea;">resFile</span>=<span style="color: #98be65;">"prsFile_col_type_sbr_smt.txt"</span>
+<span style="color: #dcaeea;">prsPath</span>=<span style="color: #98be65;">"/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/sim/prediction/single/prs/"</span>
+
+
+<span style="color: #c678dd;">declare</span> -a <span style="color: #dcaeea;">parFiles</span>=<span style="color: #51afef;">(</span><span style="color: #98be65;">"train-chr1-22-shuf-300000-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21.sim.par"</span>
+                    <span style="color: #51afef;">)</span>
+
+<span style="color: #c678dd;">declare</span> -a <span style="color: #dcaeea;">sbrFiles</span>=<span style="color: #51afef;">(</span><span style="color: #98be65;">"train-chr1-22-shuf-300000-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21.assoc.ci.assoc.linear.ma_sbrc.txt"</span>
+                    <span style="color: #51afef;">)</span>
+<span style="color: #c678dd;">declare</span> -a <span style="color: #dcaeea;">smtFiles</span>=<span style="color: #51afef;">(</span><span style="color: #98be65;">"smt-bayes-results.ma"</span>
+                    <span style="color: #51afef;">)</span>
+<span style="color: #5B6268;">###########################</span>
+<span style="color: #dcaeea;">homePath</span>=<span style="color: #98be65;">"/home/uqsliu28/"</span>
+<span style="color: #dcaeea;">qsubshcom</span>=<span style="color: #98be65;">"</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{homePath}</span><span style="color: #98be65;">/softwares/qsubshcom/qsubshcom"</span>
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">scriptPath="${homePath}/projects/annotation/sim/prediction/eqtlComparison/scripts"</span>
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">for bunya 3</span>
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">scriptPath="/home/uqsliu28/projects/sbayesRC/scripts"</span>
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">for delta2</span>
+<span style="color: #dcaeea;">scriptPath</span>=<span style="color: #98be65;">"/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/sim/prediction/single/"</span>
+<span style="color: #dcaeea;">logPath</span>=<span style="color: #98be65;">"</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{scriptPath}</span><span style="color: #98be65;">/log"</span>
+<span style="color: #ECBE7B;">mkdir</span> -p $<span style="color: #51afef;">{</span><span style="color: #dcaeea;">logPath</span><span style="color: #51afef;">}</span>
+
+<span style="color: #dcaeea;">scriptName</span>=<span style="color: #98be65;">"calPRS.r"</span>
+<span style="color: #ECBE7B;">chmod</span> <span style="color: #da8548; font-weight: bold;">751</span> $<span style="color: #51afef;">{</span><span style="color: #dcaeea;">scriptPath</span><span style="color: #51afef;">}</span>/$<span style="color: #51afef;">{</span><span style="color: #dcaeea;">scriptName</span><span style="color: #51afef;">}</span>
+
+<span style="color: #51afef;">for</span> num<span style="color: #51afef;"> in</span> <span style="color: #da8548; font-weight: bold;">0</span>
+<span style="color: #51afef;">do</span>
+    <span style="color: #dcaeea;">outPath</span>=$<span style="color: #51afef;">{</span><span style="color: #dcaeea;">prsPath</span><span style="color: #51afef;">}</span>/$<span style="color: #51afef;">{</span><span style="color: #dcaeea;">smtFiles</span><span style="color: #c678dd;">[</span>$<span style="color: #98be65;">{</span><span style="color: #dcaeea;">num</span><span style="color: #98be65;">}</span><span style="color: #c678dd;">]</span><span style="color: #51afef;">}</span>
+    <span style="color: #ECBE7B;">mkdir</span> -p $<span style="color: #51afef;">{</span><span style="color: #dcaeea;">outPath</span><span style="color: #51afef;">}</span>
+    <span style="color: #ECBE7B;">mkdir</span> -p $<span style="color: #51afef;">{</span><span style="color: #dcaeea;">resPath</span><span style="color: #51afef;">}</span>
+    <span style="color: #dcaeea;">qsubName</span>=<span style="color: #98be65;">"prs-</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{num}</span><span style="color: #98be65;">-</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{smtFiles[$num]}</span><span style="color: #98be65;">-</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{scriptName}</span><span style="color: #98be65;">"</span>
+    <span style="color: #dcaeea;">printLog</span>=<span style="color: #98be65;">"</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{logPath}</span><span style="color: #98be65;">/</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{qsubName}</span><span style="color: #98be65;">-</span><span style="color: #51afef; font-weight: bold;">$(</span><span style="color: #51afef; font-weight: bold;">date</span><span style="color: #51afef; font-weight: bold;"> +"%Y-%m-%d-%I-%M-%p")</span><span style="color: #98be65;">.log"</span>
+    <span style="color: #dcaeea;">tmp_cmd</span>=<span style="color: #98be65;">"Rscript </span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{scriptPath}</span><span style="color: #98be65;">/</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{scriptName}</span><span style="color: #98be65;"> --type </span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{smtFiles[$num]}</span>
+<span style="color: #98be65;">                      --outPath </span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{outPath}</span><span style="color: #98be65;"> \</span>
+<span style="color: #98be65;">                      --parFile </span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{parPath}</span><span style="color: #98be65;">/</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{parFiles[$num]}</span><span style="color: #98be65;"> \</span>
+<span style="color: #98be65;">                      --sbrFile </span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{sbrPath}</span><span style="color: #98be65;">/</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{sbrFiles[$num]}</span><span style="color: #98be65;"> \</span>
+<span style="color: #98be65;">                      --smtFile </span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{smtPath}</span><span style="color: #98be65;">/</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{smtFiles[$num]}</span><span style="color: #98be65;">\</span>
+<span style="color: #98be65;">                      --resFile </span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{resPath}</span><span style="color: #98be65;">/</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{resFile}</span><span style="color: #98be65;">&gt; </span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{printLog}</span><span style="color: #98be65;">"</span>
+    <span style="color: #5B6268;">## </span><span style="color: #5B6268;">$qsubshcom "$tmp_cmd" 1 50G  ${qsubName}  10:00:00 "-queue=normal"  ## delta2</span>
+    $<span style="color: #dcaeea;">qsubshcom</span> <span style="color: #98be65;">"</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">tmp_cmd</span><span style="color: #98be65;">"</span> <span style="color: #da8548; font-weight: bold;">1</span> 50G  $<span style="color: #51afef;">{</span><span style="color: #dcaeea;">qsubName</span><span style="color: #51afef;">}</span>  48:00:00 <span style="color: #98be65;">"-queue=normal"</span>  <span style="color: #5B6268;">## </span><span style="color: #5B6268;">bunya3</span>
+<span style="color: #51afef;">done</span>
+
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org4bde79a" class="outline-4">
+<h4 id="org4bde79a"><span class="section-number-4">3.3.3.</span> run bivariate trait</h4>
+<div class="outline-text-4" id="text-3-3-3">
+<div class="org-src-container">
+<pre class="src src-bash"><span style="color: #5B6268;">## </span><span style="color: #5B6268;">homePath="/home/yangjianLab/liushouye/"</span>
+<span style="color: #dcaeea;">sbrPath</span>=<span style="color: #98be65;">"/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/sim/out/sbayesrc/bivariate/"</span>
+<span style="color: #dcaeea;">smtPath</span>=<span style="color: #98be65;">"/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/sim/out/smt/maFile4MT_ST/"</span>
+<span style="color: #dcaeea;">parPath</span>=<span style="color: #98be65;">"/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/sim/gcta/bivariate/"</span>
+<span style="color: #dcaeea;">resPath</span>=<span style="color: #98be65;">"/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/sim/prediction/bivariate/results/"</span>
+<span style="color: #dcaeea;">resFile</span>=<span style="color: #98be65;">"prsFile_col_type_sbr_smt.txt"</span>
+<span style="color: #dcaeea;">prsPath</span>=<span style="color: #98be65;">"/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/sim/prediction/bivariate/prs/"</span>
+
+
+<span style="color: #c678dd;">declare</span> -a <span style="color: #dcaeea;">parFiles</span>=<span style="color: #51afef;">(</span><span style="color: #98be65;">"train-chr1-22-shuf-300000-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21.caus-trait-1.gcta.par"</span>
+                     <span style="color: #98be65;">"train-chr1-22-shuf-300000-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21.caus-trait-1.gcta.par"</span>
+                     <span style="color: #98be65;">"train-chr1-22-shuf-300000-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21.caus-trait-2.gcta.par"</span>
+                      <span style="color: #98be65;">"train-chr1-22-shuf-300000-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21.caus-trait-2.gcta.par"</span>
+                    <span style="color: #51afef;">)</span>
+
+<span style="color: #c678dd;">declare</span> -a <span style="color: #dcaeea;">sbrFiles</span>=<span style="color: #51afef;">(</span><span style="color: #98be65;">"train-chr1-22-shuf-300000-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21.caus-trait-1.gcta.phen.plink.ci.assoc.linear.ma_sbrc.txt"</span>
+                     <span style="color: #98be65;">"train-chr1-22-shuf-300000-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21.caus-trait-1.gcta.phen.plink.ci.assoc.linear.ma_sbrc.txt"</span>
+                     <span style="color: #98be65;">"train-chr1-22-shuf-300000-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21.caus-trait-2.gcta.phen.plink.ci.assoc.linear.ma_sbrc.txt"</span>
+                     <span style="color: #98be65;">"train-chr1-22-shuf-300000-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21.caus-trait-2.gcta.phen.plink.ci.assoc.linear.ma_sbrc.txt"</span>
+                    <span style="color: #51afef;">)</span>
+<span style="color: #c678dd;">declare</span> -a <span style="color: #dcaeea;">smtFiles</span>=<span style="color: #51afef;">(</span><span style="color: #98be65;">"b1_ma_MT.ma"</span>
+                     <span style="color: #98be65;">"b1_ma_ST.ma"</span>
+                     <span style="color: #98be65;">"b2_ma_MT.ma"</span>
+                     <span style="color: #98be65;">"b2_ma_ST.ma"</span>
+                    <span style="color: #51afef;">)</span>
+<span style="color: #5B6268;">###########################</span>
+<span style="color: #dcaeea;">homePath</span>=<span style="color: #98be65;">"/home/uqsliu28/"</span>
+<span style="color: #dcaeea;">qsubshcom</span>=<span style="color: #98be65;">"</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{homePath}</span><span style="color: #98be65;">/softwares/qsubshcom/qsubshcom"</span>
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">scriptPath="${homePath}/projects/annotation/sim/prediction/eqtlComparison/scripts"</span>
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">for bunya 3</span>
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">scriptPath="/home/uqsliu28/projects/sbayesRC/scripts"</span>
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">for delta2</span>
+<span style="color: #dcaeea;">scriptPath</span>=<span style="color: #98be65;">"/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/sim/prediction/bivariate/"</span>
+<span style="color: #dcaeea;">logPath</span>=<span style="color: #98be65;">"</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{scriptPath}</span><span style="color: #98be65;">/log"</span>
+<span style="color: #ECBE7B;">mkdir</span> -p $<span style="color: #51afef;">{</span><span style="color: #dcaeea;">logPath</span><span style="color: #51afef;">}</span>
+
+<span style="color: #dcaeea;">scriptName</span>=<span style="color: #98be65;">"calPRS.r"</span>
+<span style="color: #ECBE7B;">chmod</span> <span style="color: #da8548; font-weight: bold;">751</span> $<span style="color: #51afef;">{</span><span style="color: #dcaeea;">scriptPath</span><span style="color: #51afef;">}</span>/$<span style="color: #51afef;">{</span><span style="color: #dcaeea;">scriptName</span><span style="color: #51afef;">}</span>
+
+<span style="color: #51afef;">for</span> num<span style="color: #51afef;"> in</span> <span style="color: #da8548; font-weight: bold;">0</span> <span style="color: #da8548; font-weight: bold;">1</span> <span style="color: #da8548; font-weight: bold;">2</span> <span style="color: #da8548; font-weight: bold;">3</span>
+<span style="color: #51afef;">do</span>
+    <span style="color: #dcaeea;">outPath</span>=$<span style="color: #51afef;">{</span><span style="color: #dcaeea;">prsPath</span><span style="color: #51afef;">}</span>/$<span style="color: #51afef;">{</span><span style="color: #dcaeea;">smtFiles</span><span style="color: #c678dd;">[</span>$<span style="color: #98be65;">{</span><span style="color: #dcaeea;">num</span><span style="color: #98be65;">}</span><span style="color: #c678dd;">]</span><span style="color: #51afef;">}</span>
+    <span style="color: #ECBE7B;">mkdir</span> -p $<span style="color: #51afef;">{</span><span style="color: #dcaeea;">outPath</span><span style="color: #51afef;">}</span>
+    <span style="color: #ECBE7B;">mkdir</span> -p $<span style="color: #51afef;">{</span><span style="color: #dcaeea;">resPath</span><span style="color: #51afef;">}</span>
+    <span style="color: #dcaeea;">qsubName</span>=<span style="color: #98be65;">"prs-</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{num}</span><span style="color: #98be65;">-</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{smtFiles[$num]}</span><span style="color: #98be65;">-</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{scriptName}</span><span style="color: #98be65;">"</span>
+    <span style="color: #dcaeea;">printLog</span>=<span style="color: #98be65;">"</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{logPath}</span><span style="color: #98be65;">/</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{qsubName}</span><span style="color: #98be65;">-</span><span style="color: #51afef; font-weight: bold;">$(</span><span style="color: #51afef; font-weight: bold;">date</span><span style="color: #51afef; font-weight: bold;"> +"%Y-%m-%d-%I-%M-%p")</span><span style="color: #98be65;">.log"</span>
+    <span style="color: #dcaeea;">tmp_cmd</span>=<span style="color: #98be65;">"Rscript </span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{scriptPath}</span><span style="color: #98be65;">/</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{scriptName}</span><span style="color: #98be65;"> --type </span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{smtFiles[$num]}</span>
+<span style="color: #98be65;">                      --outPath </span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{outPath}</span><span style="color: #98be65;"> \</span>
+<span style="color: #98be65;">                      --parFile </span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{parPath}</span><span style="color: #98be65;">/</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{parFiles[$num]}</span><span style="color: #98be65;"> \</span>
+<span style="color: #98be65;">                      --sbrFile </span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{sbrPath}</span><span style="color: #98be65;">/</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{sbrFiles[$num]}</span><span style="color: #98be65;"> \</span>
+<span style="color: #98be65;">                      --smtFile </span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{smtPath}</span><span style="color: #98be65;">/</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{smtFiles[$num]}</span><span style="color: #98be65;">\</span>
+<span style="color: #98be65;">                      --resFile </span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{resPath}</span><span style="color: #98be65;">/</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{resFile}</span><span style="color: #98be65;">&gt; </span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{printLog}</span><span style="color: #98be65;">"</span>
+    <span style="color: #5B6268;">## </span><span style="color: #5B6268;">$qsubshcom "$tmp_cmd" 1 50G  ${qsubName}  10:00:00 "-queue=normal"  ## delta2</span>
+    $<span style="color: #dcaeea;">qsubshcom</span> <span style="color: #98be65;">"</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">tmp_cmd</span><span style="color: #98be65;">"</span> <span style="color: #da8548; font-weight: bold;">1</span> 50G  $<span style="color: #51afef;">{</span><span style="color: #dcaeea;">qsubName</span><span style="color: #51afef;">}</span>  48:00:00 <span style="color: #98be65;">"-queue=normal"</span>  <span style="color: #5B6268;">## </span><span style="color: #5B6268;">bunya3</span>
+<span style="color: #51afef;">done</span>
+</pre>
+</div>
 </div>
 </div>
 </div>
@@ -1164,7 +1260,7 @@ theme(plot.title = element_text(hjust = <span style="color: #da8548; font-weight
 <div id="postamble" class="status">
 <p class="date">Date: 2021-03-01</p>
 <p class="author">Author: Liu, Shouye</p>
-<p class="date">Created: 2023-04-09 Sun 17:57</p>
+<p class="date">Created: 2023-05-03 Wed 10:04</p>
 </div>
 </body>
 </html>

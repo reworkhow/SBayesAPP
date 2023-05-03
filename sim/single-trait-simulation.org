@@ -720,215 +720,203 @@ $qsubshcom "$tmp_cmd" 1 250G  ${qsubName}  100:00:00 "-queue=normal"
 #+end_src
 
 ** Prediction
+*** calPRS.r
 #+begin_src R
 rm(list = ls())
+options(scipen=999)
 library(data.table)
-library(ggplot2)
-library(SBayesE)
+library(optparse)
+##############################################################
+#####         Step 1. Parameter setting option         #######
+##############################################################
+option_list = list(
+  ##  type
+  make_option(c("--type"), action="store", default="", type='character',
+              help=""),
+  make_option(c("--outPath"), type="character", default=NULL,
+              help="set train path", metavar="character"),
+  ## various files
+  make_option(c("--parFile"), type="character", default=NULL,
+              help="set par", metavar="character"),
+  make_option(c("--sbrFile"), type="character", default=NULL,
+              help="set sbr", metavar="character"),
+  make_option(c("--smtFile"), type="character", default=NULL,
+              help="set smt", metavar="character"),
+  make_option(c("--resFile"), type="character", default=NULL,
+              help="set res", metavar="character")
+)
+opt = parse_args(OptionParser(option_list=option_list))
 ## library(latex2exp)
+if(FALSE) {
+  smtFile = "/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/sim/smt/maFile4MT_ST/b1_ma_MT.ma"
+  parFile = "/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/sim/gcta/bivariate/train-chr1-22-shuf-300000-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21.caus-trait-1.gcta.par"
+  sbrFile = "/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/sim/out/sbayesrc/bivariate/train-chr1-22-shuf-300000-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21.caus-trait-1.gcta.phen.plink.ci.assoc.linear.ma_sbrc.txt"
+  resultFile = "/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/sim/prediction/bivariate/results/prsFile.txt"
+} else {
 
-datPath = "/home/uqsliu28/projects/sbayesRC/ldAndMa/sim/"
-betaTrueFileName = "train-chr1-22-shuf-300000-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21.sim.par"
-betaEstFileName = "smt-bayes-results.ma"
-validBfileName = "valid-chr1-22-shuf-48501-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21"
-trainBfileName = "train-chr1-22-shuf-300000-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21"
-betaBbrFileName = "train-chr1-22-shuf-300000-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21.assoc.ci.assoc.linear.ma_sbrc.txt"
+}
+plink2= "/home/uqsliu28//softwares/plink/plink2"
+validBfile = "/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/sim/data/valid-chr1-22-shuf-48501-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21"
+outPath = opt$outPath
+resultFile = opt$resFile
 
-betaMarginFileName = "train-chr1-22-shuf-300000-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21.assoc.ci.assoc.linear.ma"
+prsParFile = paste0(outPath,"/",basename(opt$parFile))
+prsSbrFile = paste0(outPath,"/",basename(opt$sbrFile))
+prsSmtFile = paste0(outPath,"/",basename(opt$smtFile))
+#####################################
+### betaTrue
+validCMD = paste0(plink2,
+                  " --bfile ", validBfile,
+                  " --score ", opt$parFile, " 1 2 4 header cols=+scoresums  center ",
+                  " --out ", prsParFile
+                  )
+system(validCMD)
+## sbayesrc result
+validCMD = paste0(plink2,
+                  " --bfile ", validBfile,
+                  " --score ", opt$sbrFile, " 1 2 5 header cols=+scoresums  center ",
+                  " --out ", prsSbrFile
+                  )
+system(validCMD)
+### smt result
+validCMD = paste0(plink2,
+                  " --bfile ", validBfile,
+                  " --score ", opt$smtFile, " 2 5 8 header cols=+scoresums  center ",
+                  " --out ", prsSmtFile
+                  )
+system(validCMD)
 
-betaTrueFile = paste0(datPath, "/gcta/single/",betaTrueFileName)
-## betaMarginFile = paste0(datPath, "/gcta/single/",betaMarginFileName)
+prsPar <- fread(paste0(prsParFile,".sscore"))
+colnames(prsPar) <- c("FID", "IID","ALLELE_CT", "NAMED_ALLELE_DOSAGE_SUM","SCORE1_AVG", "Par")
 
-betaEstFile = paste0(datPath,"/smt/",betaEstFileName)
+prsSbr <-fread(paste0(prsSbrFile,".sscore") )
+colnames(prsSbr) <- c("FID", "IID","ALLELE_CT", "NAMED_ALLELE_DOSAGE_SUM","SCORE1_AVG", "Sbr")
 
-trainBfile = paste0(datPath, "/data/", trainBfileName)
-validBfile = paste0(datPath, "/data/", validBfileName)
+prsSmt <-fread(paste0(prsSmtFile,".sscore"))
+colnames(prsSmt) <- c("FID", "IID","ALLELE_CT", "NAMED_ALLELE_DOSAGE_SUM","SCORE1_AVG", "Smt")
 
-############################################################
-########## correlation between smt and
-############################################################
-betaEstRaw = fread(betaEstFile)
-## betaMarRaw = fread(betaMarginFile)
-
-betaTrueRaw = fread(betaTrueFile)
-names(betaTrueRaw) <- c("SNP", "RefAllele", "Frequency", "Effect")
-
-famTrain = fread(paste0(trainBfile, ".bim") )
-names(famTrain) <- c("CHR","SNP","POS","CM","A1","A2")
-
-## merge
-betaTrue = merge(betaTrueRaw, famTrain, by = "SNP")
-
-bimValid = fread(paste0(validBfile,".bim"))
-names(bimValid) <- c("CHR","SNP","POS","CM","A1","A2")
-
-bimTrain = fread(paste0(trainBfile,".bim"))
-names(bimTrain) <- c("CHR","SNP","POS","CM","A1","A2")
-
-snpIdx = Reduce(intersect, list(bimValid$SNP, betaTrue$SNP, betaEstRaw$Name) )
-snpIdxTrain = Reduce(intersect, list(snpIdx,bimTrain$SNP ) )
-
-## do QC process for beta true effect
-ma_val2 = betaTrue[match(snpIdx,betaTrue$SNP),]
-genoInfo = bimValid[match(snpIdx,bimValid$SNP),]
-genoInfoTrain = bimTrain[match(snpIdx,bimTrain$SNP),]
-
-## check allele flip between train and bim file
-bA1A1 = (genoInfo$A1 == genoInfoTrain$A1)
-bA1A2 = (genoInfo$A1 ==  genoInfoTrain$A2 )
-bAll = bA1A1 | bA1A2
-sum(bA1A1)
-## [1] 9029
-sum(bA1A2)
-## [1] 0
-
-## check allele flip between beta true and marginal effect
-## ma_valMar = betaMarRaw[match(snpIdx,betaMarRaw$SNP),]
-
-## ## check allele flip between train and bim file
-## bA1A1 = (ma_valMar$A1 == genoInfo$A1)
-## bA1A2 = (ma_valMar$A1 ==  genoInfo$A2 )
-## bAll = bA1A1 | bA1A2
-## sum(bA1A1)
-## ## [1] 9029
-## sum(bA1A2)
+ merge(merge(phenotype, covariates, by=c("FID", "IID")), indlist, by=c("FID","IID"))
 
 
-idx = match(ma_val2$SNP, snpIdx)
-message(length(idx), " SNPs in common between GWAS summary and LD")
-## Check the consistency of alleles (A1, A2)
-bA1A1 = (ma_val2$RefAllele == genoInfo$A1)
-bA1A2 = (ma_val2$RefAllele ==  genoInfo$A2 )
-bAll = bA1A1 | bA1A2
-message(sum(bAll), " SNPs have consistent alleles (A1, A2) between training and validation dataset")
+prsTotal <- merge(
+                  merge(prsPar[,c("FID","IID", "Par")],
+                        prsSbr[,c("FID","IID", "Sbr")],
+                        by=c("FID", "IID")),
+                  prsSmt[,c("FID","IID", "Smt")],
+                   by=c("FID", "IID"))
 
-# do QC process for beta estimation effect
-ma_val3 = betaEstRaw[match(snpIdx, betaEstRaw$Name)]
-message(length(idx), " SNPs in common between GWAS summary and LD")
-## Check the consistency of alleles (A1, A2)
-bA1A1 = (ma_val3$A1 == genoInfo$A1) & (ma_val3$A2 == genoInfo$A2 )
-bA1A2 = (ma_val3$A1 ==  genoInfo$A2 ) & (ma_val3$A2 == genoInfo$A1)
-bAll = bA1A1 | bA1A2
-message(sum(bAll), " SNPs have consistent alleles (A1, A2) between training and validation dataset")
-### allele flip
-##  ma_val3[bA1A2]
-##       ID      Name Chrom Position A1 A2 A1Freq     A1Effect SE PIP
-## 1: 98843 rs7561434     0        0  A  G 0.4999 1.250239e-05  0   0
-## ma_val2[bA1A2]
-##         SNP RefAllele Frequency     Effect CHR POS       CM A1 A2
-## 1: rs7561434         G  0.500086 0.00358294   2   0 34062843  G  A
-ma_val3[bA1A2,BETAF:= - A1Effect]
-ma_val3[bA1A1,BETAF:= A1Effect]
+dat <- data.frame(type = opt$type,
+                  corSbr = cor(prsTotal$Par,prsTotal$Sbr)^2,
+                  corSmt = cor(prsTotal$Par,prsTotal$Smt)^2)
 
-## Now, we need to read genotype from validation dataset
-indNum = 48501
-ukb <- BGData::as.BGData(BEDMatrix::BEDMatrix(validBfile))
-geno <- as.matrix(ukb@geno)
-## select genotype
-colnames(geno)  <- gsub("(.+)_(.+)","\\1",colnames(geno))
-geno <- geno[,match(snpIdx,colnames(geno))]
-## select phenotype
-selectedIndName <- sample(rownames(geno),indNum)
-geno <- geno[match(selectedIndName,rownames(geno)),]
-## extract genotype information
-genoMap <- ukb@map[ ukb@map$snp_id %in% snpIdx ,]
-rownames(genoMap) <- gsub("(.+)_(.+)","\\1",rownames(genoMap) )
-genoInfo <- BGData::BGData(geno = geno, map = genoMap)
-freq  <- BGData::summarize(X = BGData::geno(genoInfo) )
-## add additional attributes
-genoInfo@map$freq_na      <- freq$freq_na
-genoInfo@map$sd           <- freq$sd
-genoInfo@map$allele_freq  <- freq$allele_freq
-genoInfo@map$na           <- colSums(is.na(geno))
-snp2pq                    <- 2 * freq$allele_freq * ( 1- freq$allele_freq)
-names(snp2pq)             <- snpIdx
-## finally, center and standardize the data
-W <- BGData::preprocess(geno, center = TRUE, scale = TRUE,impute = TRUE)
-## W <- apply(W, 2, function(x){ (x-mean(x))/sd(x) })
-## W <- apply(W, 2, function(x){ x-mean(x) })
-print(paste0("REAL genotype is used ", "(N = ",indNum,")"))
-
-## calculate
-X <-  W[,match(snpIdx,colnames(W))]
-
-betaTrueEffect = ma_val2$Effect
-betaEstEffect = ma_val3$BETAF
-
-gVal <- X %*% betaTrueEffect
-estVal = X %*% betaEstEffect
-
-message("Correlation between true and estimated genetic effect: ",cor(betaTrueEffect,betaEstEffect))
-message("Correlation between true and estimated genetic effect: ",cor(betaTrueEffect, ma_val3$A1Effect))
-## Correlation between true and estimated genetic effect: 0.319570150414059
+write.table(dat, file = resultFile,col.names = FALSE,row.names = FALSE, sep = "\t", append = T)
+#+end_src
+*** run single trait
+#+begin_src bash
+## homePath="/home/yangjianLab/liushouye/"
+sbrPath="/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/sim/out/sbayesrc/single/"
+smtPath="/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/sim/out/smt/"
+parPath="/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/sim/gcta/single/"
+resPath="/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/sim/prediction/single/results/"
+resFile="prsFile_col_type_sbr_smt.txt"
+prsPath="/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/sim/prediction/single/prs/"
 
 
-message("Prediction R2 between true and estimated genetic effect: ", cor(gVal, estVal))
-## Prediction R2 between true and estimated genetic effect: 0.321346618304841
+declare -a parFiles=("train-chr1-22-shuf-300000-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21.sim.par"
+                    )
 
-dat = data.frame(betaTrue = betaTrueEffect,
-                 betaMean = betaEstEffect)
+declare -a sbrFiles=("train-chr1-22-shuf-300000-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21.assoc.ci.assoc.linear.ma_sbrc.txt"
+                    )
+declare -a smtFiles=("smt-bayes-results.ma"
+                    )
+###########################
+homePath="/home/uqsliu28/"
+qsubshcom="${homePath}/softwares/qsubshcom/qsubshcom"
+## scriptPath="${homePath}/projects/annotation/sim/prediction/eqtlComparison/scripts"
+## for bunya 3
+## scriptPath="/home/uqsliu28/projects/sbayesRC/scripts"
+## for delta2
+scriptPath="/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/sim/prediction/single/"
+logPath="${scriptPath}/log"
+mkdir -p ${logPath}
 
-#######################################################
-###### SBayesRC results
-#######################################################
-betaEstSbrFile = paste0(datPath,"/out/sbayesrc/single/",betaBbrFileName)
-betaEstSbrRaw = fread(betaEstSbrFile)
+scriptName="calPRS.r"
+chmod 751 ${scriptPath}/${scriptName}
 
-snpIdxSbr = Reduce(intersect, list(betaEstSbrRaw$SNP,snpIdx) )
-## > str(snpIdxSbr)
-## chr [1:9029] "rs2235536" "rs2840528" "rs6683974" "rs2483274" "rs6703610" ...
-## > str(snpIdx)
-## chr [1:9029] "rs2235536" "rs2840528" "rs6683974" "rs2483274" "rs6703610" ...
-## same snpIdx
-ma_val4 = betaEstSbrRaw[match(snpIdx, betaEstSbrRaw$SNP)]
+for num in 0
+do
+    outPath=${prsPath}/${smtFiles[${num}]}
+    mkdir -p ${outPath}
+    mkdir -p ${resPath}
+    qsubName="prs-${num}-${smtFiles[$num]}-${scriptName}"
+    printLog="${logPath}/${qsubName}-$(date +"%Y-%m-%d-%I-%M-%p").log"
+    tmp_cmd="Rscript ${scriptPath}/${scriptName} --type ${smtFiles[$num]}
+                      --outPath ${outPath} \
+                      --parFile ${parPath}/${parFiles[$num]} \
+                      --sbrFile ${sbrPath}/${sbrFiles[$num]} \
+                      --smtFile ${smtPath}/${smtFiles[$num]}\
+                      --resFile ${resPath}/${resFile}> ${printLog}"
+    ## $qsubshcom "$tmp_cmd" 1 50G  ${qsubName}  10:00:00 "-queue=normal"  ## delta2
+    $qsubshcom "$tmp_cmd" 1 50G  ${qsubName}  48:00:00 "-queue=normal"  ## bunya3
+done
 
-## check allele flip
-## Check the consistency of alleles (A1, A2)
-bA1A1 = (ma_val4$A1 == genoInfo$A1)
-bA1A2 = (ma_val4$A1 ==  genoInfo$A2 )
-bAll = bA1A1 | bA1A2
-message(sum(bAll), " SNPs have consistent alleles (A1, A2) between training and validation dataset")
+#+end_src
 
-ma_val4[bA1A2,BETAF:= - BETA]
-ma_val4[bA1A1,BETAF:= BETA]
-
-betaEstEffectSbr = ma_val4$BETAF
-
-estValSbr = X %*% betaEstEffectSbr
-
-message("Correlation between true and estimated genetic effect: ",cor(betaTrueEffect,betaEstEffectSbr))
-## Correlation between true and estimated genetic effect: 0.318533521299413
-message("Correlation between true and estimated genetic effect(not flip allele effect): ",cor(betaTrueEffect, ma_val4$BETA))
-## Correlation between true and estimated genetic effect: 0.58774477265263
-message("Prediction R2 between true and estimated genetic effect: ", cor(gVal, estValSbr))
-## Prediction R2 between true and estimated genetic effect: 0.319583753762207
+*** run bivariate trait
+#+begin_src bash
+## homePath="/home/yangjianLab/liushouye/"
+sbrPath="/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/sim/out/sbayesrc/bivariate/"
+smtPath="/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/sim/out/smt/maFile4MT_ST/"
+parPath="/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/sim/gcta/bivariate/"
+resPath="/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/sim/prediction/bivariate/results/"
+resFile="prsFile_col_type_sbr_smt.txt"
+prsPath="/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/sim/prediction/bivariate/prs/"
 
 
-#######################################################
-###### end
-#######################################################
+declare -a parFiles=("train-chr1-22-shuf-300000-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21.caus-trait-1.gcta.par"
+                     "train-chr1-22-shuf-300000-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21.caus-trait-1.gcta.par"
+                     "train-chr1-22-shuf-300000-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21.caus-trait-2.gcta.par"
+                      "train-chr1-22-shuf-300000-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21.caus-trait-2.gcta.par"
+                    )
 
-mycolors = c("#56B4E9" )
-ggplot(dat, aes(betaTrue,betaMean)) + geom_point(color = mycolors) +
-  scale_color_manual(values=mycolors) +
- ggtitle("Scatter Plot: True vs. Estimated Effects") +
-theme_geometry(dat$betaTrue,
-               dat$betaMean,
-               color = "grey",
-               xlab=TeX("$\\beta_{true}$"),
-               ylab=  TeX("$\\beta_{Mean}$")) +
-theme(plot.title = element_text(hjust = 0.5))
+declare -a sbrFiles=("train-chr1-22-shuf-300000-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21.caus-trait-1.gcta.phen.plink.ci.assoc.linear.ma_sbrc.txt"
+                     "train-chr1-22-shuf-300000-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21.caus-trait-1.gcta.phen.plink.ci.assoc.linear.ma_sbrc.txt"
+                     "train-chr1-22-shuf-300000-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21.caus-trait-2.gcta.phen.plink.ci.assoc.linear.ma_sbrc.txt"
+                     "train-chr1-22-shuf-300000-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21.caus-trait-2.gcta.phen.plink.ci.assoc.linear.ma_sbrc.txt"
+                    )
+declare -a smtFiles=("b1_ma_MT.ma"
+                     "b1_ma_ST.ma"
+                     "b2_ma_MT.ma"
+                     "b2_ma_ST.ma"
+                    )
+###########################
+homePath="/home/uqsliu28/"
+qsubshcom="${homePath}/softwares/qsubshcom/qsubshcom"
+## scriptPath="${homePath}/projects/annotation/sim/prediction/eqtlComparison/scripts"
+## for bunya 3
+## scriptPath="/home/uqsliu28/projects/sbayesRC/scripts"
+## for delta2
+scriptPath="/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/sim/prediction/bivariate/"
+logPath="${scriptPath}/log"
+mkdir -p ${logPath}
 
-dat = data.frame(gVal = gVal,
-                 estVal = estVal)
+scriptName="calPRS.r"
+chmod 751 ${scriptPath}/${scriptName}
 
-ggplot(dat, aes(gVal,estVal)) + geom_point(color = mycolors) +
- ggtitle(paste0("Scatter Plot"  ) ) +
-   scale_color_manual(values=mycolors) +
-theme_geometry(dat$gVal,
-               dat$estVal,
-               color = "grey",
-               xlab= TeX("$X_{valid}\\beta_{true}$"),
-               ylab=   TeX("$X_{valid}\\beta_{Mean}$")) +
-theme(plot.title = element_text(hjust = 0.5))
+for num in 0 1 2 3
+do
+    outPath=${prsPath}/${smtFiles[${num}]}
+    mkdir -p ${outPath}
+    mkdir -p ${resPath}
+    qsubName="prs-${num}-${smtFiles[$num]}-${scriptName}"
+    printLog="${logPath}/${qsubName}-$(date +"%Y-%m-%d-%I-%M-%p").log"
+    tmp_cmd="Rscript ${scriptPath}/${scriptName} --type ${smtFiles[$num]}
+                      --outPath ${outPath} \
+                      --parFile ${parPath}/${parFiles[$num]} \
+                      --sbrFile ${sbrPath}/${sbrFiles[$num]} \
+                      --smtFile ${smtPath}/${smtFiles[$num]}\
+                      --resFile ${resPath}/${resFile}> ${printLog}"
+    ## $qsubshcom "$tmp_cmd" 1 50G  ${qsubName}  10:00:00 "-queue=normal"  ## delta2
+    $qsubshcom "$tmp_cmd" 1 50G  ${qsubName}  48:00:00 "-queue=normal"  ## bunya3
+done
 #+end_src
