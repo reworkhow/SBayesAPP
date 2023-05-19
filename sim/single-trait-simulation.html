@@ -3,7 +3,7 @@
 "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
 <head>
-<!-- 2023-05-03 Wed 10:04 -->
+<!-- 2023-05-19 Fri 14:58 -->
 <meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Generate LD matrix and do single trait whole-genome simulation</title>
@@ -201,51 +201,69 @@
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents" role="doc-toc">
 <ul>
-<li><a href="#org7c9b466">1. Per LD block LD matrix</a>
+<li><a href="#org8c5a0b2">1. Per LD block LD matrix</a>
 <ul>
-<li><a href="#org15136e9">1.1. Extract snplist from per ld block and generate HM3 data based on snpInfo</a></li>
-<li><a href="#org24adbb2">1.2. Generate LD matrix based on per-block-snplist</a></li>
+<li><a href="#org43c510e">1.1. Extract snplist from per ld block and generate HM3 data based on snpInfo</a></li>
+<li><a href="#org08b0b0f">1.2. Generate LD matrix based on per-block-snplist</a></li>
 </ul>
 </li>
-<li><a href="#orga914e02">2. Simulation</a>
+<li><a href="#org4305a5e">2. Simulation</a>
 <ul>
-<li><a href="#org4486a06">2.1. Training and testing dataset</a>
+<li><a href="#orgcc1f9f4">2.1. Training and testing dataset</a>
 <ul>
-<li><a href="#org1ffe312">2.1.1. Select samples</a></li>
-<li><a href="#org35ae575">2.1.2. Selecting a series of training datasets</a></li>
+<li><a href="#org06b899b">2.1.1. Select samples</a></li>
+<li><a href="#org54465bf">2.1.2. Selecting a series of training datasets</a></li>
 </ul>
 </li>
-<li><a href="#orgb377437">2.2. single-trait-simulation</a></li>
-<li><a href="#org14bb653">2.3. Bivariate trait simulation</a>
+<li><a href="#orgc26e423">2.2. single-trait-simulation</a></li>
+<li><a href="#orgb74419d">2.3. Bivariate trait simulation</a>
 <ul>
-<li><a href="#org11d309e">2.3.1. Perform simulation</a></li>
-</ul>
-</li>
-</ul>
-</li>
-<li><a href="#org82d12c5">3. Perform analysis</a>
-<ul>
-<li><a href="#orga428a52">3.1. Perform gctb-ldm-SbayesC using band LD matrix</a>
-<ul>
-<li><a href="#orgfa841af">3.1.1. Construct GWAS ma format</a></li>
-<li><a href="#orgf06a7b9">3.1.2. run gctb-ldm-SbayesC</a>
-<ul>
-<li><a href="#org6c514ad">3.1.2.1. Using band LD matrix</a></li>
+<li><a href="#orgcaf7254">2.3.1. Perform simulation</a></li>
 </ul>
 </li>
 </ul>
 </li>
-<li><a href="#orgef9ad43">3.2. Perform SbayesRC without annotation using low-rank LD matrix</a>
+<li><a href="#orgec84a69">3. Perform analysis</a>
 <ul>
-<li><a href="#org6c5614f">3.2.1. Do SBayesRC analysis</a></li>
-<li><a href="#org646f587">3.2.2. Run SBayesRC</a></li>
+<li><a href="#org37fab1e">3.1. Perform gctb-ldm-SbayesC using band LD matrix</a>
+<ul>
+<li><a href="#org73ff3b8">3.1.1. Construct GWAS ma format</a></li>
+<li><a href="#org34fc81b">3.1.2. run gctb-ldm-SbayesC</a>
+<ul>
+<li><a href="#orgd76adf0">3.1.2.1. Using band LD matrix</a></li>
 </ul>
 </li>
-<li><a href="#orgc4e41a9">3.3. Prediction</a>
+</ul>
+</li>
+<li><a href="#org80795a5">3.2. Perform SbayesRC without annotation using low-rank LD matrix</a>
 <ul>
-<li><a href="#org8382a11">3.3.1. calPRS.r</a></li>
-<li><a href="#orgd6bade8">3.3.2. run single trait</a></li>
-<li><a href="#org4bde79a">3.3.3. run bivariate trait</a></li>
+<li><a href="#orga8171f6">3.2.1. Use R package</a>
+<ul>
+<li><a href="#org45beb01">3.2.1.1. Do SBayesRC analysis</a></li>
+<li><a href="#orge462235">3.2.1.2. Run SBayesRC</a></li>
+</ul>
+</li>
+<li><a href="#org982ba6d">3.2.2. Use GCTB-SBayesC</a></li>
+<li><a href="#org007440d">3.2.3. Use GCTB-SBayesRC</a>
+<ul>
+<li><a href="#org3d8bcb4">3.2.3.1. Step 1: compute block-wise LD matrices</a></li>
+<li><a href="#org6aaf9f5">3.2.3.2. Step 2: Calculate low-rank LD matrix</a></li>
+<li><a href="#orgde84bc9">3.2.3.3. Perform SBayesC analysis</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#org9ea5aab">3.3. Prediction</a>
+<ul>
+<li><a href="#org37b2aca">3.3.1. calPRS.r</a></li>
+<li><a href="#org6bb7dbf">3.3.2. run single trait</a></li>
+<li><a href="#orgf154d07">3.3.3. run bivariate trait</a></li>
+</ul>
+</li>
+<li><a href="#org0152456">3.4. Simulation with annotation</a>
+<ul>
+<li><a href="#org375e9cb">3.4.1. R: generate bivarte-annotation</a></li>
+<li><a href="#orgcbc3f86">3.4.2. bash</a></li>
 </ul>
 </li>
 </ul>
@@ -255,12 +273,12 @@
 </div>
 
 
-<div id="outline-container-org7c9b466" class="outline-2">
-<h2 id="org7c9b466"><span class="section-number-2">1.</span> Per LD block LD matrix</h2>
+<div id="outline-container-org8c5a0b2" class="outline-2">
+<h2 id="org8c5a0b2"><span class="section-number-2">1.</span> Per LD block LD matrix</h2>
 <div class="outline-text-2" id="text-1">
 </div>
-<div id="outline-container-org15136e9" class="outline-3">
-<h3 id="org15136e9"><span class="section-number-3">1.1.</span> Extract snplist from per ld block and generate HM3 data based on snpInfo</h3>
+<div id="outline-container-org43c510e" class="outline-3">
+<h3 id="org43c510e"><span class="section-number-3">1.1.</span> Extract snplist from per ld block and generate HM3 data based on snpInfo</h3>
 <div class="outline-text-3" id="text-1-1">
 <div class="org-src-container">
 <pre class="src src-R"><span style="color: #a9a1e1;">library</span>(data.table)
@@ -317,8 +335,8 @@ fwrite(data.frame(snpinfo$ID),file = outFile,col.names = <span style="color: #EC
 </div>
 </div>
 </div>
-<div id="outline-container-org24adbb2" class="outline-3">
-<h3 id="org24adbb2"><span class="section-number-3">1.2.</span> Generate LD matrix based on per-block-snplist</h3>
+<div id="outline-container-org08b0b0f" class="outline-3">
+<h3 id="org08b0b0f"><span class="section-number-3">1.2.</span> Generate LD matrix based on per-block-snplist</h3>
 <div class="outline-text-3" id="text-1-2">
 <div class="org-src-container">
 <pre class="src src-bash"><span style="color: #dcaeea;">gctb</span>=<span style="color: #98be65;">"/home/uqsliu28/softwares/gctb/gctb"</span>
@@ -365,16 +383,16 @@ $<span style="color: #dcaeea;">qsubshcom</span> <span style="color: #98be65;">"<
 </div>
 </div>
 
-<div id="outline-container-orga914e02" class="outline-2">
-<h2 id="orga914e02"><span class="section-number-2">2.</span> Simulation</h2>
+<div id="outline-container-org4305a5e" class="outline-2">
+<h2 id="org4305a5e"><span class="section-number-2">2.</span> Simulation</h2>
 <div class="outline-text-2" id="text-2">
 </div>
-<div id="outline-container-org4486a06" class="outline-3">
-<h3 id="org4486a06"><span class="section-number-3">2.1.</span> Training and testing dataset</h3>
+<div id="outline-container-orgcc1f9f4" class="outline-3">
+<h3 id="orgcc1f9f4"><span class="section-number-3">2.1.</span> Training and testing dataset</h3>
 <div class="outline-text-3" id="text-2-1">
 </div>
-<div id="outline-container-org1ffe312" class="outline-4">
-<h4 id="org1ffe312"><span class="section-number-4">2.1.1.</span> Select samples</h4>
+<div id="outline-container-org06b899b" class="outline-4">
+<h4 id="org06b899b"><span class="section-number-4">2.1.1.</span> Select samples</h4>
 <div class="outline-text-4" id="text-2-1-1">
 <div class="org-src-container">
 <pre class="src src-bash"><span style="color: #c678dd;">options</span><span style="color: #51afef;">(</span><span style="color: #dcaeea;">scipen</span>=<span style="color: #da8548; font-weight: bold;">999</span><span style="color: #51afef;">)</span>
@@ -411,8 +429,8 @@ samsLeft &lt;- fam<span style="color: #51afef;">[</span>,c<span style="color: #c
 </div>
 </div>
 </div>
-<div id="outline-container-org35ae575" class="outline-4">
-<h4 id="org35ae575"><span class="section-number-4">2.1.2.</span> Selecting a series of training datasets</h4>
+<div id="outline-container-org54465bf" class="outline-4">
+<h4 id="org54465bf"><span class="section-number-4">2.1.2.</span> Selecting a series of training datasets</h4>
 <div class="outline-text-4" id="text-2-1-2">
 <div class="org-src-container">
 <pre class="src src-bash"><span style="color: #5B6268;">####################################################################</span>
@@ -483,8 +501,8 @@ $<span style="color: #dcaeea;">qsubshcom</span> <span style="color: #98be65;">"<
 </div>
 </div>
 </div>
-<div id="outline-container-orgb377437" class="outline-3">
-<h3 id="orgb377437"><span class="section-number-3">2.2.</span> single-trait-simulation</h3>
+<div id="outline-container-orgc26e423" class="outline-3">
+<h3 id="orgc26e423"><span class="section-number-3">2.2.</span> single-trait-simulation</h3>
 <div class="outline-text-3" id="text-2-2">
 <div class="org-src-container">
 <pre class="src src-R"><span style="color: #5B6268;">####################################################################</span>
@@ -548,12 +566,12 @@ system(plinkGWAS)
 </div>
 </div>
 </div>
-<div id="outline-container-org14bb653" class="outline-3">
-<h3 id="org14bb653"><span class="section-number-3">2.3.</span> Bivariate trait simulation</h3>
+<div id="outline-container-orgb74419d" class="outline-3">
+<h3 id="orgb74419d"><span class="section-number-3">2.3.</span> Bivariate trait simulation</h3>
 <div class="outline-text-3" id="text-2-3">
 </div>
-<div id="outline-container-org11d309e" class="outline-4">
-<h4 id="org11d309e"><span class="section-number-4">2.3.1.</span> Perform simulation</h4>
+<div id="outline-container-orgcaf7254" class="outline-4">
+<h4 id="orgcaf7254"><span class="section-number-4">2.3.1.</span> Perform simulation</h4>
 <div class="outline-text-4" id="text-2-3-1">
 <div class="org-src-container">
 <pre class="src src-R"><span style="color: #5B6268;">###############################################</span>
@@ -750,16 +768,16 @@ fwrite(bivTraitMa2,
 </div>
 </div>
 </div>
-<div id="outline-container-org82d12c5" class="outline-2">
-<h2 id="org82d12c5"><span class="section-number-2">3.</span> Perform analysis</h2>
+<div id="outline-container-orgec84a69" class="outline-2">
+<h2 id="orgec84a69"><span class="section-number-2">3.</span> Perform analysis</h2>
 <div class="outline-text-2" id="text-3">
 </div>
-<div id="outline-container-orga428a52" class="outline-3">
-<h3 id="orga428a52"><span class="section-number-3">3.1.</span> Perform gctb-ldm-SbayesC using band LD matrix</h3>
+<div id="outline-container-org37fab1e" class="outline-3">
+<h3 id="org37fab1e"><span class="section-number-3">3.1.</span> Perform gctb-ldm-SbayesC using band LD matrix</h3>
 <div class="outline-text-3" id="text-3-1">
 </div>
-<div id="outline-container-orgfa841af" class="outline-4">
-<h4 id="orgfa841af"><span class="section-number-4">3.1.1.</span> Construct GWAS ma format</h4>
+<div id="outline-container-org73ff3b8" class="outline-4">
+<h4 id="org73ff3b8"><span class="section-number-4">3.1.1.</span> Construct GWAS ma format</h4>
 <div class="outline-text-4" id="text-3-1-1">
 <div class="org-src-container">
 <pre class="src src-R"><span style="color: #a9a1e1;">library</span>(data.table)
@@ -826,12 +844,12 @@ fwrite(maDat,file = paste0(assocFile,<span style="color: #98be65;">".ma"</span>)
 </div>
 </div>
 </div>
-<div id="outline-container-orgf06a7b9" class="outline-4">
-<h4 id="orgf06a7b9"><span class="section-number-4">3.1.2.</span> run gctb-ldm-SbayesC</h4>
+<div id="outline-container-org34fc81b" class="outline-4">
+<h4 id="org34fc81b"><span class="section-number-4">3.1.2.</span> run gctb-ldm-SbayesC</h4>
 <div class="outline-text-4" id="text-3-1-2">
 </div>
-<div id="outline-container-org6c514ad" class="outline-5">
-<h5 id="org6c514ad"><span class="section-number-5">3.1.2.1.</span> Using band LD matrix</h5>
+<div id="outline-container-orgd76adf0" class="outline-5">
+<h5 id="orgd76adf0"><span class="section-number-5">3.1.2.1.</span> Using band LD matrix</h5>
 <div class="outline-text-5" id="text-3-1-2-1">
 <div class="org-src-container">
 <pre class="src src-bash"><span style="color: #dcaeea;">homePath</span>=<span style="color: #98be65;">"/home/uqsliu28/"</span>
@@ -884,13 +902,17 @@ $<span style="color: #dcaeea;">qsubshcom</span> <span style="color: #98be65;">"<
 </div>
 </div>
 
-<div id="outline-container-orgef9ad43" class="outline-3">
-<h3 id="orgef9ad43"><span class="section-number-3">3.2.</span> Perform SbayesRC without annotation using low-rank LD matrix</h3>
+<div id="outline-container-org80795a5" class="outline-3">
+<h3 id="org80795a5"><span class="section-number-3">3.2.</span> Perform SbayesRC without annotation using low-rank LD matrix</h3>
 <div class="outline-text-3" id="text-3-2">
 </div>
-<div id="outline-container-org6c5614f" class="outline-4">
-<h4 id="org6c5614f"><span class="section-number-4">3.2.1.</span> Do SBayesRC analysis</h4>
+<div id="outline-container-orga8171f6" class="outline-4">
+<h4 id="orga8171f6"><span class="section-number-4">3.2.1.</span> Use R package</h4>
 <div class="outline-text-4" id="text-3-2-1">
+</div>
+<div id="outline-container-org45beb01" class="outline-5">
+<h5 id="org45beb01"><span class="section-number-5">3.2.1.1.</span> Do SBayesRC analysis</h5>
+<div class="outline-text-5" id="text-3-2-1-1">
 <div class="org-src-container">
 <pre class="src src-bash"><span style="color: #5B6268;">################################################################</span>
 <span style="color: #5B6268;">####################### </span><span style="color: #5B6268;">Script begins ##########################</span>
@@ -991,9 +1013,9 @@ SBayesRC::impute<span style="color: #51afef;">(</span>maTidyFile, ld_folder,maIm
 </div>
 </div>
 </div>
-<div id="outline-container-org646f587" class="outline-4">
-<h4 id="org646f587"><span class="section-number-4">3.2.2.</span> Run SBayesRC</h4>
-<div class="outline-text-4" id="text-3-2-2">
+<div id="outline-container-orge462235" class="outline-5">
+<h5 id="orge462235"><span class="section-number-5">3.2.1.2.</span> Run SBayesRC</h5>
+<div class="outline-text-5" id="text-3-2-1-2">
 <div class="org-src-container">
 <pre class="src src-bash"><span style="color: #5B6268;">## </span><span style="color: #5B6268;">Step 2. Set cluster parameters and submit the script into cluster</span>
 <span style="color: #5B6268;">## </span><span style="color: #5B6268;">Step 1. Basic cluster setting</span>
@@ -1034,13 +1056,180 @@ $<span style="color: #dcaeea;">qsubshcom</span> <span style="color: #98be65;">"<
 </div>
 </div>
 </div>
+<div id="outline-container-org982ba6d" class="outline-4">
+<h4 id="org982ba6d"><span class="section-number-4">3.2.2.</span> Use GCTB-SBayesC</h4>
+<div class="outline-text-4" id="text-3-2-2">
+<div class="org-src-container">
+<pre class="src src-bash"><span style="color: #dcaeea;">homePath</span>=<span style="color: #98be65;">"/home/uqsliu28/"</span>
+<span style="color: #dcaeea;">MainPath</span>=<span style="color: #98be65;">"</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{homePath}</span><span style="color: #98be65;">/projects/annotation/"</span>
+<span style="color: #dcaeea;">gctb</span>=<span style="color: #98be65;">"</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{homePath}</span><span style="color: #98be65;">/softwares/sbayese/gctbWChr-0123"</span>
+<span style="color: #dcaeea;">outPath</span>=<span style="color: #98be65;">"/home/uqsliu28/90days/projects/annotation/real/debug/out/gctbsc/"</span>
+<span style="color: #5B6268;">#</span><span style="color: #5B6268;">TASK_ID=22</span>
+<span style="color: #dcaeea;">ldPath</span>=<span style="color: #98be65;">"/home/uqsliu28/90days/projects/annotation/real/debug/data/whole/"</span>
+<span style="color: #dcaeea;">gwasPath</span>=<span style="color: #98be65;">"/home/uqsliu28/90days/projects/annotation/real/debug/data/"</span>
+<span style="color: #dcaeea;">eqtlPath</span>=$<span style="color: #51afef;">{</span><span style="color: #dcaeea;">gwasPath</span><span style="color: #51afef;">}</span>
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">TASK_ID=1</span>
+<span style="color: #dcaeea;">ldFile</span>=<span style="color: #98be65;">"ldm.ukbV3_eur_unrel_n20k_hm3-chr-</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{TASK_ID}</span><span style="color: #98be65;">-20k-sams.ldm.full"</span>
+<span style="color: #dcaeea;">gwasFile</span>=<span style="color: #98be65;">"chr-1-22-Height_UKB_HM3.ma_imp_nor2.ma"</span>
+<span style="color: #dcaeea;">eqtlFile</span>=<span style="color: #98be65;">"eQTLGen-height-chr-1-22-all-genes"</span>
+<span style="color: #dcaeea;">outFile</span>=<span style="color: #98be65;">"</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{gwasFile}</span><span style="color: #98be65;">-</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{TASK_ID}</span><span style="color: #98be65;">.gctbsc"</span>
 
-<div id="outline-container-orgc4e41a9" class="outline-3">
-<h3 id="orgc4e41a9"><span class="section-number-3">3.3.</span> Prediction</h3>
+<span style="color: #dcaeea;">chainLength</span>=<span style="color: #da8548; font-weight: bold;">10000</span>
+<span style="color: #dcaeea;">burnIn</span>=<span style="color: #da8548; font-weight: bold;">2000</span>
+<span style="color: #dcaeea;">outFreq</span>=<span style="color: #da8548; font-weight: bold;">1000</span>
+
+$<span style="color: #51afef;">{</span><span style="color: #dcaeea;">gctb</span><span style="color: #51afef;">}</span> --sbayes C  <span style="color: #98be65;">\</span>
+    --ldm $<span style="color: #51afef;">{</span><span style="color: #dcaeea;">ldPath</span><span style="color: #51afef;">}</span>/$<span style="color: #51afef;">{</span><span style="color: #dcaeea;">ldFile</span><span style="color: #51afef;">}</span> <span style="color: #98be65;">\</span>
+    --gwas-summary $<span style="color: #51afef;">{</span><span style="color: #dcaeea;">gwasPath</span><span style="color: #51afef;">}</span>/$<span style="color: #51afef;">{</span><span style="color: #dcaeea;">gwasFile</span><span style="color: #51afef;">}</span> <span style="color: #98be65;">\</span>
+    --chain-length $<span style="color: #51afef;">{</span><span style="color: #dcaeea;">chainLength</span><span style="color: #51afef;">}</span> <span style="color: #98be65;">\</span>
+    --burn-in $<span style="color: #51afef;">{</span><span style="color: #dcaeea;">burnIn</span><span style="color: #51afef;">}</span>  <span style="color: #98be65;">\</span>
+    --out-freq $<span style="color: #51afef;">{</span><span style="color: #dcaeea;">outFreq</span><span style="color: #51afef;">}</span> <span style="color: #98be65;">\</span>
+    --out   $<span style="color: #51afef;">{</span><span style="color: #dcaeea;">outPath</span><span style="color: #51afef;">}</span>/$<span style="color: #51afef;">{</span><span style="color: #dcaeea;">outFile</span><span style="color: #51afef;">}</span> <span style="color: #da8548; font-weight: bold;">2</span>&gt;&amp;<span style="color: #da8548; font-weight: bold;">1</span> | tee $<span style="color: #51afef;">{</span><span style="color: #dcaeea;">outPath</span><span style="color: #51afef;">}</span>/$<span style="color: #51afef;">{</span><span style="color: #dcaeea;">outFile</span><span style="color: #51afef;">}</span>.log
+
+<span style="color: #5B6268;">################################################################</span>
+<span style="color: #5B6268;">######################### </span><span style="color: #5B6268;">Script ends ##########################</span>
+<span style="color: #5B6268;">################################################################</span>
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">Step 1. Basic cluster setting</span>
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">homePath="/home/yangjianLab/liushouye/"</span>
+<span style="color: #dcaeea;">homePath</span>=<span style="color: #98be65;">"/home/uqsliu28/"</span>
+<span style="color: #dcaeea;">qsubshcom</span>=<span style="color: #98be65;">"</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{homePath}</span><span style="color: #98be65;">/softwares/qsubshcom/qsubshcom"</span>
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">scriptPath="${homePath}/projects/annotation/sim/prediction/eqtlComparison/scripts"</span>
+<span style="color: #dcaeea;">scriptPath</span>=<span style="color: #98be65;">"/home/uqsliu28/90days/projects/annotation/real/debug/scripts"</span>
+<span style="color: #dcaeea;">logPath</span>=<span style="color: #98be65;">"</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{scriptPath}</span><span style="color: #98be65;">/log"</span>
+<span style="color: #ECBE7B;">mkdir</span> -p $<span style="color: #51afef;">{</span><span style="color: #dcaeea;">logPath</span><span style="color: #51afef;">}</span>
+
+<span style="color: #dcaeea;">scriptName</span>=<span style="color: #98be65;">"gctbSC.sh"</span>
+<span style="color: #ECBE7B;">chmod</span> <span style="color: #da8548; font-weight: bold;">751</span> $<span style="color: #51afef;">{</span><span style="color: #dcaeea;">scriptPath</span><span style="color: #51afef;">}</span>/$<span style="color: #51afef;">{</span><span style="color: #dcaeea;">scriptName</span><span style="color: #51afef;">}</span>
+<span style="color: #dcaeea;">qsubName</span>=<span style="color: #98be65;">"</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{scriptName}</span><span style="color: #98be65;">"</span>
+<span style="color: #dcaeea;">printLog</span>=<span style="color: #98be65;">"</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{logPath}</span><span style="color: #98be65;">/</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{qsubName}</span><span style="color: #98be65;">-</span><span style="color: #51afef; font-weight: bold;">$(</span><span style="color: #51afef; font-weight: bold;">date</span><span style="color: #51afef; font-weight: bold;"> +"%Y-%m-%d-%I-%M-%p")</span><span style="color: #98be65;">.log"</span>
+<span style="color: #dcaeea;">tmp_cmd</span>=<span style="color: #98be65;">"</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{scriptPath}</span><span style="color: #98be65;">/</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{scriptName}</span><span style="color: #98be65;">  &gt; </span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{printLog}</span><span style="color: #98be65;">"</span>
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">$qsubshcom "$tmp_cmd" 1 60G  ${qsubName}  100:00:00 "-queue=intel-fat,amd-ep2"</span>
+$<span style="color: #dcaeea;">qsubshcom</span> <span style="color: #98be65;">"</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">tmp_cmd</span><span style="color: #98be65;">"</span> <span style="color: #da8548; font-weight: bold;">5</span> 100G  $<span style="color: #51afef;">{</span><span style="color: #dcaeea;">qsubName</span><span style="color: #51afef;">}</span>  100:00:00 <span style="color: #98be65;">"-queue=normal  -array=1-22"</span>
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-org007440d" class="outline-4">
+<h4 id="org007440d"><span class="section-number-4">3.2.3.</span> Use GCTB-SBayesRC</h4>
+<div class="outline-text-4" id="text-3-2-3">
+</div>
+<div id="outline-container-org3d8bcb4" class="outline-5">
+<h5 id="org3d8bcb4"><span class="section-number-5">3.2.3.1.</span> Step 1: compute block-wise LD matrices</h5>
+<div class="outline-text-5" id="text-3-2-3-1">
+<div class="org-src-container">
+<pre class="src src-bash"><span style="color: #5B6268;">################################################################</span>
+<span style="color: #5B6268;">######################### </span><span style="color: #5B6268;">Script starts ##########################</span>
+<span style="color: #5B6268;">################################################################</span>
+<span style="color: #dcaeea;">gctb</span>=<span style="color: #98be65;">"/home/uqsliu28/softwares/gctb/gctb"</span>
+<span style="color: #dcaeea;">mainPath</span>=<span style="color: #98be65;">"/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/ldblockComm/"</span>
+<span style="color: #dcaeea;">rawDatPath</span>=<span style="color: #98be65;">"/home/uqsliu28//projects/annotation//dataRaw/ukbGeno/"</span>
+
+<span style="color: #dcaeea;">refPos</span>=<span style="color: #98be65;">"chr1-22-fourier_ls_4cM.sbayesrc.pos"</span>
+<span style="color: #dcaeea;">bfileSuffix</span>=<span style="color: #98be65;">"ukbEURu_imp_v3_HM3_maf01"</span>
+<span style="color: #dcaeea;">outFile</span>=<span style="color: #98be65;">"chr1-22-ukbEURu_imp_v3_HM3_maf01-ldm-block-</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{TASK_ID}</span><span style="color: #98be65;">"</span>
+
+
+<span style="color: #dcaeea;">logPath</span>=<span style="color: #98be65;">"</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{mainPath}</span><span style="color: #98be65;">/ldmForLbs/log"</span>
+<span style="color: #ECBE7B;">mkdir</span> -p $<span style="color: #51afef;">{</span><span style="color: #dcaeea;">logPath</span><span style="color: #51afef;">}</span>
+
+$<span style="color: #51afef;">{</span><span style="color: #dcaeea;">gctb</span><span style="color: #51afef;">}</span> --bfile $<span style="color: #51afef;">{</span><span style="color: #dcaeea;">rawDatPath</span><span style="color: #51afef;">}</span>/$<span style="color: #51afef;">{</span><span style="color: #dcaeea;">bfileSuffix</span><span style="color: #51afef;">}</span> <span style="color: #98be65;">\</span>
+    --make-block-ldm  <span style="color: #98be65;">\</span>
+    --block-info $<span style="color: #51afef;">{</span><span style="color: #dcaeea;">mainPath</span><span style="color: #51afef;">}</span>/$<span style="color: #51afef;">{</span><span style="color: #dcaeea;">refPos</span><span style="color: #51afef;">}</span> <span style="color: #98be65;">\</span>
+    --block $<span style="color: #51afef;">{</span><span style="color: #dcaeea;">TASK_ID</span><span style="color: #51afef;">}</span> <span style="color: #98be65;">\</span>
+    --out   $<span style="color: #51afef;">{</span><span style="color: #dcaeea;">mainPath</span><span style="color: #51afef;">}</span>/ldmForLbs/ <span style="color: #da8548; font-weight: bold;">2</span>&gt;&amp;<span style="color: #da8548; font-weight: bold;">1</span> | tee $<span style="color: #51afef;">{</span><span style="color: #dcaeea;">logPath</span><span style="color: #51afef;">}</span>/log-eigen-$<span style="color: #51afef;">{</span><span style="color: #dcaeea;">outFile</span><span style="color: #51afef;">}</span>.log
+
+<span style="color: #5B6268;">################################################################</span>
+<span style="color: #5B6268;">######################### </span><span style="color: #5B6268;">Script starts ##########################</span>
+<span style="color: #5B6268;">################################################################</span>
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">Step 1. Basic cluster setting</span>
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">homePath="/home/yangjianLab/liushouye/"</span>
+<span style="color: #51afef;">if </span><span style="color: #c678dd;">false</span>; <span style="color: #51afef;">then</span>
+<span style="color: #dcaeea;">homePath</span>=<span style="color: #98be65;">"/home/uqsliu28/"</span>
+<span style="color: #dcaeea;">qsubshcom</span>=<span style="color: #98be65;">"</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{homePath}</span><span style="color: #98be65;">/softwares/qsubshcom/qsubshcom"</span>
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">scriptPath="${homePath}/projects/annotation/sim/prediction/eqtlComparison/scripts"</span>
+<span style="color: #dcaeea;">scriptPath</span>=<span style="color: #98be65;">"/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/ldblockComm/ldmForLbs/"</span>
+<span style="color: #dcaeea;">logPath</span>=<span style="color: #98be65;">"</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{scriptPath}</span><span style="color: #98be65;">/log"</span>
+<span style="color: #ECBE7B;">mkdir</span> -p $<span style="color: #51afef;">{</span><span style="color: #dcaeea;">logPath</span><span style="color: #51afef;">}</span>
+
+<span style="color: #dcaeea;">scriptName</span>=<span style="color: #98be65;">"ldmForLbs.sh"</span>
+<span style="color: #ECBE7B;">chmod</span> <span style="color: #da8548; font-weight: bold;">751</span> $<span style="color: #51afef;">{</span><span style="color: #dcaeea;">scriptPath</span><span style="color: #51afef;">}</span>/$<span style="color: #51afef;">{</span><span style="color: #dcaeea;">scriptName</span><span style="color: #51afef;">}</span>
+<span style="color: #dcaeea;">qsubName</span>=<span style="color: #98be65;">"</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{scriptName}</span><span style="color: #98be65;">"</span>
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">printLog="${logPath}/${qsubName}-$(</span><span style="color: #5B6268;">date</span><span style="color: #5B6268;"> +"%Y-%m-%d-%I-%M-%p").log"</span>
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">tmp_cmd="${scriptPath}/${scriptName}  &gt; ${printLog}"</span>
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">printLog="${logPath}/${qsubName}-$(</span><span style="color: #5B6268;">date</span><span style="color: #5B6268;"> +"%Y-%m-%d-%I-%M-%p").log"</span>
+<span style="color: #dcaeea;">tmp_cmd</span>=<span style="color: #98be65;">"</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{scriptPath}</span><span style="color: #98be65;">/</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{scriptName}</span><span style="color: #98be65;">"</span>
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">$qsubshcom "$tmp_cmd" 1 60G  ${qsubName}  100:00:00 "-queue=intel-fat,amd-ep2"</span>
+$<span style="color: #dcaeea;">qsubshcom</span> <span style="color: #98be65;">"</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">tmp_cmd</span><span style="color: #98be65;">"</span> <span style="color: #da8548; font-weight: bold;">1</span> 300G  $<span style="color: #51afef;">{</span><span style="color: #dcaeea;">qsubName</span><span style="color: #51afef;">}</span>  100:00:00 <span style="color: #98be65;">"-queue=normal -array=1-591"</span>
+<span style="color: #51afef;">fi</span>
+<span style="color: #5B6268;">################################################################</span>
+<span style="color: #5B6268;">######################### </span><span style="color: #5B6268;">Script ends ##########################</span>
+<span style="color: #5B6268;">################################################################</span>
+<span style="color: #5B6268;">################################################################</span>
+<span style="color: #5B6268;">######################### </span><span style="color: #5B6268;">Script ends ##########################</span>
+<span style="color: #5B6268;">################################################################</span>
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-org6aaf9f5" class="outline-5">
+<h5 id="org6aaf9f5"><span class="section-number-5">3.2.3.2.</span> Step 2: Calculate low-rank LD matrix</h5>
+<div class="outline-text-5" id="text-3-2-3-2">
+<div class="org-src-container">
+<pre class="src src-bash"><span style="color: #dcaeea;">gctb</span>=<span style="color: #98be65;">"/home/uqsliu28/softwares/gctb/gctb"</span>
+<span style="color: #dcaeea;">mainPath</span>=<span style="color: #98be65;">"/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/ldblockComm/"</span>
+
+<span style="color: #dcaeea;">ldmInfo</span>=<span style="color: #98be65;">"chr1-22-ukbEURu_imp_v3_HM3_maf01-ldm-block-</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{TASK_ID}</span><span style="color: #98be65;">.ldm.full"</span>
+
+<span style="color: #dcaeea;">logPath</span>=<span style="color: #98be65;">"</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{mainPath}</span><span style="color: #98be65;">/lbs/log"</span>
+<span style="color: #ECBE7B;">mkdir</span> -p $<span style="color: #51afef;">{</span><span style="color: #dcaeea;">logPath</span><span style="color: #51afef;">}</span>
+
+$<span style="color: #51afef;">{</span><span style="color: #dcaeea;">gctb</span><span style="color: #51afef;">}</span> --ldm $<span style="color: #51afef;">{</span><span style="color: #dcaeea;">mainPath</span><span style="color: #51afef;">}</span>/ldm/$<span style="color: #51afef;">{</span><span style="color: #dcaeea;">ldmInfo</span><span style="color: #51afef;">}</span> <span style="color: #98be65;">\</span>
+    --make-ldm-eigen <span style="color: #98be65;">\</span>
+    --block  $<span style="color: #51afef;">{</span><span style="color: #dcaeea;">TASK_ID</span><span style="color: #51afef;">}</span> <span style="color: #98be65;">\</span>
+    --out   $<span style="color: #51afef;">{</span><span style="color: #dcaeea;">mainPath</span><span style="color: #51afef;">}</span>/lbs/$<span style="color: #51afef;">{</span><span style="color: #dcaeea;">ldmInfo</span><span style="color: #51afef;">}</span> <span style="color: #da8548; font-weight: bold;">2</span>&gt;&amp;<span style="color: #da8548; font-weight: bold;">1</span> | tee $<span style="color: #51afef;">{</span><span style="color: #dcaeea;">logPath</span><span style="color: #51afef;">}</span>/log-eigen-$<span style="color: #51afef;">{</span><span style="color: #dcaeea;">ldmInfo</span><span style="color: #51afef;">}</span>.log
+
+<span style="color: #5B6268;">################################################################</span>
+<span style="color: #5B6268;">######################### </span><span style="color: #5B6268;">Script starts ##########################</span>
+<span style="color: #5B6268;">################################################################</span>
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">Step 1. Basic cluster setting</span>
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">homePath="/home/yangjianLab/liushouye/"</span>
+<span style="color: #51afef;">if </span><span style="color: #c678dd;">false</span>; <span style="color: #51afef;">then</span>
+<span style="color: #dcaeea;">homePath</span>=<span style="color: #98be65;">"/home/uqsliu28/"</span>
+<span style="color: #dcaeea;">qsubshcom</span>=<span style="color: #98be65;">"</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{homePath}</span><span style="color: #98be65;">/softwares/qsubshcom/qsubshcom"</span>
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">scriptPath="${homePath}/projects/annotation/sim/prediction/eqtlComparison/scripts"</span>
+<span style="color: #dcaeea;">scriptPath</span>=<span style="color: #98be65;">"/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/ldblockComm/lbs/"</span>
+<span style="color: #dcaeea;">logPath</span>=<span style="color: #98be65;">"</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{scriptPath}</span><span style="color: #98be65;">/log"</span>
+<span style="color: #ECBE7B;">mkdir</span> -p $<span style="color: #51afef;">{</span><span style="color: #dcaeea;">logPath</span><span style="color: #51afef;">}</span>
+
+<span style="color: #dcaeea;">scriptName</span>=<span style="color: #98be65;">"lbs.sh"</span>
+<span style="color: #ECBE7B;">chmod</span> <span style="color: #da8548; font-weight: bold;">751</span> $<span style="color: #51afef;">{</span><span style="color: #dcaeea;">scriptPath</span><span style="color: #51afef;">}</span>/$<span style="color: #51afef;">{</span><span style="color: #dcaeea;">scriptName</span><span style="color: #51afef;">}</span>
+<span style="color: #dcaeea;">qsubName</span>=<span style="color: #98be65;">"</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{scriptName}</span><span style="color: #98be65;">"</span>
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">printLog="${logPath}/${qsubName}-$(</span><span style="color: #5B6268;">date</span><span style="color: #5B6268;"> +"%Y-%m-%d-%I-%M-%p").log"</span>
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">tmp_cmd="${scriptPath}/${scriptName}  &gt; ${printLog}"</span>
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">printLog="${logPath}/${qsubName}-$(</span><span style="color: #5B6268;">date</span><span style="color: #5B6268;"> +"%Y-%m-%d-%I-%M-%p").log"</span>
+<span style="color: #dcaeea;">tmp_cmd</span>=<span style="color: #98be65;">"</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{scriptPath}</span><span style="color: #98be65;">/</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{scriptName}</span><span style="color: #98be65;">"</span>
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">$qsubshcom "$tmp_cmd" 1 60G  ${qsubName}  100:00:00 "-queue=intel-fat,amd-ep2"</span>
+$<span style="color: #dcaeea;">qsubshcom</span> <span style="color: #98be65;">"</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">tmp_cmd</span><span style="color: #98be65;">"</span> <span style="color: #da8548; font-weight: bold;">1</span> 15G  $<span style="color: #51afef;">{</span><span style="color: #dcaeea;">qsubName</span><span style="color: #51afef;">}</span>  100:00:00 <span style="color: #98be65;">"-queue=normal -array=1-591"</span>
+<span style="color: #51afef;">fi</span>
+<span style="color: #5B6268;">################################################################</span>
+<span style="color: #5B6268;">######################### </span><span style="color: #5B6268;">Script ends ##########################</span>
+<span style="color: #5B6268;">################################################################</span>
+
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-orgde84bc9" class="outline-5">
+<h5 id="orgde84bc9"><span class="section-number-5">3.2.3.3.</span> Perform SBayesC analysis</h5>
+</div>
+</div>
+</div>
+<div id="outline-container-org9ea5aab" class="outline-3">
+<h3 id="org9ea5aab"><span class="section-number-3">3.3.</span> Prediction</h3>
 <div class="outline-text-3" id="text-3-3">
 </div>
-<div id="outline-container-org8382a11" class="outline-4">
-<h4 id="org8382a11"><span class="section-number-4">3.3.1.</span> calPRS.r</h4>
+<div id="outline-container-org37b2aca" class="outline-4">
+<h4 id="org37b2aca"><span class="section-number-4">3.3.1.</span> calPRS.r</h4>
 <div class="outline-text-4" id="text-3-3-1">
 <div class="org-src-container">
 <pre class="src src-R"><span style="color: #a9a1e1;">rm</span>(list = ls())
@@ -1069,7 +1258,7 @@ option_list = list(
 opt = parse_args(OptionParser(option_list=option_list))
 <span style="color: #5B6268;">## </span><span style="color: #5B6268;">library(latex2exp)</span>
 <span style="color: #51afef;">if</span>(<span style="color: #ECBE7B;">FALSE</span>) {
-  smtFile = <span style="color: #98be65;">"/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/sim/smt/maFile4MT_ST/b1_ma_MT.ma"</span>
+  smtFile = <span style="color: #98be65;">"/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/sim/out/smt/maFile4MT_ST/b1_ma_ST.ma"</span>
   parFile = <span style="color: #98be65;">"/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/sim/gcta/bivariate/train-chr1-22-shuf-300000-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21.caus-trait-1.gcta.par"</span>
   sbrFile = <span style="color: #98be65;">"/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/sim/out/sbayesrc/bivariate/train-chr1-22-shuf-300000-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21.caus-trait-1.gcta.phen.plink.ci.assoc.linear.ma_sbrc.txt"</span>
   resultFile = <span style="color: #98be65;">"/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/sim/prediction/bivariate/results/prsFile.txt"</span>
@@ -1080,6 +1269,43 @@ plink2= <span style="color: #98be65;">"/home/uqsliu28//softwares/plink/plink2"</
 validBfile = <span style="color: #98be65;">"/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/sim/data/valid-chr1-22-shuf-48501-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21"</span>
 outPath = opt$outPath
 resultFile = opt$resFile
+<span style="color: #5B6268;">### </span><span style="color: #5B6268;">calcuate correlation</span>
+
+parRaw = fread(parFile)
+colnames(parRaw) = c(<span style="color: #98be65;">"SNP"</span>,<span style="color: #98be65;">"A1"</span>,<span style="color: #98be65;">"freq"</span>, <span style="color: #98be65;">"A1Effect"</span>)
+
+sbrRaw = fread(sbrFile)
+colnames(sbrRaw) = c(<span style="color: #98be65;">"SNP"</span>,<span style="color: #98be65;">"A1Sbr"</span>,<span style="color: #98be65;">"BETA"</span>,<span style="color: #98be65;">"PIP"</span>,<span style="color: #98be65;">"A1EffectSbr"</span>)
+smtRaw = fread(smtFile)
+colnames(smtRaw) = c( <span style="color: #98be65;">"ID"</span>,<span style="color: #98be65;">"SNP"</span>,<span style="color: #98be65;">"Chrom"</span>,<span style="color: #98be65;">"Position"</span>,<span style="color: #98be65;">"A1Smt"</span>,<span style="color: #98be65;">"A2"</span>,<span style="color: #98be65;">"A1Freq"</span>,<span style="color: #98be65;">"A1EffectSmt"</span>,<span style="color: #98be65;">"SE"</span>,<span style="color: #98be65;">"PIP"</span>)
+
+
+total <span style="color: #a9a1e1;">&lt;-</span> merge( merge(parRaw[,c(<span style="color: #98be65;">"SNP"</span>,<span style="color: #98be65;">"A1"</span>,<span style="color: #98be65;">"A1Effect"</span>)],
+                        sbrRaw[,c(<span style="color: #98be65;">"SNP"</span>,<span style="color: #98be65;">"A1Sbr"</span>,<span style="color: #98be65;">"A1EffectSbr"</span>)],
+                        by=c(<span style="color: #98be65;">"SNP"</span>)),
+                 smtRaw[,c(<span style="color: #98be65;">"SNP"</span>,<span style="color: #98be65;">"A1Smt"</span>,<span style="color: #98be65;">"A1EffectSmt"</span>)],
+                   by=c(<span style="color: #98be65;">"SNP"</span>))
+
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">allele flip</span>
+bA1A1 =  (total$A1 == total$A1Sbr )
+bA1A2 = (total$A1 != total$A1Sbr )
+bAll = bA1A2 |bA1A1
+<span style="color: #a9a1e1;">message</span>(sum(bAll), <span style="color: #98be65;">" SNPs have consistent alleles (A1, A2) between the summary data and LD"</span>)
+total[bA1A1, BetaSbr:=  A1EffectSbr ]
+total[bA1A2, BetaSbr:= - A1EffectSbr  ]
+
+bA1A1 = (total$A1 == total$A1Smt )
+bA1A2 = (total$A1 != total$A1Smt )
+bAll = bA1A1 | bA1A2
+<span style="color: #a9a1e1;">message</span>(sum(bAll), <span style="color: #98be65;">" SNPs have consistent alleles (A1, A2) between the summary data and LD"</span>)
+total[bA1A1, BetaSmt:= A1EffectSmt ]
+total[bA1A2, BetaSmt:= - A1EffectSmt ]
+
+plot(total$A1Effect,total$A1EffectSbr)
+
+plot(total$A1Effect,total$BetaSbr)
+plot(total$A1Effect,total$BetaSmt,xlab = <span style="color: #98be65;">"betaTrue"</span>,ylab = <span style="color: #98be65;">"betaMean"</span>,main= <span style="color: #98be65;">"b1_ma_ST"</span>)
+
 
 prsParFile = paste0(outPath,<span style="color: #98be65;">"/"</span>,basename(opt$parFile))
 prsSbrFile = paste0(outPath,<span style="color: #98be65;">"/"</span>,basename(opt$sbrFile))
@@ -1135,8 +1361,8 @@ write.table(dat, file = resultFile,col.names = <span style="color: #ECBE7B;">FAL
 </div>
 </div>
 </div>
-<div id="outline-container-orgd6bade8" class="outline-4">
-<h4 id="orgd6bade8"><span class="section-number-4">3.3.2.</span> run single trait</h4>
+<div id="outline-container-org6bb7dbf" class="outline-4">
+<h4 id="org6bb7dbf"><span class="section-number-4">3.3.2.</span> run single trait</h4>
 <div class="outline-text-4" id="text-3-3-2">
 <div class="org-src-container">
 <pre class="src src-bash"><span style="color: #5B6268;">## </span><span style="color: #5B6268;">homePath="/home/yangjianLab/liushouye/"</span>
@@ -1191,8 +1417,8 @@ write.table(dat, file = resultFile,col.names = <span style="color: #ECBE7B;">FAL
 </div>
 </div>
 
-<div id="outline-container-org4bde79a" class="outline-4">
-<h4 id="org4bde79a"><span class="section-number-4">3.3.3.</span> run bivariate trait</h4>
+<div id="outline-container-orgf154d07" class="outline-4">
+<h4 id="orgf154d07"><span class="section-number-4">3.3.3.</span> run bivariate trait</h4>
 <div class="outline-text-4" id="text-3-3-3">
 <div class="org-src-container">
 <pre class="src src-bash"><span style="color: #5B6268;">## </span><span style="color: #5B6268;">homePath="/home/yangjianLab/liushouye/"</span>
@@ -1255,12 +1481,525 @@ write.table(dat, file = resultFile,col.names = <span style="color: #ECBE7B;">FAL
 </div>
 </div>
 </div>
+<div id="outline-container-org0152456" class="outline-3">
+<h3 id="org0152456"><span class="section-number-3">3.4.</span> Simulation with annotation</h3>
+<div class="outline-text-3" id="text-3-4">
+</div>
+<div id="outline-container-org375e9cb" class="outline-4">
+<h4 id="org375e9cb"><span class="section-number-4">3.4.1.</span> R: generate bivarte-annotation</h4>
+<div class="outline-text-4" id="text-3-4-1">
+<div class="org-src-container">
+<pre class="src src-R"><span style="color: #5B6268;">##############################################################</span>
+<span style="color: #5B6268;">#####   </span><span style="color: #5B6268;">bivAnno.R               #######</span>
+<span style="color: #5B6268;">#####         </span><span style="color: #5B6268;">Step 1. Parameter setting option         #######</span>
+<span style="color: #5B6268;">#####         </span><span style="color: #5B6268;">Step 1. Parameter setting option         #######</span>
+<span style="color: #5B6268;">##############################################################</span>
+
+<span style="color: #a9a1e1;">options</span>(scipen = <span style="color: #da8548; font-weight: bold;">999</span>)
+<span style="color: #a9a1e1;">library</span>(MASS)
+<span style="color: #a9a1e1;">library</span>(data.table)
+<span style="color: #a9a1e1;">options</span>(scipen=<span style="color: #da8548; font-weight: bold;">999</span>)
+<span style="color: #a9a1e1;">library</span>(data.table)
+<span style="color: #a9a1e1;">library</span>(optparse)
+<span style="color: #5B6268;">##############################################################</span>
+<span style="color: #5B6268;">#####         </span><span style="color: #5B6268;">Step 1. Parameter setting option         #######</span>
+<span style="color: #5B6268;">##############################################################</span>
+option_list = list(
+  <span style="color: #5B6268;">##  </span><span style="color: #5B6268;">type</span>
+  make_option(c(<span style="color: #98be65;">"--pleio_percent"</span>), action=<span style="color: #98be65;">"store"</span>, default=<span style="color: #da8548; font-weight: bold;">10</span>, type=<span style="color: #98be65;">'numeric'</span>,
+              help=<span style="color: #98be65;">""</span>),
+  make_option(c(<span style="color: #98be65;">"--sample_size"</span>), action=<span style="color: #98be65;">"store"</span>, default=<span style="color: #da8548; font-weight: bold;">10</span>, type=<span style="color: #98be65;">'numeric'</span>,
+              help=<span style="color: #98be65;">""</span>),
+  make_option(c(<span style="color: #98be65;">"--annotation_size"</span>), action=<span style="color: #98be65;">"store"</span>, default=<span style="color: #da8548; font-weight: bold;">0.1</span>, type=<span style="color: #98be65;">'numeric'</span>,
+              help=<span style="color: #98be65;">""</span>)
+)
+opt = parse_args(OptionParser(option_list=option_list))
+
+print(<span style="color: #98be65;">"option is: "</span>)
+opt
+<span style="color: #5B6268;">###############################################</span>
+<span style="color: #5B6268;">### </span><span style="color: #5B6268;">Below are parameters to be changed</span>
+<span style="color: #5B6268;">###############################################</span>
+
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">MainPath &lt;- "/home/carol666/MTSBayesC/"</span>
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">gcta64 &lt;- "/home/carol666/packages/gcta"</span>
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">plink19 &lt;- "/home/carol666/packages/plink"</span>
+plink19= <span style="color: #98be65;">"/home/uqsliu28//softwares/plink/plink19"</span>
+gcta64 <span style="color: #a9a1e1;">&lt;-</span> <span style="color: #98be65;">"/home/uqsliu28/softwares/gcta/gcta64"</span>
+
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">outPath = "/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/sim/gcta/annot/"</span>
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">bfilePath= "/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/sim/data/"</span>
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">bfileName = "train-chr1-22-shuf-300000-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21"</span>
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">bfile = paste0(bfilePath,bfileName)</span>
+
+<span style="color: #51afef;">if</span>(<span style="color: #ECBE7B;">FALSE</span>){
+<span style="color: #5B6268;"># </span><span style="color: #5B6268;">parameters</span>
+seed <span style="color: #a9a1e1;">&lt;-</span> <span style="color: #da8548; font-weight: bold;">123</span> <span style="color: #5B6268;"># </span><span style="color: #5B6268;">set seed for reproducibility</span>
+sample_size <span style="color: #a9a1e1;">&lt;-</span> <span style="color: #da8548; font-weight: bold;">500</span>
+annotation_size <span style="color: #a9a1e1;">&lt;-</span> <span style="color: #da8548; font-weight: bold;">0.1</span> <span style="color: #5B6268;"># </span><span style="color: #5B6268;">10% of SNPs in category 1</span>
+pleio_percent <span style="color: #a9a1e1;">&lt;-</span> <span style="color: #da8548; font-weight: bold;">1.0</span>
+h21 <span style="color: #a9a1e1;">&lt;-</span> <span style="color: #da8548; font-weight: bold;">0.5</span> <span style="color: #5B6268;"># </span><span style="color: #5B6268;">h2 for trait 1</span>
+h22 <span style="color: #a9a1e1;">&lt;-</span> <span style="color: #da8548; font-weight: bold;">0.1</span> <span style="color: #5B6268;"># </span><span style="color: #5B6268;">h2 for trait 2</span>
+nCategory <span style="color: #a9a1e1;">&lt;-</span> <span style="color: #da8548; font-weight: bold;">2</span> <span style="color: #5B6268;"># </span><span style="color: #5B6268;">number of annotation groups</span>
+pis <span style="color: #a9a1e1;">&lt;-</span> rep(<span style="color: #da8548; font-weight: bold;">0.01</span>, nCategory) <span style="color: #5B6268;"># </span><span style="color: #5B6268;">proportion of non-zero effects in each annotation group</span>
+QTLcor <span style="color: #a9a1e1;">&lt;-</span> c(<span style="color: #da8548; font-weight: bold;">0.8</span>, <span style="color: #da8548; font-weight: bold;">0.2</span>) <span style="color: #5B6268;"># </span><span style="color: #5B6268;">QTL correlation bewteen two traits for the two category</span>
+Rescor <span style="color: #a9a1e1;">&lt;-</span> <span style="color: #da8548; font-weight: bold;">0.1</span>
+nTrait <span style="color: #a9a1e1;">&lt;-</span> <span style="color: #da8548; font-weight: bold;">2</span>
+repNum <span style="color: #a9a1e1;">&lt;-</span> <span style="color: #da8548; font-weight: bold;">1</span> <span style="color: #5B6268;"># </span><span style="color: #5B6268;">number of replicates in gcta</span>
+}
+<span style="color: #5B6268;">#############################################</span>
+sample_size <span style="color: #a9a1e1;">&lt;-</span> opt$sample_size
+annotation_size <span style="color: #a9a1e1;">&lt;-</span> opt$annotation_size
+pleio_percent <span style="color: #a9a1e1;">&lt;-</span> opt$pleio_percent
+
+<span style="color: #5B6268;">#############################################</span>
+<span style="color: #5B6268;"># </span><span style="color: #5B6268;">parameters</span>
+seed <span style="color: #a9a1e1;">&lt;-</span> <span style="color: #da8548; font-weight: bold;">123</span> <span style="color: #5B6268;"># </span><span style="color: #5B6268;">set seed for reproducibility</span>
+
+h21 <span style="color: #a9a1e1;">&lt;-</span> <span style="color: #da8548; font-weight: bold;">0.5</span> <span style="color: #5B6268;"># </span><span style="color: #5B6268;">h2 for trait 1</span>
+h22 <span style="color: #a9a1e1;">&lt;-</span> <span style="color: #da8548; font-weight: bold;">0.1</span> <span style="color: #5B6268;"># </span><span style="color: #5B6268;">h2 for trait 2</span>
+nCategory <span style="color: #a9a1e1;">&lt;-</span> <span style="color: #da8548; font-weight: bold;">2</span> <span style="color: #5B6268;"># </span><span style="color: #5B6268;">number of annotation groups</span>
+pis <span style="color: #a9a1e1;">&lt;-</span> rep(<span style="color: #da8548; font-weight: bold;">0.01</span>, nCategory) <span style="color: #5B6268;"># </span><span style="color: #5B6268;">proportion of non-zero effects in each annotation group</span>
+QTLcor <span style="color: #a9a1e1;">&lt;-</span> c(<span style="color: #da8548; font-weight: bold;">0.8</span>, <span style="color: #da8548; font-weight: bold;">0.2</span>) <span style="color: #5B6268;"># </span><span style="color: #5B6268;">QTL correlation bewteen two traits for the two category</span>
+Rescor <span style="color: #a9a1e1;">&lt;-</span> <span style="color: #da8548; font-weight: bold;">0.1</span>
+nTrait <span style="color: #a9a1e1;">&lt;-</span> <span style="color: #da8548; font-weight: bold;">2</span>
+
+repNum <span style="color: #a9a1e1;">&lt;-</span> <span style="color: #da8548; font-weight: bold;">1</span> <span style="color: #5B6268;"># </span><span style="color: #5B6268;">number of replicates in gcta</span>
+
+
+rawDataPath <span style="color: #a9a1e1;">&lt;-</span> paste0(<span style="color: #98be65;">"/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/sim/data/"</span>)
+outPath <span style="color: #a9a1e1;">&lt;-</span> paste0(<span style="color: #98be65;">"/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/sim/gcta/annot/"</span>)
+
+rawBimFileSuffix <span style="color: #a9a1e1;">&lt;-</span> paste0(<span style="color: #98be65;">"train-chr1-22-shuf-300000-sams-ukbEURu_imp_v3_HM3_maf01-2023-02-21"</span>)
+
+<span style="color: #5B6268;">###############################################</span>
+<span style="color: #5B6268;">### </span><span style="color: #5B6268;">Above are parameters to be changed</span>
+<span style="color: #5B6268;">###############################################</span>
+
+outPath <span style="color: #a9a1e1;">&lt;-</span> paste0(outPath, <span style="color: #98be65;">"pleioPercent"</span>, pleio_percent, <span style="color: #98be65;">"_sampleSize"</span>, sample_size, <span style="color: #98be65;">"_annotationSize"</span>, annotation_size, <span style="color: #98be65;">"/"</span>)
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">system(paste0("mkdir"))</span>
+
+<span style="color: #5B6268;"># </span><span style="color: #5B6268;">output parameters</span>
+<span style="color: #a9a1e1;">message</span>(<span style="color: #98be65;">"seed: "</span>, seed)
+<span style="color: #a9a1e1;">message</span>(<span style="color: #98be65;">"sample size: "</span>, sample_size)
+<span style="color: #a9a1e1;">message</span>(<span style="color: #98be65;">"annotation size: "</span>, annotation_size)
+<span style="color: #a9a1e1;">message</span>(<span style="color: #98be65;">"pleiotropic percent: "</span>, pleio_percent)
+<span style="color: #a9a1e1;">message</span>(<span style="color: #98be65;">"h2 for trait 1: "</span>, h21)
+<span style="color: #a9a1e1;">message</span>(<span style="color: #98be65;">"h2 for trait 2: "</span>, h22)
+<span style="color: #a9a1e1;">message</span>(<span style="color: #98be65;">"number of annotation groups: "</span>, nCategory)
+<span style="color: #a9a1e1;">message</span>(<span style="color: #98be65;">"proportion of non-zero effects in each annotation group: "</span>, paste(pis, collapse = <span style="color: #98be65;">", "</span>))
+<span style="color: #a9a1e1;">message</span>(<span style="color: #98be65;">"QTL correlation: "</span>, paste(QTLcor, collapse = <span style="color: #98be65;">", "</span>))
+<span style="color: #a9a1e1;">message</span>(<span style="color: #98be65;">"Residual correlation: "</span>, Rescor)
+<span style="color: #a9a1e1;">message</span>(<span style="color: #98be65;">"folder to save simulation results: "</span>, outPath)
+dir.create(outPath)
+
+
+rawBimFile <span style="color: #a9a1e1;">&lt;-</span> paste0(rawDataPath, rawBimFileSuffix, <span style="color: #98be65;">".bim"</span>)
+rawFamFile <span style="color: #a9a1e1;">&lt;-</span> paste0(rawDataPath, rawBimFileSuffix, <span style="color: #98be65;">".fam"</span>)
+bim <span style="color: #a9a1e1;">&lt;-</span> fread(rawBimFile)
+names(bim) <span style="color: #a9a1e1;">&lt;-</span> c(<span style="color: #98be65;">"CHR"</span>, <span style="color: #98be65;">"SNP"</span>, <span style="color: #98be65;">"POS"</span>, <span style="color: #98be65;">"CM"</span>, <span style="color: #98be65;">"A1"</span>, <span style="color: #98be65;">"A2"</span>)
+fam <span style="color: #a9a1e1;">&lt;-</span> fread(rawFamFile)
+names(fam) <span style="color: #a9a1e1;">&lt;-</span> c(<span style="color: #98be65;">"FID"</span>, <span style="color: #98be65;">"IID"</span>, <span style="color: #98be65;">"PID"</span>, <span style="color: #98be65;">"MID"</span>,<span style="color: #98be65;">"SEX"</span>, <span style="color: #98be65;">"PHENOTYPE"</span>)
+
+set.seed(seed)
+<span style="color: #5B6268;">##############################################</span>
+<span style="color: #5B6268;"># </span><span style="color: #5B6268;">1. Sample Size (10K or 100K) &#8658; #individuals</span>
+<span style="color: #5B6268;"># </span><span style="color: #5B6268;">select individuals based on sample size parameters</span>
+<span style="color: #5B6268;">##############################################</span>
+nInd <span style="color: #a9a1e1;">&lt;-</span> nrow(fam)
+nMarker <span style="color: #a9a1e1;">&lt;-</span> nrow(bim)
+<span style="color: #5B6268;"># </span><span style="color: #5B6268;">Generate random indices for selected individuals without replacement</span>
+random_ind_index <span style="color: #a9a1e1;">&lt;-</span> sort(sample(nInd, sample_size, replace = <span style="color: #ECBE7B;">FALSE</span>))
+<span style="color: #5B6268;"># </span><span style="color: #5B6268;">selected individuals</span>
+selected_ind <span style="color: #a9a1e1;">&lt;-</span> fam[random_ind_index, c(<span style="color: #98be65;">"FID"</span>, <span style="color: #98be65;">"IID"</span>)]
+
+selected_ind_file <span style="color: #a9a1e1;">&lt;-</span> paste0(outPath, rawBimFileSuffix, <span style="color: #98be65;">"-selectedInd.txt"</span>)
+fwrite(data.frame(selected_ind), file = selected_ind_file, col.names = <span style="color: #ECBE7B;">FALSE</span>, sep = <span style="color: #98be65;">"\t"</span>)
+selected_ind_out <span style="color: #a9a1e1;">&lt;-</span> sprintf(<span style="color: #98be65;">"%s/%s.%dInd"</span>, outPath, rawBimFileSuffix, sample_size)
+
+plinkInd <span style="color: #a9a1e1;">&lt;-</span> paste0(
+    plink19, <span style="color: #98be65;">" --bfile "</span>, rawDataPath, rawBimFileSuffix,
+    <span style="color: #98be65;">" --keep "</span>, selected_ind_file,
+    <span style="color: #98be65;">" --make-bed "</span>,
+    <span style="color: #98be65;">"--threads 100 "</span>,
+    <span style="color: #98be65;">" --out "</span>, selected_ind_out
+)
+system(plinkInd)
+
+<span style="color: #5B6268;">##  </span><span style="color: #5B6268;">Calculate allele frequency</span>
+plinkFreq <span style="color: #a9a1e1;">&lt;-</span> paste0(
+    plink19, <span style="color: #98be65;">" --bfile "</span>, selected_ind_out,
+    <span style="color: #98be65;">" --freq "</span>,
+    <span style="color: #98be65;">" --out "</span>, selected_ind_out
+)
+system(plinkFreq)
+
+<span style="color: #5B6268;">##############################################</span>
+<span style="color: #5B6268;"># </span><span style="color: #5B6268;">2. Annotation size (1%/10%) &#8658; #SNPs in each annotation group</span>
+<span style="color: #5B6268;"># </span><span style="color: #5B6268;">select SNPs into annotation group based on annotation size parameters</span>
+<span style="color: #5B6268;">##############################################</span>
+<span style="color: #5B6268;"># </span><span style="color: #5B6268;">Calculate the number of SNP to select for the category 1</span>
+nSNPc1 <span style="color: #a9a1e1;">&lt;-</span> ceiling(nMarker * annotation_size)
+<span style="color: #5B6268;"># </span><span style="color: #5B6268;">Generate random SNP indices without replacement</span>
+random_snp_c1_index <span style="color: #a9a1e1;">&lt;-</span> sort(sample(nMarker, nSNPc1, replace = <span style="color: #ECBE7B;">FALSE</span>))
+<span style="color: #5B6268;"># </span><span style="color: #5B6268;">Select the random SNPs for category 1 using the generated indices</span>
+SNPsc1 <span style="color: #a9a1e1;">&lt;-</span> bim$SNP[random_snp_c1_index]
+SNPsc2 <span style="color: #a9a1e1;">&lt;-</span> setdiff(bim$SNP, SNPsc1)
+<span style="color: #a9a1e1;">message</span>(<span style="color: #98be65;">"number of SNPs selected in category 1: "</span>, length(SNPsc1))
+<span style="color: #a9a1e1;">message</span>(<span style="color: #98be65;">"number of SNPs selected in category 2: "</span>, length(SNPsc2))
+
+<span style="color: #5B6268;"># </span><span style="color: #5B6268;">save selected SNPs</span>
+write.table(SNPsc1, paste0(outPath, <span style="color: #98be65;">"SNPsc1"</span>, <span style="color: #98be65;">".txt"</span>), row.names = F, col.names = F, quote = F)
+write.table(SNPsc2, paste0(outPath, <span style="color: #98be65;">"SNPsc2"</span>, <span style="color: #98be65;">".txt"</span>), row.names = F, col.names = F, quote = F)
+
+<span style="color: #5B6268;">##############################################</span>
+<span style="color: #5B6268;"># </span><span style="color: #5B6268;">3. Pi &#8658; number of QTL in each annotation group</span>
+<span style="color: #5B6268;"># </span><span style="color: #5B6268;">select QTL into annotation group based on Pi parameters</span>
+<span style="color: #5B6268;">##############################################</span>
+<span style="color: #5B6268;"># </span><span style="color: #5B6268;">number of QTLs in each category</span>
+nSNPc2 <span style="color: #a9a1e1;">&lt;-</span> nMarker - nSNPc1
+nSNPc <span style="color: #a9a1e1;">&lt;-</span> c(nSNPc1, nSNPc2)
+nQTL <span style="color: #a9a1e1;">&lt;-</span> floor(nSNPc * pis)
+<span style="color: #a9a1e1;">message</span>(<span style="color: #98be65;">"number of QTL in each annotation group: "</span>, paste(nQTL, collapse = <span style="color: #98be65;">", "</span>))
+
+<span style="color: #5B6268;">##############################################</span>
+<span style="color: #5B6268;"># </span><span style="color: #5B6268;">4. %pleiotropic QTL for 2 traits</span>
+<span style="color: #5B6268;"># </span><span style="color: #5B6268;">select pleiotropic QTL based on %pleiotropic parameters</span>
+<span style="color: #5B6268;">##############################################</span>
+npleioQTL <span style="color: #a9a1e1;">&lt;-</span> floor(nQTL * pleio_percent) <span style="color: #5B6268;"># </span><span style="color: #5B6268;">number of pleiotropic QTL in each annotation group</span>
+<span style="color: #a9a1e1;">message</span>(<span style="color: #98be65;">"number of pleiotropic QTL in each annotation group: "</span>, paste(npleioQTL, collapse = <span style="color: #98be65;">", "</span>))
+<span style="color: #51afef;">if</span> (pleio_percent &lt; <span style="color: #da8548; font-weight: bold;">1.0</span>) {
+    nnonpleioQTL <span style="color: #a9a1e1;">&lt;-</span> nQTL - npleioQTL <span style="color: #5B6268;"># </span><span style="color: #5B6268;">number of non-pleiotropic QTL in each annotation group</span>
+    <span style="color: #a9a1e1;">message</span>(<span style="color: #98be65;">"number of non-pleiotropic QTL in each annotation group: "</span>, paste(nnonpleioQTL, collapse = <span style="color: #98be65;">", "</span>))
+}
+
+<span style="color: #5B6268;">##############################################</span>
+<span style="color: #5B6268;"># </span><span style="color: #5B6268;">5. QTL effect correlation</span>
+<span style="color: #5B6268;">##############################################</span>
+
+QTLmean <span style="color: #a9a1e1;">&lt;-</span> c(<span style="color: #da8548; font-weight: bold;">0</span>, <span style="color: #da8548; font-weight: bold;">0</span>) <span style="color: #5B6268;"># </span><span style="color: #5B6268;">mean of QTL effect for trait 1 and trait 2</span>
+QTLcovmat <span style="color: #a9a1e1;">&lt;-</span> list( <span style="color: #5B6268;"># </span><span style="color: #5B6268;">marker covariance matrix for category 1 and category 2 (for npleioQTL)</span>
+    QTLcovmatc1 = matrix(c(<span style="color: #da8548; font-weight: bold;">1</span>, QTLcor[<span style="color: #da8548; font-weight: bold;">1</span>], QTLcor[<span style="color: #da8548; font-weight: bold;">1</span>], <span style="color: #da8548; font-weight: bold;">1</span>), nrow = <span style="color: #da8548; font-weight: bold;">2</span>, ncol = <span style="color: #da8548; font-weight: bold;">2</span>, byrow = <span style="color: #ECBE7B;">TRUE</span>),
+    QTLcovmatc2 = matrix(c(<span style="color: #da8548; font-weight: bold;">1</span>, QTLcor[<span style="color: #da8548; font-weight: bold;">2</span>], QTLcor[<span style="color: #da8548; font-weight: bold;">2</span>], <span style="color: #da8548; font-weight: bold;">1</span>), nrow = <span style="color: #da8548; font-weight: bold;">2</span>, ncol = <span style="color: #da8548; font-weight: bold;">2</span>, byrow = <span style="color: #ECBE7B;">TRUE</span>)
+)
+
+QTLpos <span style="color: #a9a1e1;">&lt;-</span> list(
+    QTLposc1 = sample(SNPsc1, nQTL[<span style="color: #da8548; font-weight: bold;">1</span>], replace = <span style="color: #ECBE7B;">FALSE</span>), <span style="color: #5B6268;"># </span><span style="color: #5B6268;">QTL positions for category 1</span>
+    QTLposc2 = sample(SNPsc2, nQTL[<span style="color: #da8548; font-weight: bold;">2</span>], replace = <span style="color: #ECBE7B;">FALSE</span>) <span style="color: #5B6268;"># </span><span style="color: #5B6268;">QTL positions for category 2</span>
+) <span style="color: #5B6268;"># </span><span style="color: #5B6268;">QTL positions for category 1 and category 2</span>
+
+<span style="color: #5B6268;"># </span><span style="color: #5B6268;">pleiotropic QTL positions for category 1 and category 2</span>
+<span style="color: #51afef;">if</span> (pleio_percent &lt; <span style="color: #da8548; font-weight: bold;">1.0</span>) {
+    pleioQTLpos <span style="color: #a9a1e1;">&lt;-</span> list(
+        QTLposc1 = sample(QTLpos[[<span style="color: #98be65;">"QTLposc1"</span>]], npleioQTL[<span style="color: #da8548; font-weight: bold;">1</span>], replace = <span style="color: #ECBE7B;">FALSE</span>),
+        QTLposc2 = sample(QTLpos[[<span style="color: #98be65;">"QTLposc2"</span>]], npleioQTL[<span style="color: #da8548; font-weight: bold;">2</span>], replace = <span style="color: #ECBE7B;">FALSE</span>)
+    ) <span style="color: #5B6268;"># </span><span style="color: #5B6268;">pleiotropic QTL positions for category 1 and category 2</span>
+} <span style="color: #51afef;">else</span> <span style="color: #51afef;">if</span> (pleio_percent == <span style="color: #da8548; font-weight: bold;">1.0</span>) {
+    pleioQTLpos <span style="color: #a9a1e1;">&lt;-</span> QTLpos
+}
+<span style="color: #5B6268;"># </span><span style="color: #5B6268;">save pleiotropic QTL positions</span>
+<span style="color: #51afef;">for</span> (i <span style="color: #51afef;">in</span> <span style="color: #da8548; font-weight: bold;">1</span>:nCategory) {
+    write.table(pleioQTLpos[[i]], sprintf(<span style="color: #98be65;">"%s/pleioQTLposc%d.txt"</span>, outPath, i), row.names = F, col.names = F, quote = F)
+}
+
+<span style="color: #5B6268;"># </span><span style="color: #5B6268;">pleiotropic QTL effects for category 1 and category 2</span>
+pleioQTLeff <span style="color: #a9a1e1;">&lt;-</span> list(
+    QTLeffc1 = mvrnorm(npleioQTL[<span style="color: #da8548; font-weight: bold;">1</span>], QTLmean, QTLcovmat$QTLcovmatc1),
+    QTLeffc2 = mvrnorm(npleioQTL[<span style="color: #da8548; font-weight: bold;">2</span>], QTLmean, QTLcovmat$QTLcovmatc2)
+)
+
+<span style="color: #51afef;">if</span> (pleio_percent &lt; <span style="color: #da8548; font-weight: bold;">1.0</span>) {
+    <span style="color: #5B6268;"># </span><span style="color: #5B6268;">non-pleiotropic QTL positions for category 1 and category 2</span>
+    nonpleioQTLposc1 <span style="color: #a9a1e1;">&lt;-</span> setdiff(QTLpos[[<span style="color: #98be65;">"QTLposc1"</span>]], pleioQTLpos[[<span style="color: #98be65;">"QTLposc1"</span>]])
+    nonpleioQTLposc2 <span style="color: #a9a1e1;">&lt;-</span> setdiff(QTLpos[[<span style="color: #98be65;">"QTLposc2"</span>]], pleioQTLpos[[<span style="color: #98be65;">"QTLposc2"</span>]])
+    <span style="color: #5B6268;"># </span><span style="color: #5B6268;">only half affect trait 1</span>
+    nnonpleioQTLT1 <span style="color: #a9a1e1;">&lt;-</span> floor(nnonpleioQTL / <span style="color: #da8548; font-weight: bold;">2</span>)
+    <span style="color: #5B6268;"># </span><span style="color: #5B6268;">only half affect trait 2</span>
+    nnonpleioQTLT2 <span style="color: #a9a1e1;">&lt;-</span> nnonpleioQTL - nnonpleioQTLT1
+    nonpleioQTLpos <span style="color: #a9a1e1;">&lt;-</span> list(
+        QTLposc1 = list(T1 = sample(nonpleioQTLposc1, nnonpleioQTLT1[<span style="color: #da8548; font-weight: bold;">1</span>], replace = <span style="color: #ECBE7B;">FALSE</span>)),
+        QTLposc2 = list(T1 = sample(nonpleioQTLposc2, nnonpleioQTLT1[<span style="color: #da8548; font-weight: bold;">2</span>], replace = <span style="color: #ECBE7B;">FALSE</span>))
+    )
+    <span style="color: #5B6268;"># </span><span style="color: #5B6268;">the other half affect trait 2</span>
+    nonpleioQTLpos$QTLposc1$T2 <span style="color: #a9a1e1;">&lt;-</span> setdiff(nonpleioQTLposc1, nonpleioQTLpos$QTLposc1$T1)
+    nonpleioQTLpos$QTLposc2$T2 <span style="color: #a9a1e1;">&lt;-</span> setdiff(nonpleioQTLposc2, nonpleioQTLpos$QTLposc2$T1)
+
+    <span style="color: #5B6268;"># </span><span style="color: #5B6268;">save non-pleiotropic QTL positions</span>
+    <span style="color: #51afef;">for</span> (i <span style="color: #51afef;">in</span> <span style="color: #da8548; font-weight: bold;">1</span>:nCategory) {
+        <span style="color: #51afef;">for</span> (j <span style="color: #51afef;">in</span> <span style="color: #da8548; font-weight: bold;">1</span>:nTrait) {
+            write.table(nonpleioQTLpos[[i]][j], sprintf(<span style="color: #98be65;">"%s/nonpleioQTLposc%dt%d.txt"</span>, outPath, i, j), row.names = F, col.names = F, quote = F)
+        }
+    }
+    <span style="color: #5B6268;"># </span><span style="color: #5B6268;">non-pleiotropic QTL effects for category 1 and category 2</span>
+    nonpleioQTLeff <span style="color: #a9a1e1;">&lt;-</span> list(
+        QTLeffc1 = list(
+            T1 = rnorm(nnonpleioQTLT1[<span style="color: #da8548; font-weight: bold;">1</span>], <span style="color: #da8548; font-weight: bold;">0</span>, <span style="color: #da8548; font-weight: bold;">1</span>),
+            T2 = rnorm(nnonpleioQTLT2[<span style="color: #da8548; font-weight: bold;">1</span>], <span style="color: #da8548; font-weight: bold;">0</span>, <span style="color: #da8548; font-weight: bold;">1</span>)
+        ),
+        QTLeffc2 = list(
+            T1 = rnorm(nnonpleioQTLT1[<span style="color: #da8548; font-weight: bold;">2</span>], <span style="color: #da8548; font-weight: bold;">0</span>, <span style="color: #da8548; font-weight: bold;">1</span>),
+            T2 = rnorm(nnonpleioQTLT2[<span style="color: #da8548; font-weight: bold;">2</span>], <span style="color: #da8548; font-weight: bold;">0</span>, <span style="color: #da8548; font-weight: bold;">1</span>)
+        )
+    )
+}
+
+<span style="color: #5B6268;">##############################################</span>
+<span style="color: #5B6268;"># </span><span style="color: #5B6268;">6. Simulate Breeding Values</span>
+<span style="color: #5B6268;">##############################################</span>
+totalQTL <span style="color: #a9a1e1;">&lt;-</span> unique(c(QTLpos$QTLposc1, QTLpos$QTLposc2))
+totalQTLFile <span style="color: #a9a1e1;">&lt;-</span> paste0(sprintf(<span style="color: #98be65;">"%s/totalQTL.txt"</span>, outPath))
+write.table(totalQTL, totalQTLFile, row.names = F, col.names = F, quote = F)
+
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">select bfile subset based on caucal snplist</span>
+plinkQTL <span style="color: #a9a1e1;">&lt;-</span> paste0(
+    plink19, <span style="color: #98be65;">" --bfile "</span>, selected_ind_out,
+    <span style="color: #98be65;">" --extract "</span>, totalQTLFile,
+    <span style="color: #98be65;">" --make-bed "</span>,
+    <span style="color: #98be65;">"--threads 100 "</span>,
+    <span style="color: #98be65;">" --out "</span>, paste0(selected_ind_out, <span style="color: #98be65;">".QTL"</span>)
+)
+system(plinkQTL)
+
+<span style="color: #5B6268;"># </span><span style="color: #5B6268;">Then 4 columns corresponding to the QTLtotal, effects: T1c1, T1c2, T2c1, T2c2</span>
+<span style="color: #5B6268;"># </span><span style="color: #5B6268;">(a little tedious for non-overlapping category, but it's a general framework for overlapping category)</span>
+QTLeffects = data.frame(matrix(<span style="color: #da8548; font-weight: bold;">0</span>, nrow = length(totalQTL), ncol = <span style="color: #da8548; font-weight: bold;">4</span>))
+rownames(QTLeffects) = totalQTL
+colnames(QTLeffects) = c(<span style="color: #98be65;">"T1c1"</span>, <span style="color: #98be65;">"T1c2"</span>, <span style="color: #98be65;">"T2c1"</span>, <span style="color: #98be65;">"T2c2"</span>)
+
+<span style="color: #5B6268;"># </span><span style="color: #5B6268;">T1c1</span>
+QTLeffects[pleioQTLpos$QTLposc1, <span style="color: #98be65;">"T1c1"</span>] = pleioQTLeff$QTLeffc1[, <span style="color: #da8548; font-weight: bold;">1</span>]
+<span style="color: #5B6268;"># </span><span style="color: #5B6268;">T1c2</span>
+QTLeffects[pleioQTLpos$QTLposc2, <span style="color: #98be65;">"T1c2"</span>] = pleioQTLeff$QTLeffc2[, <span style="color: #da8548; font-weight: bold;">1</span>]
+<span style="color: #5B6268;"># </span><span style="color: #5B6268;">T2c1</span>
+QTLeffects[pleioQTLpos$QTLposc1, <span style="color: #98be65;">"T2c1"</span>] = pleioQTLeff$QTLeffc1[, <span style="color: #da8548; font-weight: bold;">2</span>]
+<span style="color: #5B6268;"># </span><span style="color: #5B6268;">T2c2</span>
+QTLeffects[pleioQTLpos$QTLposc2, <span style="color: #98be65;">"T2c2"</span>] = pleioQTLeff$QTLeffc2[, <span style="color: #da8548; font-weight: bold;">2</span>]
+<span style="color: #51afef;">if</span> (pleio_percent &lt; <span style="color: #da8548; font-weight: bold;">1.0</span>) {
+    <span style="color: #5B6268;"># </span><span style="color: #5B6268;">T1c1</span>
+    QTLeffects[nonpleioQTLpos$QTLposc1$T1, <span style="color: #98be65;">"T1c1"</span>] = nonpleioQTLeff$QTLeffc1$T1
+    <span style="color: #5B6268;"># </span><span style="color: #5B6268;">T1c2</span>
+    QTLeffects[nonpleioQTLpos$QTLposc2$T1, <span style="color: #98be65;">"T1c2"</span>] = nonpleioQTLeff$QTLeffc2$T1
+    <span style="color: #5B6268;"># </span><span style="color: #5B6268;">T2c1</span>
+    QTLeffects[nonpleioQTLpos$QTLposc1$T2, <span style="color: #98be65;">"T2c1"</span>] = nonpleioQTLeff$QTLeffc1$T2
+    <span style="color: #5B6268;"># </span><span style="color: #5B6268;">T2c2</span>
+    QTLeffects[nonpleioQTLpos$QTLposc2$T2, <span style="color: #98be65;">"T2c2"</span>] = nonpleioQTLeff$QTLeffc2$T2
+}
+QTLeffects$SNP = rownames(QTLeffects)
+
+<span style="color: #5B6268;"># </span><span style="color: #5B6268;">Use gcta to calculate the breeding values</span>
+catTraitcombination = c(<span style="color: #98be65;">"T1c1"</span>, <span style="color: #98be65;">"T1c2"</span>, <span style="color: #98be65;">"T2c1"</span>, <span style="color: #98be65;">"T2c2"</span>)
+<span style="color: #51afef;">for</span> (c <span style="color: #51afef;">in</span> catTraitcombination) {
+    print(c)
+    <span style="color: #5B6268;"># </span><span style="color: #5B6268;">generate the eff file for gcta</span>
+    effFile = paste0(sprintf(<span style="color: #98be65;">"%s/effFile_%s.txt"</span>, outPath, c))
+    fwrite(QTLeffects[, c(<span style="color: #98be65;">"SNP"</span>, c)], file = effFile, col.names = <span style="color: #ECBE7B;">FALSE</span>, sep = <span style="color: #98be65;">"\t"</span>)
+}
+
+<span style="color: #5B6268;">### </span><span style="color: #5B6268;">calcualte breeding values (geno*beta) for "T1c1", "T1c2", "T2c1", "T2c2"</span>
+<span style="color: #51afef;">for</span> (c <span style="color: #51afef;">in</span> catTraitcombination){
+    print(c)
+    gctaMlm <span style="color: #a9a1e1;">&lt;-</span> paste0(
+        gcta64, <span style="color: #98be65;">" --bfile "</span>, paste0(selected_ind_out, <span style="color: #98be65;">".QTL"</span>),
+        <span style="color: #98be65;">" --simu-qt "</span>,
+        <span style="color: #98be65;">" --simu-causal-loci "</span>, sprintf(<span style="color: #98be65;">"%s/effFile_%s.txt"</span>, outPath, c),
+        <span style="color: #98be65;">" --simu-hsq "</span>, <span style="color: #da8548; font-weight: bold;">1</span>,
+        <span style="color: #98be65;">" --simu-rep "</span>, repNum,
+        <span style="color: #98be65;">" --thread-num 100"</span>,
+        <span style="color: #98be65;">" --out "</span>, sprintf(<span style="color: #98be65;">"%s/bv4%s.gcta"</span>,outPath, c)
+    )
+    system(gctaMlm)
+}
+
+<span style="color: #5B6268;"># </span><span style="color: #5B6268;">Standardize breeding values</span>
+bvs = data.frame(matrix(<span style="color: #ECBE7B;">NA</span>, nrow = sample_size, ncol = <span style="color: #da8548; font-weight: bold;">4</span>))
+colnames(bvs) = catTraitcombination
+<span style="color: #51afef;">for</span> (c <span style="color: #51afef;">in</span> catTraitcombination) {
+    print(c)
+    <span style="color: #5B6268;"># </span><span style="color: #5B6268;">read the breeding value file</span>
+    bv_df = fread(paste0(sprintf(<span style="color: #98be65;">"%s/bv4%s.gcta"</span>, outPath, c), <span style="color: #98be65;">".phen"</span>))
+    bvs[, c] = bv_df$V3
+}
+bvs$FID = bv_df$V1
+bvs$IID = bv_df$V2
+
+<span style="color: #a9a1e1;">message</span>(sprintf(<span style="color: #98be65;">"cor(bv1,bv2) for category 1: %f"</span>, cor(bvs$T1c1, bvs$T2c1)))
+<span style="color: #a9a1e1;">message</span>(sprintf(<span style="color: #98be65;">"cor(bv1,bv2) for category 2: %f"</span>, cor(bvs$T1c2, bvs$T2c2)))
+
+<span style="color: #5B6268;"># </span><span style="color: #5B6268;">total breeding values for trait 1</span>
+bv1 = bvs$T1c1 + bvs$T1c2
+<span style="color: #5B6268;"># </span><span style="color: #5B6268;">total breeding values for trait 2</span>
+bv2 = bvs$T2c1 + bvs$T2c2
+sdbv <span style="color: #a9a1e1;">&lt;-</span> c(sd(bv1), sd(bv2))
+<span style="color: #5B6268;"># </span><span style="color: #5B6268;">Standardize breeding value</span>
+bv1 <span style="color: #a9a1e1;">&lt;-</span> bv1 / sd(bv1) * sqrt(h21)
+bv2 <span style="color: #a9a1e1;">&lt;-</span> bv2 / sd(bv2) * sqrt(h22)
+<span style="color: #a9a1e1;">message</span>(<span style="color: #98be65;">"After standardization:"</span>)
+<span style="color: #a9a1e1;">message</span>(<span style="color: #98be65;">"varg1 = "</span>, var(bv1))
+<span style="color: #a9a1e1;">message</span>(<span style="color: #98be65;">"varg2 = "</span>, var(bv2))
+<span style="color: #a9a1e1;">message</span>(<span style="color: #98be65;">"cov(bv1,bv2) = "</span>, cov(bv1, bv2))
+<span style="color: #a9a1e1;">message</span>(<span style="color: #98be65;">"cor(bv1,bv2) = "</span>, cor(bv1, bv2))
+
+<span style="color: #5B6268;"># </span><span style="color: #5B6268;">save breeding value</span>
+write.table(bv1, sprintf(<span style="color: #98be65;">"%s/bv1.txt"</span>, outPath), row.names = F, col.names = F, quote = F)
+write.table(bv2, sprintf(<span style="color: #98be65;">"%s/bv2.txt"</span>, outPath), row.names = F, col.names = F, quote = F)
+
+<span style="color: #5B6268;">##############################################</span>
+<span style="color: #5B6268;"># </span><span style="color: #5B6268;">7. Residual correlation</span>
+<span style="color: #5B6268;">##############################################</span>
+res_mean <span style="color: #a9a1e1;">&lt;-</span> c(<span style="color: #da8548; font-weight: bold;">0</span>, <span style="color: #da8548; font-weight: bold;">0</span>) <span style="color: #5B6268;"># </span><span style="color: #5B6268;">mean of residual effect for trait 1 and trait 2</span>
+res_covmat <span style="color: #a9a1e1;">&lt;-</span> matrix(c(<span style="color: #da8548; font-weight: bold;">1</span>, Rescor, Rescor, <span style="color: #da8548; font-weight: bold;">1</span>), nrow = <span style="color: #da8548; font-weight: bold;">2</span>, ncol = <span style="color: #da8548; font-weight: bold;">2</span>, byrow = <span style="color: #ECBE7B;">TRUE</span>) <span style="color: #5B6268;"># </span><span style="color: #5B6268;">residual covariance matrix</span>
+eAll <span style="color: #a9a1e1;">&lt;-</span> mvrnorm(sample_size, res_mean, res_covmat) <span style="color: #5B6268;"># </span><span style="color: #5B6268;">residual effect</span>
+e1 <span style="color: #a9a1e1;">&lt;-</span> eAll[, <span style="color: #da8548; font-weight: bold;">1</span>] <span style="color: #5B6268;"># </span><span style="color: #5B6268;">residual effect for trait 1</span>
+e2 <span style="color: #a9a1e1;">&lt;-</span> eAll[, <span style="color: #da8548; font-weight: bold;">2</span>] <span style="color: #5B6268;"># </span><span style="color: #5B6268;">residual effect for trait 2</span>
+e1 <span style="color: #a9a1e1;">&lt;-</span> e1 / sd(e1) * sqrt(<span style="color: #da8548; font-weight: bold;">1</span> - h21)
+e2 <span style="color: #a9a1e1;">&lt;-</span> e2 / sd(e2) * sqrt(<span style="color: #da8548; font-weight: bold;">1</span> - h22)
+<span style="color: #a9a1e1;">message</span>(<span style="color: #98be65;">"After standardization:"</span>)
+<span style="color: #a9a1e1;">message</span>(<span style="color: #98be65;">"vare1 = "</span>, var(e1))
+<span style="color: #a9a1e1;">message</span>(<span style="color: #98be65;">"vare2 = "</span>, var(e2))
+<span style="color: #a9a1e1;">message</span>(<span style="color: #98be65;">"cov(e1,e2) = "</span>, cov(e1, e2))
+<span style="color: #a9a1e1;">message</span>(<span style="color: #98be65;">"cor(e1,e2) = "</span>, cor(e1, e2))
+
+<span style="color: #5B6268;"># </span><span style="color: #5B6268;">Standardize phenotypes</span>
+y1 <span style="color: #a9a1e1;">&lt;-</span> bv1 + e1
+y2 <span style="color: #a9a1e1;">&lt;-</span> bv2 + e2
+sdy <span style="color: #a9a1e1;">&lt;-</span> c(sd(y1), sd(y2))
+y1 <span style="color: #a9a1e1;">&lt;-</span> (y1 - mean(y1)) / sd(y1)
+y2 <span style="color: #a9a1e1;">&lt;-</span> (y2 - mean(y2)) / sd(y2)
+
+<span style="color: #a9a1e1;">message</span>(<span style="color: #98be65;">"After standardization:"</span>)
+<span style="color: #a9a1e1;">message</span>(<span style="color: #98be65;">"vary1 = "</span>, var(y1))
+<span style="color: #a9a1e1;">message</span>(<span style="color: #98be65;">"vary2 = "</span>, var(y2))
+<span style="color: #a9a1e1;">message</span>(<span style="color: #98be65;">"final varg1 ="</span>, var((bv1 - mean(y1)) / sd(y1)))
+<span style="color: #a9a1e1;">message</span>(<span style="color: #98be65;">"final varg2 ="</span>, var((bv2 - mean(y1)) / sd(y1)))
+
+<span style="color: #5B6268;"># </span><span style="color: #5B6268;">save phenotypes</span>
+write.table(y1, sprintf(<span style="color: #98be65;">"%s/y1.txt"</span>, outPath), row.names = F, col.names = F, quote = F)
+write.table(y2, sprintf(<span style="color: #98be65;">"%s/y2.txt"</span>, outPath), row.names = F, col.names = F, quote = F)
+
+<span style="color: #5B6268;"># </span><span style="color: #5B6268;">save plink phenotypes</span>
+phentrait1File <span style="color: #a9a1e1;">&lt;-</span> paste0(outPath,<span style="color: #98be65;">"Trait1.gcta.phen.plink"</span>)
+fwrite(data.frame(FID = bvs$FID, IID = bvs$IID, y = y1), file = phentrait1File, col.names = <span style="color: #ECBE7B;">FALSE</span>, sep = <span style="color: #98be65;">"\t"</span>)
+
+phentrait2File <span style="color: #a9a1e1;">&lt;-</span> paste0(outPath, <span style="color: #98be65;">"Trait2.gcta.phen.plink"</span>)
+fwrite(data.frame(FID = bvs$FID, IID = bvs$IID, y = y2), file = phentrait2File, col.names = <span style="color: #ECBE7B;">FALSE</span>, sep = <span style="color: #98be65;">"\t"</span>)
+
+
+<span style="color: #5B6268;">##############################################</span>
+<span style="color: #5B6268;"># </span><span style="color: #5B6268;">8. Generate summary data</span>
+<span style="color: #5B6268;">##############################################</span>
+<span style="color: #5B6268;"># </span><span style="color: #5B6268;">Trait 1</span>
+plinkGWAS <span style="color: #a9a1e1;">&lt;-</span> paste0(
+    plink19, <span style="color: #98be65;">" --bfile "</span>, selected_ind_out,
+    <span style="color: #98be65;">" --pheno "</span>, phentrait1File,
+    <span style="color: #98be65;">" --linear "</span>,
+    <span style="color: #98be65;">" --ci 0.95 "</span>,
+    <span style="color: #98be65;">" --out "</span>, phentrait1File, <span style="color: #98be65;">".ci"</span>
+)
+system(plinkGWAS)
+
+<span style="color: #5B6268;"># </span><span style="color: #5B6268;">Trait 2</span>
+plinkGWAS <span style="color: #a9a1e1;">&lt;-</span> paste0(
+    plink19, <span style="color: #98be65;">" --bfile "</span>, selected_ind_out,
+    <span style="color: #98be65;">" --pheno "</span>, phentrait2File,
+    <span style="color: #98be65;">" --linear "</span>,
+    <span style="color: #98be65;">" --ci 0.95 "</span>,
+    <span style="color: #98be65;">" --out "</span>, phentrait2File, <span style="color: #98be65;">".ci"</span>
+)
+system(plinkGWAS)
+
+<span style="color: #5B6268;">##############################################</span>
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">Re-format result into ma format</span>
+
+headerPlink <span style="color: #a9a1e1;">&lt;-</span> c(<span style="color: #98be65;">"SNP"</span>, <span style="color: #98be65;">"A1"</span>, <span style="color: #98be65;">"A2"</span>, <span style="color: #98be65;">"MAF"</span>, <span style="color: #98be65;">"BETA"</span>, <span style="color: #98be65;">"SE"</span>, <span style="color: #98be65;">"P"</span>, <span style="color: #98be65;">"N"</span>)
+headerMa <span style="color: #a9a1e1;">&lt;-</span> c(<span style="color: #98be65;">"SNP"</span>, <span style="color: #98be65;">"A1"</span>, <span style="color: #98be65;">"A2"</span>, <span style="color: #98be65;">"freq"</span>, <span style="color: #98be65;">"b"</span>, <span style="color: #98be65;">"se"</span>, <span style="color: #98be65;">"p"</span>, <span style="color: #98be65;">"N"</span>)
+freqFile <span style="color: #a9a1e1;">&lt;-</span> sprintf(<span style="color: #98be65;">"%s.frq"</span>, selected_ind_out)
+
+bivTraitFile1 <span style="color: #a9a1e1;">&lt;-</span> paste0(phentrait1File, <span style="color: #98be65;">".ci"</span>, <span style="color: #98be65;">".assoc.linear"</span>)
+bivTraitFile2 <span style="color: #a9a1e1;">&lt;-</span> paste0(phentrait2File, <span style="color: #98be65;">".ci"</span>, <span style="color: #98be65;">".assoc.linear"</span>)
+
+bivTrait1 <span style="color: #a9a1e1;">&lt;-</span> fread(bivTraitFile1)
+bivTrait2 <span style="color: #a9a1e1;">&lt;-</span> fread(bivTraitFile2)
+freq <span style="color: #a9a1e1;">&lt;-</span> fread(freqFile)
+
+
+bivTraitAll1 <span style="color: #a9a1e1;">&lt;-</span> merge(bivTrait1, freq, by = c(<span style="color: #98be65;">"SNP"</span>, <span style="color: #98be65;">"A1"</span>, <span style="color: #98be65;">"CHR"</span>))
+bivTraitAll2 <span style="color: #a9a1e1;">&lt;-</span> merge(bivTrait2, freq, by = c(<span style="color: #98be65;">"SNP"</span>, <span style="color: #98be65;">"A1"</span>, <span style="color: #98be65;">"CHR"</span>))
+
+bivTraitAll1$N <span style="color: #a9a1e1;">&lt;-</span> sample_size
+bivTraitAll2$N <span style="color: #a9a1e1;">&lt;-</span> sample_size
+
+bivTraitMa1 <span style="color: #a9a1e1;">&lt;-</span> bivTraitAll1[, ..headerPlink]
+bivTraitMa2 <span style="color: #a9a1e1;">&lt;-</span> bivTraitAll2[, ..headerPlink]
+
+names(bivTraitMa1) <span style="color: #a9a1e1;">&lt;-</span> headerMa
+names(bivTraitMa2) <span style="color: #a9a1e1;">&lt;-</span> headerMa
+
+fwrite(bivTraitMa1,
+    file = paste0(bivTraitFile1, <span style="color: #98be65;">".ma"</span>),
+    col.names = <span style="color: #ECBE7B;">TRUE</span>, sep = <span style="color: #98be65;">"\t"</span>
+)
+
+fwrite(bivTraitMa2,
+    file = paste0(bivTraitFile2, <span style="color: #98be65;">".ma"</span>),
+    col.names = <span style="color: #ECBE7B;">TRUE</span>, sep = <span style="color: #98be65;">"\t"</span>
+)
+
+system(paste0(<span style="color: #98be65;">"rm "</span>,selected_ind_out,<span style="color: #98be65;">"*"</span>) )
+
+print(<span style="color: #98be65;">"Done!"</span>)
+<span style="color: #5B6268;">#####################################################</span>
+<span style="color: #5B6268;">#####################################################</span>
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgcbc3f86" class="outline-4">
+<h4 id="orgcbc3f86"><span class="section-number-4">3.4.2.</span> bash</h4>
+<div class="outline-text-4" id="text-3-4-2">
+<div class="org-src-container">
+<pre class="src src-bash"><span style="color: #5B6268;">###########################</span>
+<span style="color: #dcaeea;">homePath</span>=<span style="color: #98be65;">"/home/uqsliu28/"</span>
+<span style="color: #dcaeea;">qsubshcom</span>=<span style="color: #98be65;">"</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{homePath}</span><span style="color: #98be65;">/softwares/qsubshcom/qsubshcom"</span>
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">scriptPath="${homePath}/projects/annotation/sim/prediction/eqtlComparison/scripts"</span>
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">for bunya 3</span>
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">scriptPath="/home/uqsliu28/projects/sbayesRC/scripts"</span>
+<span style="color: #5B6268;">## </span><span style="color: #5B6268;">for delta2</span>
+<span style="color: #dcaeea;">scriptPath</span>=<span style="color: #98be65;">"/home/uqsliu28/90days/projects/sbayesRC/ldAndMa/sim/gcta/annot/"</span>
+<span style="color: #dcaeea;">logPath</span>=<span style="color: #98be65;">"</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{scriptPath}</span><span style="color: #98be65;">/log"</span>
+<span style="color: #ECBE7B;">mkdir</span> -p $<span style="color: #51afef;">{</span><span style="color: #dcaeea;">logPath</span><span style="color: #51afef;">}</span>
+
+<span style="color: #dcaeea;">scriptName</span>=<span style="color: #98be65;">"bivAnno.R"</span>
+<span style="color: #ECBE7B;">chmod</span> <span style="color: #da8548; font-weight: bold;">751</span> $<span style="color: #51afef;">{</span><span style="color: #dcaeea;">scriptPath</span><span style="color: #51afef;">}</span>/$<span style="color: #51afef;">{</span><span style="color: #dcaeea;">scriptName</span><span style="color: #51afef;">}</span>
+
+<span style="color: #51afef;">for</span> samSize<span style="color: #51afef;"> in</span> <span style="color: #da8548; font-weight: bold;">10000</span> <span style="color: #da8548; font-weight: bold;">100000</span>
+<span style="color: #51afef;">do</span>
+    <span style="color: #51afef;">for</span> annoSize<span style="color: #51afef;"> in</span> <span style="color: #da8548; font-weight: bold;">0.01</span> <span style="color: #da8548; font-weight: bold;">0.1</span>
+    <span style="color: #51afef;">do</span>
+        <span style="color: #51afef;">for</span> plePer<span style="color: #51afef;"> in</span>  <span style="color: #da8548; font-weight: bold;">0.5</span> <span style="color: #da8548; font-weight: bold;">1</span>
+        <span style="color: #51afef;">do</span>
+            <span style="color: #dcaeea;">qsubName</span>=<span style="color: #98be65;">"ann-</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{samSize}</span><span style="color: #98be65;">-</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{annoSize}</span><span style="color: #98be65;">-</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{plePer}</span><span style="color: #98be65;">-</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{scriptName}</span><span style="color: #98be65;">"</span>
+            <span style="color: #dcaeea;">printLog</span>=<span style="color: #98be65;">"</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{logPath}</span><span style="color: #98be65;">/</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{qsubName}</span><span style="color: #98be65;">-</span><span style="color: #51afef; font-weight: bold;">$(</span><span style="color: #51afef; font-weight: bold;">date</span><span style="color: #51afef; font-weight: bold;"> +"%Y-%m-%d-%I-%M-%p")</span><span style="color: #98be65;">.log"</span>
+            <span style="color: #dcaeea;">tmp_cmd</span>=<span style="color: #98be65;">"Rscript </span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{scriptPath}</span><span style="color: #98be65;">/</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{scriptName}</span><span style="color: #98be65;"> --sample_size </span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{samSize}</span>
+<span style="color: #98be65;">                      --annotation_size </span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{annoSize}</span><span style="color: #98be65;"> \</span>
+<span style="color: #98be65;">                      --pleio_percent </span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{plePer}</span><span style="color: #98be65;"> &gt; </span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">{printLog}</span><span style="color: #98be65;">"</span>
+            <span style="color: #5B6268;">## </span><span style="color: #5B6268;">$qsubshcom "$tmp_cmd" 1 50G  ${qsubName}  10:00:00 "-queue=normal"  ## delta2</span>
+            $<span style="color: #dcaeea;">qsubshcom</span> <span style="color: #98be65;">"</span><span style="color: #a9a1e1;">$</span><span style="color: #dcaeea;">tmp_cmd</span><span style="color: #98be65;">"</span> <span style="color: #da8548; font-weight: bold;">1</span> 100G  $<span style="color: #51afef;">{</span><span style="color: #dcaeea;">qsubName</span><span style="color: #51afef;">}</span>  100:00:00 <span style="color: #98be65;">"-queue=normal"</span>  <span style="color: #5B6268;">## </span><span style="color: #5B6268;">bunya3</span>
+        <span style="color: #51afef;">done</span>
+    <span style="color: #51afef;">done</span>
+<span style="color: #51afef;">done</span>
+
+</pre>
+</div>
+</div>
+</div>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="date">Date: 2021-03-01</p>
 <p class="author">Author: Liu, Shouye</p>
-<p class="date">Created: 2023-05-03 Wed 10:04</p>
+<p class="date">Created: 2023-05-19 Fri 14:58</p>
 </div>
 </body>
 </html>
