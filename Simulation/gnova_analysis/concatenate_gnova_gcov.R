@@ -17,7 +17,7 @@ for (folder in sub_folders) {
     # Read the file and extract rho values
     data <- read.table(file_path, header = TRUE)
     category <- data$annot_name
-    rho_values <- data$rho
+    rho_values <- data$rho_corrected
     folder_name <- basename(folder) # Extract only the folder name
     results <- rbind(results, data.frame(SubFolder = folder_name, Rho = rho_values, Category = category))
   }
