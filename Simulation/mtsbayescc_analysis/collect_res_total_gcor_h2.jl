@@ -11,9 +11,8 @@ mkpath(save_path)
 # aiao_folder_path = "/common/zhao/tianjing/simu_ch1_res/mt_s_bayesc_c_aiao/" #MT-S-BayesC-C (AIAO)
 # mt_s_bayesc_folder_path = "/common/zhao/tianjing/simu_ch1_res/mt_s_bayesc/" #MT-S-BayesC (no annot)
 
-
-nind_col     = []
 #annosize_col = []
+nind_col     = []
 plepct_col   = []
 seed_col     = []
 
@@ -21,9 +20,9 @@ gcor_total_simu_col = []
 gcor_total_est_col = []
 gcor_ldsc_col = []
 
-# gcor_rrblup_col = []
-# gcor_aiao_col = []
-# gcor_mt_s_bayesc_col=[]
+gcov_total_simu_col = []
+gcov_total_est_col = []
+gcov_ldsc_col = []
 
 h21_total_simu_col = []
 h21_total_est_col = []
@@ -32,6 +31,10 @@ h21_ldsc_col = []
 h22_total_simu_col = []
 h22_total_est_col = []
 h22_ldsc_col = []
+
+# gcor_rrblup_col = []
+# gcor_aiao_col = []
+# gcor_mt_s_bayesc_col=[]
 
 ldsc_df = CSV.read(data_folder_path * "summary_ldsc_results.csv", DataFrame)
 
@@ -56,28 +59,32 @@ for (h21, h22) in h2_all
                         @warn "$bv_var_file_path not found"
                     end
                     gcor_simu = bv_var[1, 2] / sqrt(bv_var[1, 1] * bv_var[2, 2])
+                    gcov_simu = bv_var[1, 2]
                     h21_simu = bv_var[1, 1]
                     h22_simu = bv_var[2, 2]
 
                     # estimated genetic correlation from mtsbayescc
-                    gcor_res_path = res_folder_path * folder_name*"/"*"estGcor_total.txt"
-                    h2_res_path = res_folder_path * folder_name * "/" * "estGtotal.txt"
-                    if isfile(gcor_res_path)
-                        gcor_est = readdlm(gcor_res_path)[1]
-                        h21_est = readdlm(h2_res_path, ',')[1,1]
-                        h22_est = readdlm(h2_res_path, ',')[2,2]
+                    Gtotal_res_path = res_folder_path * folder_name * "/" * "estGtotal.txt"
+                    if isfile(Gtotal_res_path)
+                        Gtotal_est = readdlm(Gtotal_res_path, ',')
+                        h21_est = Gtotal_est[1,1]
+                        h22_est = Gtotal_est[2,2]
+                        gcov_est = Gtotal_est[1,2]
+                        gcor_est = gcov_est / sqrt(h21_est * h22_est)
                     else
                         @warn "Estimate File not found: $folder_name"
-                        gcor_est = 999
                         h21_est = 999
                         h22_est = 999
+                        gcov_est = 999
+                        gcor_est = 999
                     end
 
                     #ldsc
-	  	    ldsc_df_i = ldsc_df[ldsc_df[!,:Subfolder] .== folder_name,:]
-		    ldsc_gcor = ldsc_df_i[1,:genetic_corr]
-		    ldsc_h21 = ldsc_df_i[1,:h2_trait1]
-		    ldsc_h22 = ldsc_df_i[1,:h2_trait2]
+                    ldsc_df_i = ldsc_df[ldsc_df[!,:Subfolder] .== folder_name,:]
+                    ldsc_gcov = ldsc_df_i[1,:genetic_cov]
+                    ldsc_gcor = ldsc_df_i[1,:genetic_corr]
+                    ldsc_h21 = ldsc_df_i[1,:h2_trait1]
+                    ldsc_h22 = ldsc_df_i[1,:h2_trait2]
 
                    
                     # #estimated genetic correlation from mt-s-rrblup
@@ -93,22 +100,25 @@ for (h21, h22) in h2_all
                     # gcor_mt_s_bayesc = readdlm(res_path4)[1]
 
                     
-                    append!(nind_col,samSize)
                     #append!(annosize_col,annoSize)
+                    append!(nind_col,samSize)
                     append!(plepct_col,plePer)
                     append!(seed_col,seed)
 
                     append!(gcor_total_simu_col, gcor_simu)
+                    append!(gcov_total_simu_col, gcov_simu)
                     append!(h21_total_simu_col, h21_simu)
                     append!(h22_total_simu_col, h22_simu)
                     
                     append!(gcor_total_est_col,  gcor_est)
+                    append!(gcov_total_est_col,  gcov_est)
                     append!(h21_total_est_col, h21_est)
                     append!(h22_total_est_col, h22_est)
 
-		    append!(gcor_ldsc_col, ldsc_gcor)
-		    append!(h21_ldsc_col, ldsc_h21)
-		    append!(h22_ldsc_col, ldsc_h22)
+                    append!(gcor_ldsc_col, ldsc_gcor)
+                    append!(gcov_ldsc_col, ldsc_gcov)
+                    append!(h21_ldsc_col, ldsc_h21)
+                    append!(h22_ldsc_col, ldsc_h22)
 
                     # append!(gcor_rrblup_col, gcor_rrblup)
                     # append!(gcor_aiao_col, gcor_aiao)
@@ -118,9 +128,9 @@ for (h21, h22) in h2_all
         #end
     end
     df=DataFrame(nind=nind_col, plepct=plepct_col, seed=seed_col,
-             gcor_total_simu=gcor_total_simu_col, h21_total_simu=h21_total_simu_col, h22_total_simu=h22_total_simu_col,
-             gcor_total_est=gcor_total_est_col, h21_total_est=h21_total_est_col, h22_total_est=h22_total_est_col,
-	     gcor_ldsc=gcor_ldsc_col, h21_ldsc = h21_ldsc_col, h22_ldsc = h22_ldsc_col)
+             gcor_total_simu=gcor_total_simu_col, h21_total_simu=h21_total_simu_col, h22_total_simu=h22_total_simu_col, gcov_total_simu = gcov_total_simu_col,
+             gcor_total_est=gcor_total_est_col, h21_total_est=h21_total_est_col, h22_total_est=h22_total_est_col, gcov_total_est = gcov_total_est_col,
+	         gcor_ldsc=gcor_ldsc_col, h21_ldsc = h21_ldsc_col, h22_ldsc = h22_ldsc_col, gcov_ldsc = gcov_ldsc_col)
              # annosize=annosize_col, 
              # , gcor_rrblup=gcor_rrblup_col, gcor_aiao=gcor_aiao_col,
              # gcor_mtsbayesc=gcor_mt_s_bayesc_col)
