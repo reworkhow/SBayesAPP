@@ -7,7 +7,7 @@ root_dir <- "./"
 log_files <- list.files(root_dir, pattern = "ldsc_res.log", recursive = TRUE, full.names = TRUE)
 
 # Initialize a data frame to store results
-results <- data.frame(Subfolder = character(), h2_trait1 = numeric(), h2_trait2 = numeric(), genetic_corr = numeric(), stringsAsFactors = FALSE)
+results <- data.frame(Subfolder = character(), h2_trait1 = numeric(), h2_trait2 = numeric(), genetic_corr = numeric(), genetic_cov = numeric(), stringsAsFactors = FALSE)
 
 # Loop through each log file
 for (file in log_files) {
@@ -28,9 +28,13 @@ for (file in log_files) {
     genetic_corr_line <- content[line_index_corr]
     genetic_corr <- as.numeric(sub(".*Genetic Correlation: ([0-9.-]+).*", "\\1", genetic_corr_line))
 
+    line_index_gcov <- grep("Total Observed scale gencov:", content)
+    genetic_cov_line <- content[line_index_gcov]
+    genetic_cov <- as.numeric(sub(".*Total Observed scale gencov: ([0-9.-]+).*", "\\1", genetic_cov_line))
+
     # Append results
     results <- results %>%
-        add_row(Subfolder = dirname(file), h2_trait1 = h2_trait1, h2_trait2 = h2_trait2, genetic_corr = genetic_corr)
+        add_row(Subfolder = dirname(file), h2_trait1 = h2_trait1, h2_trait2 = h2_trait2, genetic_corr = genetic_corr, genetic_cov = genetic_cov)
 }
 
 results$Subfolder <- sub("^.//", "", results$Subfolder) # Remove leading './'
