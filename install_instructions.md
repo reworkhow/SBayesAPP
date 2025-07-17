@@ -57,13 +57,25 @@ If it returns something like Open MPI or MPICH, then MPI is already installed. O
 
 ### Set MPI Preferences
 1. Open Julia and run:
-```julia
-using Pkg
-Pkg.add("MPIPreferences")  # If not installed already
-using MPIPreferences
-MPIPreferences.use_system_binary()
-```
-> The message "You will need to restart Julia for the changes to take effect" means that the system MPI configuration is correctly applied, but you must restart Julia to finalize the changes.
+   ```julia
+   using Pkg
+   Pkg.add("MPIPreferences")  # If not installed already
+   using MPIPreferences
+   MPIPreferences.use_system_binary()
+   ```
+   > The message "You will need to restart Julia for the changes to take effect" means that the system MPI configuration is correctly applied, but you must restart Julia to finalize the changes.
+2. Close Julia and start a new session. Rebuild MPI in Julia to apply the changes:
+   ```julia
+   using Pkg
+   Pkg.build("MPI")
+   ```
+3. Check if MPI is working using:
+   ```
+   using MPI
+   MPI.Init()
+   println("MPI initialized with $(MPI.Comm_size(MPI.COMM_WORLD)) processes")
+   MPI.Finalize()
+   ```
 
 ---
 
