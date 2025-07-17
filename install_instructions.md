@@ -23,7 +23,7 @@ SBayesAPP is currently implemented using **MPI-compatible Julia** for distribute
 1. **Launch Julia**:
    ```bash
    julia
-````
+```
 2. **Enter package manager** (press `]` key), then run:
 
    ```julia
