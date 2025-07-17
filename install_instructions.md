@@ -10,10 +10,9 @@ SBayesAPP is currently implemented in **Julia** and designed to run efficiently 
 
 | Tool          | Version      | Notes                                     |
 |---------------|--------------|-------------------------------------------|
-| **Julia**     | 1.8.x        | Tested with 1.8.5                         |
-| **MPI**       | OpenMPI or MPICH | Used for distributed parallelism        |
-| **Python**    | ≥3.8         | (Optional) for preprocessing (e.g., munge scripts) |
-| **R**         | ≥4.1         | (Optional) for post-analysis visualization |
+| **Julia**     | 1.11.x        | Tested with 1.11.4                       |
+| **MPI**       | OpenMPI or MPICH | Used for distributed parallelism      |
+| **R**         | ≥4.1         | (Optional) for post-analysis visualization|
 
 > 🔧 You must have an **MPI-compatible Julia setup**, e.g., with `MPICH` or `OpenMPI` loaded on your HPC.
 
