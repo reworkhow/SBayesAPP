@@ -5,9 +5,9 @@ SBayesAPP (Summary-data-based Bayesian method leveraging biological Annotations 
 This method estimates:
 - Annotation-stratified genetic covariance matrix
 - Annotation-stratified SNP effect covariance matrix
-- Polygenic proportions 
+- Annotation-stratified Polygenic proportions 
 
-SBayesAPP enables researchers to identify whether enrichment arises from many shared variants with weak effects or few variants with strong pleiotropic effects.
+SBayesAPP enables researchers to identify whether coheritability enrichment arises from many shared variants with weak effects or few variants with strong pleiotropic effects.
 
 ---
 
