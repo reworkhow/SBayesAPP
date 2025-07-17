@@ -1,4 +1,4 @@
-# 🛠️ Installation Instructions for SBayesAPP
+# 🛠️ Julia Installation Instructions for SBayesAPP
 
 SBayesAPP is currently implemented in **Julia** and designed to run efficiently on high-performance computing (HPC) environments using **MPI** (Message Passing Interface). A future version with **OpenMP support** will be released to simplify setup and improve accessibility for single-node or multi-threaded users.
 
@@ -84,33 +84,7 @@ If it returns something like Open MPI or MPICH, then MPI is already installed. O
 
 ---
 
-## 🚀 Running the MPI Version
-
-Make sure you are on an HPC system with `mpirun` or `srun` available.
-
-Example run command:
-
-```bash
-mpirun -np 20 julia --project sbayesapp_mpi.jl \
-    --sumstats1 trait1.txt \
-    --sumstats2 trait2.txt \
-    --annot annotation_matrix.txt \
-    --ld_dir path_to_ld_blocks/ \
-    --out results/
-```
-
-You may also submit this using `sbatch` on SLURM-based systems.
-
----
-
 ## 📦 Optional: Python & R Environment
-
-**Python** (for munge\_sumstats):
-
-```bash
-pip install pandas numpy scipy
-```
-
 **R** (for visualization):
 
 ```r
@@ -136,12 +110,5 @@ Stay tuned in the [GitHub Issues](https://github.com/reworkhow/S-MT-Bayes/issues
 If you encounter issues during installation or setup:
 
 * Check open and closed [Issues](https://github.com/reworkhow/S-MT-Bayes/issues)
-* Or contact the authors listed in the [README](./README.md)
 
-```
-
----
-
-Let me know if you're using a specific cluster (e.g., SLURM, PBS) and I can tailor the MPI `sbatch` submission example. I can also help prepare a Julia `Project.toml` for package reproducibility.
-```
 
