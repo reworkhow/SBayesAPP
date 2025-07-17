@@ -11,15 +11,6 @@ SBayesAPP enables researchers to identify whether coheritability enrichment aris
 
 ---
 
-## 📖 Overview
-
-- 🔍 Distinguishes between pleiotropy, shared polygenicity, and LD-driven genetic correlation
-- 📊 Supports genome-wide and annotation-stratified inference
-- 🧬 Integrates functional annotations (e.g., single-cell expression data)
-- 🧪 Benchmarking via simulation and real data (e.g., T2D and fasting glucose)
-
----
-
 ## 🛠 Installation
 
 SBayesAPP is written in Julia and uses some Python and R scripts for preprocessing and visualization.
