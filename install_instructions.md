@@ -23,4 +23,95 @@ SBayesAPP is currently implemented using **MPI-compatible Julia** for distribute
 1. **Launch Julia**:
    ```bash
    julia
+````
+2. **Enter package manager** (press `]` key), then run:
+
+   ```julia
+   add CSV
+   add DataFrames
+   add DelimitedFiles
+   add Distributions
+   add LinearAlgebra
+   add ProgressMeter
+   add Random
+   add Statistics
+   add Dates
+   add JLD2
+   ```
+
+3. If your are using MPI implementation, also add:
+
+   ```julia
+   add MPI
+   ```
+
+   You may need to set the environment variable before building:
+
+   ```bash
+   export JULIA_MPI_BINARY=system
+   julia -e 'using Pkg; Pkg.build("MPI")'
+   ```
+
+---
+
+## 🚀 Running the MPI Version
+
+Make sure you are on an HPC system with `mpirun` or `srun` available.
+
+Example run command:
+
+```bash
+mpirun -np 20 julia --project sbayesapp_mpi.jl \
+    --sumstats1 trait1.txt \
+    --sumstats2 trait2.txt \
+    --annot annotation_matrix.txt \
+    --ld_dir path_to_ld_blocks/ \
+    --out results/
+```
+
+You may also submit this using `sbatch` on SLURM-based systems.
+
+---
+
+## 📦 Optional: Python & R Environment
+
+**Python** (for munge\_sumstats):
+
+```bash
+pip install pandas numpy scipy
+```
+
+**R** (for visualization):
+
+```r
+install.packages(c("ggplot2", "reshape2", "dplyr", "pheatmap"))
+```
+
+---
+
+## 🔄 Future Update: OpenMP Version
+
+We are actively developing an **OpenMP-compatible** version of SBayesAPP. This upcoming release will:
+
+* Eliminate the need for MPI setup
+* Support multi-threading within a single machine
+* Be more accessible to users without HPC environments
+
+Stay tuned in the [GitHub Issues](https://github.com/reworkhow/S-MT-Bayes/issues) or watch this repository for updates.
+
+---
+
+## 💬 Help
+
+If you encounter issues during installation or setup:
+
+* Check open and closed [Issues](https://github.com/reworkhow/S-MT-Bayes/issues)
+* Or contact the authors listed in the [README](./README.md)
+
+```
+
+---
+
+Let me know if you're using a specific cluster (e.g., SLURM, PBS) and I can tailor the MPI `sbatch` submission example. I can also help prepare a Julia `Project.toml` for package reproducibility.
+```
 
