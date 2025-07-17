@@ -1,4 +1,4 @@
-# 🛠️ Installation Instructions for SBayesAPP
+# 🛠️ Julia Installation Instructions for SBayesAPP
 
 SBayesAPP is currently implemented in **Julia** and designed to run efficiently on high-performance computing (HPC) environments using **MPI** (Message Passing Interface). A future version with **OpenMP support** will be released to simplify setup and improve accessibility for single-node or multi-threaded users.
 
