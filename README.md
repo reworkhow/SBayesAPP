@@ -16,8 +16,7 @@ SBayesAPP enables researchers to identify whether coheritability enrichment aris
 SBayesAPP is written in Julia and uses some R scripts for preprocessing and visualization.
 
 ### Dependencies
-- Julia 1.8.x
-- Python ≥3.8
+- Julia 1.11.x
 - R ≥4.1
 - Required packages are listed in [`install_instructions.md`](./install_instructions.md)
 
@@ -27,8 +26,8 @@ SBayesAPP is written in Julia and uses some R scripts for preprocessing and visu
 
 ```text
 SBayesAPP/
-├── STSBayesC_code/             # Main Julia code for SBayesAPP
-├── Simulation/                 # Scripts and data for simulation studies
+├── SBayesAPP_code/             # Main Julia code for SBayesAPP
+├── Simulation/                 # Scripts for simulation studies
 ├── example_data/              # Example input files
 ├── results/                   # Example output files
 ├── scripts/                   # Pipeline and preprocessing scripts
