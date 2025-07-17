@@ -104,13 +104,6 @@ You may also submit this using `sbatch` on SLURM-based systems.
 ---
 
 ## 📦 Optional: Python & R Environment
-
-**Python** (for munge\_sumstats):
-
-```bash
-pip install pandas numpy scipy
-```
-
 **R** (for visualization):
 
 ```r
