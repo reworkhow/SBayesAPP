@@ -20,12 +20,12 @@ SBayesAPP is currently implemented using **MPI-compatible Julia** for distribute
 
 ## 📦 Julia Package Setup
 
-1. **Launch Julia**:
+1. Launch Julia:
    ```bash
    julia
    ```
 
-2. **Enter package manager** (press `]` key), then run:
+2. Enter package manager (press `]` key), then run:
 
    ```julia
    add CSV
@@ -63,6 +63,7 @@ Pkg.add("MPIPreferences")  # If not installed already
 using MPIPreferences
 MPIPreferences.use_system_binary()
 ```
+> The message "You will need to restart Julia for the changes to take effect" means that the system MPI configuration is correctly applied, but you must restart Julia to finalize the changes.
 
 ---
 
