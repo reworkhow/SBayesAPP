@@ -14,7 +14,17 @@ SBayesAPP is currently implemented in **Julia** and designed to run efficiently 
 | **MPI**       | OpenMPI or MPICH | Used for distributed parallelism      |
 | **R**         | ≥4.1         | (Optional) for post-analysis visualization|
 
-> 🔧 You must have an **MPI-compatible Julia setup**, e.g., with `MPICH` or `OpenMPI` loaded on your HPC.
+SBayesAPP is currently implemented using **MPI-compatible Julia** for distributed parallel computing on HPC systems.
+> 🔧 **Note**: You must have an **MPI-compatible Julia setup** to run the full MPI version of SBayesAPP.
+> However, for ease of testing and smaller-scale use, we provide a non-MPI equivalent of the core code in the `example_data/` folder. This code is functionally identical but does **not** require MPI and can be run directly in a single Julia session. This allows users to explore and validate the method locally before deploying to HPC environments.
+
+---
+
+Let me know if you'd like a minimal command-line example for the non-MPI version too.
+
+
+
+> 🔧 You must have an **MPI-compatible Julia setup** to run the MPI-version code. However, code provided in the example_data folder is exactly as the MPI-version code but without need to use MPI. 
 
 ---
 
