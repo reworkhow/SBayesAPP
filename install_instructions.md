@@ -17,10 +17,10 @@ SBayesAPP is currently implemented in **Julia** and designed to run efficiently 
 SBayesAPP is currently implemented using **MPI-compatible Julia** for distributed parallel computing on HPC systems.
 > 🔧 **Note**: You must have an **MPI-compatible Julia setup** to run the full MPI version of SBayesAPP.
 > However, for ease of testing and smaller-scale use, we provide a non-MPI equivalent of the core code in the `example_data/` folder. This code is functionally identical but does **not** require MPI and can be run directly in a single Julia session. This allows users to explore and validate the method locally before deploying to HPC environments.
-> ```bash
-> echo 'export UCX_WARN_UNUSED_ENV_VARS=n' >> ~/.bashrc
-> source ~/.bashrc
-> ```
+   ```bash
+   echo 'export UCX_WARN_UNUSED_ENV_VARS=n' >> ~/.bashrc
+   source ~/.bashrc
+   ```
 ## 📦 Julia Package Setup
 
 1. Launch Julia:
