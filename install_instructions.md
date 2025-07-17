@@ -76,7 +76,11 @@ If it returns something like Open MPI or MPICH, then MPI is already installed. O
    println("MPI initialized with $(MPI.Comm_size(MPI.COMM_WORLD)) processes")
    MPI.Finalize()
    ```
-   > You may see warning messages from UCX (Unified Communication X), which are not critical, but they can be ignored or suppressed. You can suppress them by adding below to your ``~/.bashrc``.
+   > You may see warning messages from UCX (Unified Communication X), which are not critical, but they can be ignored or suppressed. You can suppress them by adding below to your `~/.bashrc`.
+   > ```bash
+   > echo 'export UCX_WARN_UNUSED_ENV_VARS=n' >> ~/.bashrc
+   > source ~/.bashrc
+   > ```
 
 ---
 
