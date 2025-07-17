@@ -23,6 +23,7 @@ SBayesAPP is currently implemented using **MPI-compatible Julia** for distribute
 1. **Launch Julia**:
    ```bash
    julia
+   ```
 
 2. **Enter package manager** (press `]` key), then run:
 
@@ -48,13 +49,20 @@ SBayesAPP is currently implemented using **MPI-compatible Julia** for distribute
 
 ## 📦 Configure MPI on server 
 Since you’re on a server, it’s likely that an MPI implementation like OpenMPI or MPICH is already installed. You can check this by running:
+```bash
+mpirun --version
+```
 
-   You may need to set the environment variable before building:
+If it returns something like Open MPI or MPICH, then MPI is already installed. Otherwise, check with your system admin or install MPI (if you have permissions).
 
-   ```bash
-   export JULIA_MPI_BINARY=system
-   julia -e 'using Pkg; Pkg.build("MPI")'
-   ```
+### Set MPI Preferences
+1. Open Julia and run:
+```julia
+using Pkg
+Pkg.add("MPIPreferences")  # If not installed already
+using MPIPreferences
+MPIPreferences.use_system_binary()
+```
 
 ---
 
