@@ -3,9 +3,9 @@
 SBayesAPP (Summary-data-based Bayesian method leveraging biological Annotations to quantify Pleiotropy and Polygenicity) is a Bayesian framework for dissecting the shared genetic architecture between complex traits using GWAS summary statistics and functional annotations.
 
 This method estimates:
-- Annotation-stratified coheritability enrichment
-- SNP effect correlation (pleiotropy)
-- Shared polygenicity (proportion of causal variants affecting both traits)
+- Annotation-stratified genetic covariance matrix
+- Annotation-stratified SNP effect covariance matrix
+- Polygenic proportions 
 
 SBayesAPP enables researchers to identify whether enrichment arises from many shared variants with weak effects or few variants with strong pleiotropic effects.
 
