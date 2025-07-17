@@ -44,6 +44,10 @@ SBayesAPP is currently implemented using **MPI-compatible Julia** for distribute
    ```julia
    add MPI
    ```
+---
+
+## 📦 Configure MPI on server 
+Since you’re on a server, it’s likely that an MPI implementation like OpenMPI or MPICH is already installed. You can check this by running:
 
    You may need to set the environment variable before building:
 
