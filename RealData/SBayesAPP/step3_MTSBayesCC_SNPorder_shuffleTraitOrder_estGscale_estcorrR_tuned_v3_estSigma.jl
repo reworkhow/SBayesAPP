@@ -31,13 +31,23 @@ ST_path = ARGS[11]
 thin = ARGS[12] # 200
 thin = parse(Int64, thin)
 
-fixed_hyperparameters = length(ARGS) ≥ 13 ? ARGS[13] : "false"
+N1 = ARGS[13] # average N for Trait 1
+N1 = parse(Int64, N1)
+
+N2 = ARGS[14] # average N for Trait 2
+N2 = parse(Int64, N2)
+
+estimate_pi = ARGS[15] # estimate pi
+# convert estimate_pi to boolean
+estimate_pi = (estimate_pi == "true") ? true : false
+
+fixed_hyperparameters = length(ARGS) ≥ 16 ? ARGS[16] : "false"
 fixed_hyperparameters = (fixed_hyperparameters == "true") ? true : false
 
-is_continue = length(ARGS) ≥ 14 ? ARGS[14] : "true"
+is_continue = length(ARGS) ≥ 17 ? ARGS[17] : "true"
 is_continue = (is_continue == "true") ? true : false
 
-chr = length(ARGS) ≥ 15 ? ARGS[15] : ""
+chr = length(ARGS) ≥ 18 ? ARGS[18] : ""
 
 if !isempty(chr)
     Split_chr = true
@@ -53,8 +63,11 @@ end
 mkpath(analysis_path)
 cd(analysis_path)
 
+# print out N1 and N2
+println("average N1: $N1")
+println("average N2: $N2")
 
-function sample_variance_sumstats(ycorr_array, nobs, df, scale, nind_array)
+function sample_variance_sumstats(ycorr_array, nobs, df, scale)
     ntraits = length(ycorr_array)
     SSE = zeros(ntraits, ntraits)
     for traiti = 1:ntraits
@@ -62,7 +75,7 @@ function sample_variance_sumstats(ycorr_array, nobs, df, scale, nind_array)
         for traitj = traiti:ntraits
             ycorrj = ycorr_array[traitj]
             # multiple the nInd for each trait
-            SSE[traiti, traitj] =  dot(ycorri, ycorrj) * sqrt(nind_array[traiti] * nind_array[traitj]) 
+            SSE[traiti, traitj] =  dot(ycorri, ycorrj) 
             SSE[traitj, traiti] = SSE[traiti, traitj]
         end
     end
@@ -181,15 +194,16 @@ end
 # Input data 
 nMarker = 1154522
 nBlocks = 591
+# Move this part to function my_rank == 0 
 annot = CSV.read(data_path * annot_file, DataFrame)
 annotationName = names(annot)[2:end]; # ordered by continuous category then categorical category
 nLoci_annot = sum.(eachcol(annot[!, 2:end]))
 nCon = 0 # number of continuous annotation
 nCat = length(annotationName) # number of categorical annotation
 annotationType = repeat(["category"], nCat) # ordered by "continue" then "category"
+estimate_pi = estimate_pi
 estimate_vare = true
 estimate_vara = true
-estimate_pi = true
 estimate_Gscale = true
 estGscale_iter = 2000
 
@@ -211,24 +225,23 @@ else
     end
 end
 ############################################################################################################
-# Check if Trait1 folder exists in one of two places
-trait1_dir = isdir(ST_path * "../Trait1/") ? ST_path * "../Trait1/" :
-             isdir(ST_path * "Trait1/")    ? ST_path * "Trait1/" :
-             error("Trait1 folder not found in either location.")
+if estimate_pi
+    Pi11 = 0.00001
+    # Read and round values for Trait1 and Trait2
+    Pi10 = 1.0 - round(readdlm(ST_path * "Trait1/mean_pi.txt")[1,1], digits=4)
+    Pi01 = 1.0 - round(readdlm(ST_path * "Trait2/mean_pi.txt")[1,1], digits=4)
 
-
-
-Pi11 = 0.00001
-# Read and round values for Trait1 and Trait2
-Pi10 = 1.0 - round(readdlm(trait1_dir * "mean_pi.txt")[1,1], digits=4)
-Pi01 = 1.0 - round(readdlm(ST_path * "Trait2/mean_pi.txt")[1,1], digits=4)
-
-# Calculate Pi00
-Pi00 = 1.0 - Pi11 - Pi10 - Pi01
-startPi = Dict([1.0; 1.0] => Pi11, [1.0; 0.0] => Pi10, [0.0; 1.0] => Pi01, [0.0; 0.0] => Pi00)
+    # Calculate Pi00
+    Pi00 = 1.0 - Pi11 - Pi10 - Pi01
+    startPi = Dict([1.0; 1.0] => Pi11, [1.0; 0.0] => Pi10, [0.0; 1.0] => Pi01, [0.0; 0.0] => Pi00)
+else
+    Pi00 = 1e-04
+    startPi = Dict([1.0; 1.0] => 0.9997, [1.0; 0.0] => 1e-04, [0.0; 1.0] => 1e-04, [0.0; 0.0] => 1e-04)
+    println("Pi is fixed as $startPi and not estimated in the analysis.")
+end
 
 # Use to compute Gscale
-ST_h21 = round(readdlm(trait1_dir * "mean_varg_total.txt")[1, 1], digits=3)
+ST_h21 = round(readdlm(ST_path * "Trait1/mean_varg_total.txt")[1, 1], digits=3)
 ST_h22 = round(readdlm(ST_path * "Trait2/mean_varg_total.txt")[1, 1], digits=3)
 
 Gprior_vec = [zeros(2, 2) for c in 1:nCat]
@@ -247,8 +260,9 @@ function runMPI(;
     nCon=nCon, nCat=nCat,
     analysis_path=analysis_path, data_path=data_path,
     Gprior_vec=Gprior_vec,
-    thin=thin, 
-    estimate_Gscale=estimate_Gscale, estGscale_iter=estGscale_iter)
+    thin=thin, N1 = N1, N2 = N2,
+    estimate_Gscale=estimate_Gscale, estGscale_iter=estGscale_iter,
+    save_delta = true)
 
     comm = MPI.COMM_WORLD
     my_rank = MPI.Comm_rank(comm) #current rank, e.g., 0/1/2/3, root=0
@@ -277,8 +291,7 @@ function runMPI(;
     if is_continue
         burnin = 0
     else 
-        #burnin = Int(nIter * 0.4)
-        burnin = 0 
+        burnin = 1000 
     end
 
     # hyper-parameters for A (marker effect variance) and R
@@ -320,7 +333,7 @@ function runMPI(;
         end
     end
 
-    Rprior = [1. 0. ; 0. 1.]
+    Rprior = [1. / N1 0. ; 0. 1. / N2]
     nTraits = 2
 
     if estimate_vare == true
@@ -445,7 +458,9 @@ function runMPI(;
     meanAlpha = [zeros(my_nsnp * nCategory) for t in 1:nTraits]
     
     nOutput = Int(floor((nIter-burnin) / outFreq))
-    mcmc_Delta = [zeros(my_nsnp * nCategory, nOutput) for t in 1:nTraits]
+    if save_delta
+        mcmc_Delta = [zeros(my_nsnp * nCategory, nOutput) for t in 1:nTraits]
+    end
 
     if my_rank == 0
 
@@ -653,14 +668,7 @@ function runMPI(;
             xArrayc = xArray_vec[1] # nEigenb x nMarkerb matrix
             xpxc = xpx_vec[1]
 
-            R = deepcopy(R_blk[b])
-            for traiti = 1:nTraits
-                for traitj = traiti:nTraits
-                    R[traiti, traitj] = R[traiti, traitj] / sqrt(nInd[traiti] * nInd[traitj])
-                    R[traitj, traiti] = R[traiti, traitj]
-                end
-            end
-            Rinv = inv(R)
+            Rinv = inv(R_blk[b])
 
             MarkerOrder = shuffle(1:nMarkerb)
             for marker = MarkerOrder
@@ -793,23 +801,23 @@ function runMPI(;
                         if (thres > 1.1)
                             R_blk[b][traiti, traiti] = sampled_R[traiti, traiti]
                         else
-                            R_blk[b][traiti, traiti] = 1.0
+                            R_blk[b][traiti, traiti] = 1.0  
                         end
                     end
                 else
-                    sampled_R = sample_variance_sumstats(wArray, nEigenb, df_R, scale_R, nInd)
+                    sampled_R = sample_variance_sumstats(wArray, nEigenb, df_R, scale_R)
                     Rcor = compute_correlation(sampled_R)
                     for traiti = 1:nTraits
                         thres = sum(ssq_blk_cat[b][traiti, :]) / totalvarg_blk[b][traiti, traiti]
                         if (thres > 1.1)
                             R_blk[b][traiti, traiti] = sampled_R[traiti, traiti]
                         else
-                            R_blk[b][traiti, traiti] = 1.0
+                            R_blk[b][traiti, traiti] = 1.0 / nInd[traiti]
                         end
                     end
                     # tune covariance in R_blk
                     Rcov = Rcor * sqrt(R_blk[b][1, 1] * R_blk[b][2, 2])
-                    R_blk[b][1, 2] = R_blk[b][2,1] = Rcov
+                    R_blk[b][1, 2] = R_blk[b][2, 1] = Rcov
                 end
             end 
         end # end block loop 
@@ -1096,24 +1104,22 @@ function runMPI(;
                     meanR2 += (R2 - meanR2) * iIter
                 end
             end
-            # broadcast R_blkmean from 0 to other ranks
-            R_blkmean = MPI.bcast(R_blkmean, 0, comm)
-            for b in 1:my_nblk
-                R_blk[b] = R_blkmean
-            end
-
-            # #broadcast from rank 0 to other ranks
-            # R = MPI.bcast(R, 0, comm)
-            # Rinv = inv(R)
+            # # broadcast R_blkmean from 0 to other ranks
+            # R_blkmean = MPI.bcast(R_blkmean, 0, comm)
+            # for b in 1:my_nblk
+            #     R_blk[b] = R_blkmean
+            # end
         end
 
 
         # check convergence
         if iter > burnin 
              
-            if iter - burnin > 0 && (iter - burnin) % outFreq == 0
-                for trait = 1:nTraits
-                    mcmc_Delta[trait][:, iout] = deltaArray[trait]
+            if save_delta
+                if iter - burnin > 0 && (iter - burnin) % outFreq == 0
+                    for trait = 1:nTraits
+                        mcmc_Delta[trait][:, iout] = deltaArray[trait]
+                    end
                 end
             end
 
@@ -1167,11 +1173,13 @@ function runMPI(;
                     end
                 end
                 ### Save delta (last column of mcmc_Delta)
-                mkpath(analysis_path * "last_sample_delta/")
-                for t in 1:nTraits
-                    last_delta = mcmc_Delta[t][:, end]  # extract last column
-                    open(analysis_path * "last_sample_delta/last_sample_delta$(t)_rank$(my_rank).txt", "w") do io
-                        writedlm(io, last_delta)
+                if save_delta
+                    mkpath(analysis_path * "last_sample_delta/")
+                    for t in 1:nTraits
+                        last_delta = mcmc_Delta[t][:, end]  # extract last column
+                        open(analysis_path * "last_sample_delta/last_sample_delta$(t)_rank$(my_rank).txt", "w") do io
+                            writedlm(io, last_delta)
+                        end
                     end
                 end
             end
@@ -1264,8 +1272,10 @@ function runMPI(;
         end
     end
 
-    writedlm(analysis_path * "mcmc_Delta1.rank$my_rank.txt", mcmc_Delta[1])
-    writedlm(analysis_path * "mcmc_Delta2.rank$my_rank.txt", mcmc_Delta[2])
+    if save_delta
+        writedlm(analysis_path * "mcmc_Delta1.rank$my_rank.txt", mcmc_Delta[1])
+        writedlm(analysis_path * "mcmc_Delta2.rank$my_rank.txt", mcmc_Delta[2])
+    end
     writedlm(analysis_path * "meanAlpha1.rank$my_rank.txt", meanAlpha[1])
     writedlm(analysis_path * "meanAlpha2.rank$my_rank.txt", meanAlpha[2])
 
