@@ -5,7 +5,7 @@ SBayesAPP (Summary-data-based Bayesian method leveraging biological Annotations 
 This method estimates:
 - Annotation-stratified genetic covariance matrix
 - Annotation-stratified SNP effect covariance matrix
-- Annotation-stratified Polygenic proportions 
+- Annotation-stratified polygenic proportions 
 
 SBayesAPP enables researchers to identify whether coheritability enrichment arises from many shared variants with weak effects or few variants with strong pleiotropic effects.
 
@@ -29,12 +29,9 @@ The total data for T2D and FG (cell type analysis) is provided in https://drive.
 
 ```text
 SBayesAPP/
-├── SBayesAPP_code/             # Main Julia code for SBayesAPP
-├── Simulation/                 # Scripts for simulation studies
-├── example_data/              # Example input files
-├── results/                   # Example output files
-├── scripts/                   # Pipeline and preprocessing scripts
-├── doc/                       # Documentation and figures
+├── example_analysis/           # demo code for non-parallel SBayesAPP
+├── RealData/                   # code for real data analysis in manuscript
+├── Simulation/                 # code for simulated data analysis in manuscript
 ├── README.md
 ├── install_instructions.md
 └── CITATION.cff

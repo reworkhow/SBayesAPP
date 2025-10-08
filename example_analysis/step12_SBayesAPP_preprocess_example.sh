@@ -4,9 +4,9 @@
 #SBATCH --mem-per-cpu=50G
 #SBATCH --time=24:00:00
 #SBATCH --job-name=sbapp_preprocess
-#SBATCH --partition=batch,guest
-#SBATCH --output=/mnt/nrdstor/zhao/jyqqu/MTSBayesCC/SBayesAPP_step12_test.log
-#SBATCH --mail-user=jyqqu@ucdavis.edu
+#SBATCH --partition=
+#SBATCH --output=
+#SBATCH --mail-user=
 #SBATCH --mail-type=FAIL
 
 
