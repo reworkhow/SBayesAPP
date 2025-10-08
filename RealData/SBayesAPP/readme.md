@@ -1,0 +1,3 @@
+- `SBayesApp.jl`: Julia code to run SBayesApp
+- `submit.sh`: SLURM submission script for running SBayesAPP on an HPC cluster using sbatch
+- `real_data_analysis`: summarize and visualize results from SBayesAPP output files

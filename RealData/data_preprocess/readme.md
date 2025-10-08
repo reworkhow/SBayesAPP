@@ -1,0 +1,3 @@
+- `gctb_qc.sh` and `gctb_qc_submit.sh`: QC & imputation of summary statistics for SNPs in LD reference but not in GWAS data using GCTB. (see details in https://gctbhub.cloud.edu.au/software/gctb/#SBayesRCTutorial)
+- `step1_standardize_pheno_var_GCTBLDinput.R` and `step1_real_data_submit.sh`: adjust SNP effects in summary statistics to standardize the phenotypic variance
+- `step2_data_dictionary_GCTBLDinput.jl` and `step2_real_data_submit.sh`: generate formatted input data for the SBayesApp MPI code.

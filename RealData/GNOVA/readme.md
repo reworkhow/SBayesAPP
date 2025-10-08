@@ -1,0 +1,4 @@
+- `get_annot_file4gnova.R`: prepare annotation file for GNOVA input
+- `GNOVAformatting_maFiles.sh`: munge summary statistics files for GNOVA input
+- `submit_gnova_jobs.sh` and `gnova_submit.sh`: SLURM submission scripts to run GNOVA
+- `gnova_enrichment_analysis.R`: post-analysis to calculate annotation enrichment from GNOVA results

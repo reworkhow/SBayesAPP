@@ -4,7 +4,6 @@ scriptPath="/mnt/nrdstor/zhao/jyqqu/MTSBayesCC/analysis/real_data/"
 logPath="${scriptPath}/log_folder_step3_estcorrR_tuned_v3_estSigma/"
 mkdir -p ${logPath}
 
-# scriptName="step3_MTSBayesCC_SNPorder_shuffleTraitOrder_estGscaleWholeChain.jl"
 scriptName="step3_MTSBayesCC_SNPorder_shuffleTraitOrder_estGscale_estcorrR_tuned_v3_estSigma.jl"
 
 niter=3000
@@ -15,17 +14,13 @@ chainlength="3K"
 # Generate 30 random unique integers between 1 and 100000
 seeds=($(shuf -i 1-100000 -n 10))
 
-#annot_file="../cell_type_annot_human_total_unoverlap.txt"
 #annot_file="../cell_type_annot_human_total162.filtered.with_rest.annot"
 annot_file="../brain.TDEP_0kb_SBayesRC.wRest.txt"
-#annot_file="../gwas_snp_pthres_5e-5_Height.txt"
-#annot_file="../Intercept.txt"
 
 #annot_dict="anno_matrix_cell_type_human_total_unoverlap_dict"
 #annot_dict="anno_matrix_cell_type_annot_human_total162_wRest_dict"
 annot_dict="anno_matrix_brain_wRest_0kb_dict"
-# annot_dict="anno_matrix_gwas_snp_pthres_5e-5_Height_dict"
-# annot_dict="anno_matrix_intercept_dict"
+
 
 ST_folder="/mnt/nrdstor/zhao/jyqqu/MTSBayesCC/analysis/real_data/STSBayesC_vareThres/"
 
@@ -56,12 +51,6 @@ N1=130571 # SCZ
 # N2=88972 #FG
 N2=766345 # EA
 
-# previous_chainlength="$(( ${chainlength%K} - 3 ))K"
-# if [ "$chainlength" == "10K" ]; then
-#     is_continue="false"
-# else
-#     is_continue="true"
-# fi
 
 for pair in "${trait_pairs[@]}"; do
 	echo "Processing pair: $pair"
@@ -70,29 +59,16 @@ for pair in "${trait_pairs[@]}"; do
 	preprocess_path="/mnt/nrdstor/zhao/jyqqu/MTSBayesCC/data/real_data/$folder_name/"
 	echo "${seeds[@]}" > "${preprocess_path}/seeds_brain_wRest_0kb2.txt"
 
-	# # Lookup mean from the map (folder in the CSV uses underscore, e.g., T2D_AF)
-	# mean_val="${MEAN[$folder_name]}"
-  	# if [[ -z "$mean_val" ]]; then
-    # 	echo "ERROR: No Mean found for $folder_name in $csv_path"; exit 1
-  	# fi
-
-  	# # Round to nearest integer (to match your N2 vector style)
-  	# N2_this=$(printf "%.0f" "$mean_val")
-
 	for seed in "${seeds[@]}"; do
 		echo "Seed: $seed"
 		starting_value_dir="XXX"
 		secondary_starting_value_dir="XXX"
 		ST_path="$ST_folder/$folder_name/"
 		
-		# v1 -> diagonal estGscale
-		# v2 -> estGscale computed from alpha'alpha/m
 		# v3 -> estGscale computed from beta'beta/m
 		analysis_path="/mnt/nrdstor/zhao/jyqqu/MTSBayesCC/analysis/real_data/brainAnnot_0kb/MTSBayesCC_${chainlength}_corrR_tuned_v3_estSigma/${folder_name}_seed${seed}/"
 		mkdir -p $analysis_path
 
-		#for chr in 22; do
-        	#echo "Chr: $chr"	
 		LogName="SBayesAPP_${folder_name}_seed${seed}_${chainlength}_brainAnnot_0kb"
 		printLog="${logPath}/$LogName.log"
 		jobFile="${logPath}/$LogName.sh"
