@@ -1,3 +1,3 @@
-- 'generate_annot_gz.sh': Save SimData.1.annot.gz using Rscript annot.gz4sldsc.R (generate_annot_gz.sh)
+- `generate_annot_gz.sh`: Save SimData.1.annot.gz using Rscript annot.gz4sldsc.R
 - Compute LD scores with the annot file SimData.1.
 - Partitioned heritability (binary annotation)
