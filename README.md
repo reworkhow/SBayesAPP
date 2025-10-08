@@ -29,9 +29,9 @@ The total data for T2D and FG (cell type analysis) is provided in https://drive.
 
 ```text
 SBayesAPP/
-├── example_analysis/           # demo code for non-parallel SBayesAPP
-├── RealData/                   # code for real data analysis in manuscript
-├── Simulation/                 # code for simulated data analysis in manuscript
+├── Example/                    # demo script to run SBayesAPP on example data (no MPI required)
+├── RealData/                   # code for real data analysis used in the manuscript
+├── Simulation/                 # code for simulated data analysis used in the manuscript
 ├── README.md
 ├── install_instructions.md
 └── CITATION.cff
