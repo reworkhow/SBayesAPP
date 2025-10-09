@@ -1,0 +1,1 @@
+- `ldsc_rg.sh`: run LDSC.

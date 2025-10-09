@@ -1,0 +1,1 @@
+- `Sim2Tfunc_plink_chr1_memory_efficient_v2.R` and `submit_v2.sh`: simulate GWAS summary statistics from UK Biobank genotype data

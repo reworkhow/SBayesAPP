@@ -1,0 +1,4 @@
+- `step1_submit.sh` and `step1_standardize_pheno_var_Sim2Tfunc.R`: adjust SNP effects in summary statistics to standardize the phenotypic variance
+- `step2_submit.sh` and `step2_data_dictionary_Sim2Tfunc.jl`: generate formatted input data for the SBayesApp MPI code.
+- `submit.sh` and `step3_MTSBayesCC_Sim2Tfunc_SNPorder_shuffleTraitOrder_estGscale_STinput.jl`: run SBayesApp.
+- `collect_res.sh`, `collect_res_total_gcor_h2.jl`, and `collect_res_anno_stratified_gcor_h2.jl`: summarize SBayesAPP output files

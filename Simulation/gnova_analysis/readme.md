@@ -1,0 +1,3 @@
+- `make_anno.jl` and `submit_make_anno.sh`: Prepare functional annotation files for GNOVA input.
+- `munge.sh`: Process GWAS summary statistics for GNOVA input.
+- `gnova.sh`: run GNOVA.
