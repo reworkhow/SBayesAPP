@@ -23,7 +23,7 @@ SBayesAPP is written in Julia and uses some R scripts for preprocessing and visu
 ---
 
 ## Data 
-The total data for T2D and FG (cell type analysis) is provided in https://drive.google.com/drive/folders/1nR_wAj9Hwk1LCrRcFVEr9J-qXiNeaaRp. 
+The dataset for T2D and FG (cell type analysis) is provided in https://drive.google.com/drive/folders/1nR_wAj9Hwk1LCrRcFVEr9J-qXiNeaaRp. 
 
 ## 📂 Repository Structure
 
