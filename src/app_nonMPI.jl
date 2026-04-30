@@ -9,6 +9,14 @@ using Statistics
 using Dates
 using JLD2
 
+include(joinpath(@__DIR__, "io", "annotations.jl"))
+include(joinpath(@__DIR__, "model", "continuation_state.jl"))
+include(joinpath(@__DIR__, "model", "mcmc_setup.jl"))
+include(joinpath(@__DIR__, "model", "priors.jl"))
+include(joinpath(@__DIR__, "model", "r_blk_state.jl"))
+include(joinpath(@__DIR__, "model", "block_setup.jl"))
+include(joinpath(@__DIR__, "model", "utilities.jl"))
+
 data_path = ARGS[1] # path to the JLD2 files
 analysis_path = ARGS[2] # path to save the analysis results
 nIter = ARGS[3] # number of iterations
@@ -47,76 +55,14 @@ function sample_variance_sumstats(ycorr_array, nobs, df, scale, nind_array)
     return R
 end
 
-# Flatten the vector of vectors into a sequential vector
-function flatten(vec_of_vecs)
-    return vcat(map(x -> x[:], vec_of_vecs)...)
-end
-
-# Reshape the sequential vector back into a vector of vectors
-function unflatten(seq_vec, subvec_length)
-    return [seq_vec[i:i+subvec_length-1] for i in 1:subvec_length:length(seq_vec)]
-end
-
-# Flatten the vector of matrices into a sequential vector
-function flatten_matrices(vec_of_mats)
-    return vcat(map(x -> x[:], vec_of_mats)...)
-end
-
-# Reshape the sequential vector back into a vector of matrices
-function unflatten_matrices(seq_vec, nrows, ncols)
-    num_matrices = length(seq_vec) ÷ (nrows * ncols)
-    return [reshape(seq_vec[(i-1)*nrows*ncols+1:i*nrows*ncols], nrows, ncols) for i in 1:num_matrices]
-end
-
-function compute_correlation(covMatrix)
-    # Compute the standard deviations (sqrt of diagonal elements)
-    std_devs = sqrt.(diag(covMatrix))
-    # Compute the correlation coefficient
-    correlation = covMatrix[1, 2] / (std_devs[1] * std_devs[2])
-    return correlation
-end
-
-function read_to_dict(input_file::String)::Dict{Vector{Float64},Float64}
-    # Initialize an empty dictionary
-    dict = Dict{Vector{Float64},Float64}()
-
-    # Read the file line by line and populate the dictionary
-    pi_index = 1
-    for line in eachline(input_file)
-        # Check if the line contains a comma
-        # Split the line into two parts: key and value
-        key_value = split(line, r"],", limit=2)
-        
-        if length(key_value) == 2
-            # Parse the value as a Float64
-            value = parse(Float64, strip(key_value[2]))
-
-            if pi_index == 1
-                key = [0.0; 0.0]
-            elseif pi_index == 2
-                key = [1.0; 1.0]
-            elseif pi_index == 3
-                key = [1.0; 0.0]
-            elseif pi_index == 4
-                key = [0.0; 1.0]
-            end
-            
-            dict[key] = value  # Add the key-value pair to the dictionary
-        end
-        pi_index += 1
-    end
-    return dict
-end
-
-
 ############################################################################################################
 # Input data 
-annot = CSV.read(data_path * annot_file, DataFrame)
-annotationName = names(annot)[2:end]; # ordered of the categorical category
-nLoci_annot = sum.(eachcol(annot[!, 2:end]))
-nCon = 0 # number of continuous annotation
-nCat = length(annotationName) # number of categorical annotation
-annotationType = repeat(["category"], nCat) # ordered by "continue" then "category"
+annotation_metadata = load_annotation_metadata(data_path, annot_file)
+annotationName = annotation_metadata.annotationName # ordered of the categorical category
+nLoci_annot = annotation_metadata.nLoci_annot
+nCon = annotation_metadata.nCon # number of continuous annotation
+nCat = annotation_metadata.nCat # number of categorical annotation
+annotationType = annotation_metadata.annotationType # ordered by "continue" then "category"
 estimate_vare = true
 estimate_vara = true
 estimate_pi = true
@@ -125,28 +71,10 @@ estGscale_iter = 2000
 
 ############################################################################################################
 # Get starting values from ST estimates
-trait1_dir = ST_path * "Trait1/"
-trait2_dir = ST_path * "Trait2/"
-
-Pi11 = 0.00001
-# Read and round values for Trait1 and Trait2's estmated Pi -> proportion of null SNPs
-Pi10 = 1.0 - round(readdlm(trait1_dir * "mean_pi.txt")[1, 1], digits=4)
-Pi01 = 1.0 - round(readdlm(trait2_dir * "mean_pi.txt")[1, 1], digits=4)
-# Calculate Pi00
-Pi00 = 1.0 - Pi11 - Pi10 - Pi01
-# starting values for Pi for each category
-startPi = Dict([1.0; 1.0] => Pi11, [1.0; 0.0] => Pi10, [0.0; 1.0] => Pi01, [0.0; 0.0] => Pi00)
-
-# Read and round values for Trait1 and Trait2's estimated h2
-ST_h21 = round(readdlm(trait1_dir * "mean_varg_total.txt")[1, 1], digits=3)
-ST_h22 = round(readdlm(trait2_dir * "mean_varg_total.txt")[1, 1], digits=3)
-
-# Use ST's h2 and annotation size to get initial prior for SNP effect covariance matrix 
-Gprior_vec = [zeros(2, 2) for c in 1:nCat]
-for c in 1:nCat
-    Gprior_vec[c] = [ST_h21 0.0; 0.0 ST_h22] * (nLoci_annot[c] / sum(nLoci_annot))
-    Gprior_vec[c] = Gprior_vec[c] / (nLoci_annot[c] * (1 - Pi00))
-end
+start_pi_result = build_start_pi(ST_path)
+startPi = start_pi_result.startPi
+Pi00 = start_pi_result.Pi00
+Gprior_vec = build_gprior_vec(ST_path, nLoci_annot, Pi00)
 
 function runSBayesAPP(; 
     startPi=startPi,
@@ -179,7 +107,7 @@ function runSBayesAPP(;
     if is_continue
         burnin = 0
     else 
-        burnin = Int(nIter * 0.4)
+        burnin = floor(Int, nIter * 0.4)
     end
 
     # hyper-parameters for A (marker effect variance) and R
@@ -235,44 +163,14 @@ function runSBayesAPP(;
     if my_rank == 0
         writedlm(analysis_path * "annotationName.txt", annotationName)
     end
-    # reorder my_blkSNPsIndex_dict as from 1 to my_nsnp, before was from 1 to nsnp_per_block
-    sort!(my_blkID) # sort my_blkID
-    for i in 2:my_nblk
-        previousb = my_blkID[i-1]
-        ncumSNP = length(my_blkSNPsIndex_dict[previousb])
-        for key in my_blkID[i:my_nblk]
-            my_blkSNPsIndex_dict[key] = my_blkSNPsIndex_dict[key] .+ ncumSNP
-        end
-    end
-
-    xpx_dict = Dict{Int,Vector{Vector{Float64}}}() # blkID -> vector of xpx for each category
-    xArray_dict = Dict() # blkID -> TransformedX for each category
-
-    for blk in keys(my_TransformedX_dict)
-        Xb = my_TransformedX_dict[blk]
-        nMarkerb = size(Xb, 2)
-        # save xpx for continue and category annotation
-        # the last element is for category annotation
-        xpx_dict[blk] = Vector{Vector{Float64}}(undef, nCon + 1)
-        xArray_dict[blk] = Vector{Matrix{Float64}}(undef, nCon + 1)
-        for c in 1:nCon # xpx and xArray will change for continuous group 
-            xpx_dict[blk][c] = [my_anno_matrix_dict[blk][:, c][i]^2 * dot(Xb[:, i], Xb[:, i]) for i in 1:nMarkerb]
-            xArray_dict[blk][c] = Xb * diagm(my_anno_matrix_dict[blk][:, c])
-        end
-        # xpx/xArray will not change for categorical group if the SNPs are not in the group (marker effects = 0)
-        xpx_dict[blk][end] = [dot(Xb[:, i], Xb[:, i]) for i in 1:nMarkerb]
-        xArray_dict[blk][end] = Xb
-    end
-
-    # change my_anno_matrix_dict to a true/false matrix dict to indicate whether SNPs to be sampled for each category or not 
-    my_anno_matrix_dict = Dict(key => (my_anno_matrix_dict[key] .!= 0.0) for key in keys(my_anno_matrix_dict))
-    if nCon > 0
-        # for continuous annotation, all values = true
-        concol = findall(annotationType .== "continue") # column index for continuous annotation
-        for blk in keys(my_anno_matrix_dict)
-            my_anno_matrix_dict[blk][:, concol] .= true
-        end
-    end
+    xpx_dict, xArray_dict, my_anno_matrix_dict = prepare_block_state!(
+        my_blkID,
+        my_blkSNPsIndex_dict,
+        my_TransformedX_dict,
+        my_anno_matrix_dict,
+        nCon,
+        annotationType,
+    )
 
     #output
     β = zeros(nTraits)
@@ -286,32 +184,20 @@ function runSBayesAPP(;
         alphaArray = [zeros(my_nsnp * nCategory) for t in 1:nTraits]
         deltaArray = [zeros(my_nsnp * nCategory) for t in 1:nTraits]
     else
-        # load starting values
         effect_starting_path = starting_value_dir
         delta_starting_path = starting_value_dir * "last_sample_delta/"
-
-        betaArray_T1 = vec(readdlm(effect_starting_path * "last_mcmc_betaArray1.rank$my_rank.txt"))
-        betaArray_T2 = vec(readdlm(effect_starting_path * "last_mcmc_betaArray2.rank$my_rank.txt"))
-        betaArray = [betaArray_T1, betaArray_T2] #-> ordered by annotation groups [b1_c1 b2_c1 b3_c1; b1_c2 b2_c2 b3_c2]
-
-        deltaArray_T1_last_sample = vec(readdlm(delta_starting_path * "last_sample_delta1_rank$my_rank.txt"))
-        deltaArray_T2_last_sample = vec(readdlm(delta_starting_path * "last_sample_delta2_rank$my_rank.txt"))
-        deltaArray = [deltaArray_T1_last_sample, deltaArray_T2_last_sample]
-
-        alphaArray = [deltaArray[t] .* betaArray[t] for t in 1:nTraits]
-
-        # Correct my_TransformedY by inputting alphaArray 
-        for b in 1:my_nblk
-            blk = my_blkID[b] #block ID
-            nMarkerb = size(my_TransformedX_dict[blk], 2)
-            for t in 1:nTraits
-                alphaArray_total = zeros(nMarkerb)
-                for c in 1:nCategory
-                    alphaArray_total += alphaArray[t][(c-1)*my_nsnp .+ my_blkSNPsIndex_dict[blk]]
-                end  
-                my_TransformedY_dict[blk][t] = my_TransformedY_dict[blk][t] - my_TransformedX_dict[blk] * alphaArray_total
-            end
-        end
+        betaArray, alphaArray, deltaArray = initialize_effect_state!(
+            effect_starting_path,
+            delta_starting_path,
+            my_rank,
+            my_nsnp,
+            nCategory,
+            nTraits,
+            my_blkID,
+            my_blkSNPsIndex_dict,
+            my_TransformedX_dict,
+            my_TransformedY_dict,
+        )
     end
 
     #posterior mean 
@@ -322,78 +208,48 @@ function runSBayesAPP(;
     mcmc_Delta = [zeros(my_nsnp * nCategory, nOutput) for t in 1:nTraits]
 
     if my_rank == 0
-
-        nsample4mean = Int(floor((nIter - burnin) / thin))
-
-        if estimate_pi == true
-            mean_pi = deepcopy(Pi)
-            mean_pi2 = deepcopy(Pi)
-            for i in 1:nCategory
-                for key in keys(mean_pi[i])
-                    mean_pi[i][key] = 0.0
-                    mean_pi2[i][key] = 0.0
-                end
-            end
-        end
-
-        if estimate_vara == true
-            # beta effect variance
-            meanB2 = [zeros(nTraits, nTraits) for c in 1:nCategory]
-            meanA2 = [zeros(nTraits, nTraits) for c in 1:nCategory]
-            meanBcor2 = zeros(nCategory)
-            meanAcor2 = zeros(nCategory)
-        end
-        
-        # marker effect variance
-        meanA = [zeros(nTraits, nTraits) for c in 1:nCategory]
-        meanAcor = zeros(nCategory)
-
-        meanB = [zeros(nTraits, nTraits) for c in 1:nCategory]
-        meanBcor = zeros(nCategory)
-
-        # genetic effect variance
-        meanG = [zeros(nTraits, nTraits) for c in 1:nCategory]
-        meanG2 = [zeros(nTraits, nTraits) for c in 1:nCategory]
-        meanGcor = zeros(nCategory)
-        meanGcor2 = zeros(nCategory)
-
-        # beta'beta
-        meanSSE = [zeros(nTraits, nTraits) for c in 1:nCategory]
-
-        meanGtotal = zeros(nTraits, nTraits)
-        meanGtotal2 = zeros(nTraits, nTraits)
-
-        mcmcAtruecor_c = zeros(nsample4mean, nCategory)
-        mcmcBcor_c = zeros(nsample4mean, nCategory)
-        mcmcGcov_c = zeros(nsample4mean, nCategory)
-        mcmcGcor_c = zeros(nsample4mean, nCategory)
-
-        mcmcGcov_total = zeros(nsample4mean)
-        mcmcGcor_total = zeros(nsample4mean)
-
-        if estimate_vare == true
-            meanR = zeros(nTraits, nTraits)
-            meanR2 = zeros(nTraits, nTraits)
-        end
+        rank0_mcmc_state = initialize_rank0_mcmc_state(
+            Pi,
+            nIter,
+            burnin,
+            thin,
+            nTraits,
+            nCategory;
+            estimate_pi=estimate_pi,
+            estimate_vara=estimate_vara,
+            estimate_vare=estimate_vare,
+        )
+        nsample4mean = rank0_mcmc_state.nsample4mean
+        mean_pi = rank0_mcmc_state.mean_pi
+        mean_pi2 = rank0_mcmc_state.mean_pi2
+        meanB2 = rank0_mcmc_state.meanB2
+        meanA2 = rank0_mcmc_state.meanA2
+        meanBcor2 = rank0_mcmc_state.meanBcor2
+        meanAcor2 = rank0_mcmc_state.meanAcor2
+        meanA = rank0_mcmc_state.meanA
+        meanAcor = rank0_mcmc_state.meanAcor
+        meanB = rank0_mcmc_state.meanB
+        meanBcor = rank0_mcmc_state.meanBcor
+        meanG = rank0_mcmc_state.meanG
+        meanG2 = rank0_mcmc_state.meanG2
+        meanGcor = rank0_mcmc_state.meanGcor
+        meanGcor2 = rank0_mcmc_state.meanGcor2
+        meanSSE = rank0_mcmc_state.meanSSE
+        meanGtotal = rank0_mcmc_state.meanGtotal
+        meanGtotal2 = rank0_mcmc_state.meanGtotal2
+        mcmcAtruecor_c = rank0_mcmc_state.mcmcAtruecor_c
+        mcmcBcor_c = rank0_mcmc_state.mcmcBcor_c
+        mcmcGcov_c = rank0_mcmc_state.mcmcGcov_c
+        mcmcGcor_c = rank0_mcmc_state.mcmcGcor_c
+        mcmcGcov_total = rank0_mcmc_state.mcmcGcov_total
+        mcmcGcor_total = rank0_mcmc_state.mcmcGcor_total
+        meanR = rank0_mcmc_state.meanR
+        meanR2 = rank0_mcmc_state.meanR2
     end
 
+    file_names = nothing
     if my_rank == 0
-        file_names = Dict(
-            "pi" => analysis_path * "MCMC_samples_pi.txt",
-            "beta_effects_variance" => analysis_path * "MCMC_samples_beta_effects_variance.txt",
-            "genetic_effects_variance" => analysis_path * "MCMC_samples_genetic_effects_variance.txt",
-            "marker_effects_variance" => analysis_path * "MCMC_samples_marker_effects_variance.txt", # SNP effect variance computed from pleiotropic SNPs 
-            "total_genetic_effects_variance" => analysis_path * "MCMC_samples_total_genetic_effects_variance.txt"
-        )
-        for (name, path) in file_names
-            if isfile(path)
-                println("File $path already exists! It will be overwritten.")
-                open(path, "w") do io
-                end  # truncate existing
-            else
-                println("Creating file: $path")
-            end
-        end
+        file_names = prepare_mcmc_output_files(analysis_path)
     end
 
     if my_rank == 0
@@ -422,21 +278,13 @@ function runSBayesAPP(;
     iter_after_burnin_thin_index = 1
     last_saved_iter = nIter - (nIter - burnin) % outFreq
 
-    if is_continue
-        R_blk_folder = starting_value_dir * "last_sample_R_blk/"
-        if isdir(R_blk_folder)
-            R_blk = [zeros(2,2) for _ in 1:my_nblk]
-            for b in 1:my_nblk
-                R_blk[b] = readdlm(R_blk_folder * "R_blk_b$(b)_rank$(my_rank).txt")
-            end
-            println("Loaded R_blk from $R_blk_folder for rank $my_rank")
-        else
-            println("Warning: Folder $R_blk_folder in rank $my_rank does not exist. R_blk will be initialized with Rprior.")
-            R_blk = [Rprior for _ in 1:my_nblk]
-        end
-    else
-        R_blk = [Rprior for _ in 1:my_nblk]
-    end
+    R_blk = initialize_r_blk_state(
+        my_nblk,
+        my_rank,
+        Rprior;
+        is_continue=is_continue,
+        starting_value_dir=starting_value_dir,
+    )
 
     estGscale_iter = min(estGscale_iter, nIter)
 

@@ -1,8 +1,13 @@
 #!/bin/bash
 
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
 # ======= Input Arguments =======
-DATA_PATH="/mnt/nrdstor/zhao/jyqqu/MTSBayesCC/data/sim_chr1_output_v2/example_analysis/SBayesAPP_input_first10blks/"
-ANALYSIS_PATH="/mnt/nrdstor/zhao/jyqqu/MTSBayesCC/data/sim_chr1_output_v2/example_analysis/SBayesAPP_res_first10blks/"
+DATA_PATH="$REPO_ROOT/example/SBayesAPP_input_first10blks/"
+ANALYSIS_PATH="$REPO_ROOT/example/SBayesAPP_res_first10blks/"
 mkdir -p "$ANALYSIS_PATH"
 NITER=1000
 SEED=42
@@ -12,26 +17,15 @@ ANNOT_DICT="anno_matrix_dict"
 OUTFREQ=100
 STARTING_VALUE_DIR="XXX" # only needed if using starting values or extend chain length
 SECONDARY_STARTING_VALUE_DIR="XXX" # only needed if using prefixed Gscale or extend chain length
-ST_PATH="/mnt/nrdstor/zhao/jyqqu/MTSBayesCC/data/sim_chr1_output_v2/example_analysis/ST_res/"
+ST_PATH="$REPO_ROOT/example/ST_res/"
 THIN=50
 IS_CONTINUE="false"  # or "true" if continuing from a previous run
 
 # ======= Julia Environment Setup (optional) =======
-# module load julia/1.10.2  # if needed on HPC
-source ~/.bashrc          # if Julia path is set there
+if [[ -f /cvmfs/hpc.ucdavis.edu/sw/conda/root/etc/profile.d/conda.sh ]]; then
+  source /cvmfs/hpc.ucdavis.edu/sw/conda/root/etc/profile.d/conda.sh
+  conda activate nnmm_twas || true
+fi
 
 # ======= Run the Julia Script =======
-julia SBayesAPP_nonMPI.jl \
-  "$DATA_PATH" \
-  "$ANALYSIS_PATH" \
-  "$NITER" \
-  "$SEED" \
-  "$NRANK" \
-  "$ANNOT_FILE" \
-  "$ANNOT_DICT" \
-  "$OUTFREQ" \
-  "$STARTING_VALUE_DIR" \
-  "$SECONDARY_STARTING_VALUE_DIR" \
-  "$ST_PATH" \
-  "$THIN" \
-  "$IS_CONTINUE"
+julia --project="$REPO_ROOT" "$REPO_ROOT/scripts/run_example.jl"

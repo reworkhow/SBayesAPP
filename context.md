@@ -1,0 +1,4 @@
+I have a repo here. The current repo structure contains `src/` which includes `app_MPI.jl` and `app_nonMPI.jl`.  `app_MPI.jl` is an MPI version of `app_nonMPI.jl` that runs bivariate bayesC model that incorporates annotation information. 
+
+This repo also contains `script/` where it provides the `run.sh` command to run `app_nonMPI.jl`. The `run.sh` is supposed to read the data from `example/`. To demostrate the usage, I prepare the input directory `SBayesAPP_input_first10blks/`, `ST_res/` and the file `annotation_df.txt`. `run.sh` based on the input will generate the result as `SBayesAPP_res_first10blks/` as an example. Please note that I just construct this repo, so there might be a chance that the relative path is not accurate. Please don't directly refer to the path included in any files. 
+
