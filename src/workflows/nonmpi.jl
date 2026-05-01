@@ -1,8 +1,72 @@
-using Pkg
+using DelimitedFiles
+using Distributions
+using LinearAlgebra
+using ProgressMeter
+using Random
+using Statistics
+using Dates
+using JLD2
 
-Pkg.activate(joinpath(@__DIR__, ".."))
 
-using SBayesAPP
+function sample_variance_sumstats(ycorr_array, nobs, df, scale, nind_array)
+    ntraits = length(ycorr_array)
+    SSE = zeros(ntraits, ntraits)
+    for traiti = 1:ntraits
+        ycorri = ycorr_array[traiti]
+        for traitj = traiti:ntraits
+            ycorrj = ycorr_array[traitj]
+            # multiple the nInd for each trait
+            SSE[traiti, traitj] =  dot(ycorri, ycorrj) * sqrt(nind_array[traiti] * nind_array[traitj]) 
+            SSE[traitj, traiti] = SSE[traiti, traitj]
+        end
+    end
+    R = rand(InverseWishart(df + nobs, convert(Array, Symmetric(scale + SSE))))
+    return R
+end
+
+function run_nonmpi_workflow(config::ConfigTypes.NonMPIConfig)
+    data_path = config.data_path
+    analysis_path = config.analysis_path
+    nIter = config.nIter
+    seed = config.seed
+    nrank = config.nrank
+    annot_file = config.annot_file
+    annot_dict = config.annot_dict
+    outFreq = config.out_freq
+    starting_value_dir = config.starting_value_dir
+    secondary_starting_value_dir = config.secondary_starting_value_dir
+    ST_path = config.st_path
+    thin = config.thin
+    is_continue = config.is_continue
+
+    annotation_metadata = load_annotation_metadata(data_path, annot_file)
+    annotationName = annotation_metadata.annotationName
+    nLoci_annot = annotation_metadata.nLoci_annot
+    nCon = annotation_metadata.nCon
+    nCat = annotation_metadata.nCat
+    annotationType = annotation_metadata.annotationType
+    estimate_vare = true
+    estimate_vara = true
+    estimate_pi = true
+    estimate_Gscale = true
+    estGscale_iter = 2000
+
+    start_pi_result = build_start_pi(ST_path)
+    startPi = start_pi_result.startPi
+    Pi00 = start_pi_result.Pi00
+    Gprior_vec = build_gprior_vec(ST_path, nLoci_annot, Pi00)
+
+    function runSBayesAPP(; 
+        startPi=startPi,
+        nIter=nIter, outFreq=outFreq, seed=seed,
+        estimate_vare=estimate_vare, estimate_vara=estimate_vara,
+        estimate_pi=estimate_pi,
+        annotationType=annotationType, annotationName=annotationName,
+        nCon=nCon, nCat=nCat,
+        analysis_path=analysis_path, data_path=data_path,
+        Gprior_vec=Gprior_vec,
+        thin=thin, 
+        estimate_Gscale=estimate_Gscale, estGscale_iter=estGscale_iter)
 
     ############################################################################
     #read data in current rank
@@ -11,14 +75,15 @@ using SBayesAPP
         my_rank = 0
     end
 
-    my_TransformedX_dict = JLD2.load(data_path * "TransformedX_dict.jld2")["my_TransformedX_dict"] # dictionary of Q for each block; blk => Q
-    my_TransformedY_dict = JLD2.load(data_path * "TransformedY_dict.jld2")["my_TransformedY_dict"] # dictionary of w for each block; blk => [w1,w2]
-    my_blkSNPsIndex_dict = JLD2.load(data_path * "blkSNPsIndex_dict.jld2")["my_blkSNPsIndex_dict"] # dictionary of SNPs index for each block; blk => [1,2,...,nsnp_blk]
-    my_blkID = Int.(vec(readdlm(data_path * "blkIDs.txt", ',')))  # block IDs to be analyzed 
-    my_nGWAS_dict = JLD2.load(data_path * "nGWAS_dict.jld2")["my_nGWAS_dict"] # dictionary of average nInd for each block; blk => [nInd1, nInd2]
-    my_nblk = length(my_blkID) # number of blocks analyzed 
-    my_nsnp = sum(map(length, values(my_blkSNPsIndex_dict))) # total number of SNPs to be analyzed  
-    my_anno_matrix_dict = JLD2.load(data_path * "$annot_dict.jld2")["my_anno_matrix_dict"] # dictionary of annotation matrix for each block; blk => A 
+    block_data = load_nonmpi_block_data(data_path, annot_dict)
+    my_TransformedX_dict = block_data.transformed_x_dict
+    my_TransformedY_dict = block_data.transformed_y_dict
+    my_blkSNPsIndex_dict = block_data.blkSNPsIndex_dict
+    my_blkID = block_data.blkID
+    my_nGWAS_dict = block_data.nGWAS_dict
+    my_nblk = block_data.nblk
+    my_nsnp = block_data.nsnp
+    my_anno_matrix_dict = block_data.anno_matrix_dict
 
     if is_continue
         burnin = 0
@@ -26,55 +91,30 @@ using SBayesAPP
         burnin = floor(Int, nIter * 0.4)
     end
 
-    # hyper-parameters for A (marker effect variance) and R
     nCategory = nCat + nCon
-    # marker effect variance matrix
-    A_vec = [zeros(2, 2) for c in 1:nCategory]
-    if is_continue
-        A_vec_starting_path = starting_value_dir * "beta_effect_var_matrices_last_sample/"
-        for c in 1:nCategory
-            A_vec[c] = readdlm(A_vec_starting_path * "beta_effect_matrix_$c.txt", ',')
-        end
-    else # starting values 
-        A_vec = Gprior_vec
-    end
-    Ainv_vec = [inv(A_vec[c]) for c in 1:nCategory]
-
-    if is_continue
-        Pi_starting_path = starting_value_dir * "pi_last_sample/"
-        Pi = [Dict{Vector{Float64},Float64}() for c in 1:nCategory]
-        for c in 1:nCategory
-            Pi[c] = read_to_dict(Pi_starting_path * "pi_$c.txt")
-        end
-    else
-        Pi = [deepcopy(startPi) for c in 1:nCategory]
-    end
-
-    # starting value of residual variance matrix R
-    Rprior = [1. 0. ; 0. 1.]
     nTraits = 2
-    if estimate_vare == true
-        df_R = 4 + nTraits
-        scale_R = Rprior * (df_R - nTraits - 1)
-    end
-
-    if my_rank == 0
-        if estimate_vara == true
-            df_G = 4 + nTraits
-
-            if is_continue && estimate_Gscale
-                scale_G_vec = [zeros(2, 2) for c in 1:nCategory]
-                for c in 1:nCategory
-                    scale_G_vec[c] = readdlm(secondary_starting_value_dir * "scale_G$c.txt")
-                end
-                estimate_Gscale = false # estimate_Gscale = false for continuous analysis
-                println("scale_G_vec is fixed as saved in $secondary_starting_value_dir")
-            else
-                scale_G_vec = [Gprior_vec[c] * (df_G - nTraits - 1) for c in 1:nCategory]
-                println("scale_G_vec is computed by ST h2.")
-            end
-        end
-    end
+    parameter_state = initialize_nonmpi_parameter_state(
+        my_rank,
+        nCategory,
+        nTraits,
+        Gprior_vec,
+        startPi;
+        estimate_vare=estimate_vare,
+        estimate_vara=estimate_vara,
+        estimate_Gscale=estimate_Gscale,
+        is_continue=is_continue,
+        starting_value_dir=starting_value_dir,
+        secondary_starting_value_dir=secondary_starting_value_dir,
+    )
+    A_vec = parameter_state.A_vec
+    Ainv_vec = parameter_state.Ainv_vec
+    Pi = parameter_state.Pi
+    Rprior = parameter_state.Rprior
+    df_R = parameter_state.df_R
+    scale_R = parameter_state.scale_R
+    df_G = parameter_state.df_G
+    scale_G_vec = parameter_state.scale_G_vec
+    estimate_Gscale = parameter_state.estimate_Gscale
 
     if my_rank == 0
         writedlm(analysis_path * "annotationName.txt", annotationName)
@@ -620,34 +660,18 @@ using SBayesAPP
             end
 
             if iter == last_saved_iter
-                for t in 1:nTraits
-                    writedlm(analysis_path * "last_mcmc_betaArray$t.rank$my_rank.txt", betaArray[t])
-                end
-                # Save R_blk
-                mkpath(analysis_path * "last_sample_R_blk/")  # Create folder if not exist
-                for b in 1:my_nblk
-                    writedlm(analysis_path * "last_sample_R_blk/R_blk_b$(b)_rank$(my_rank).txt", R_blk[b])
-                end
-                # Save beta_effect variance matrices (A_vec)
-                mkpath(analysis_path * "beta_effect_var_matrices_last_sample/")
-                for c in 1:nCategory
-                     writedlm(analysis_path * "beta_effect_var_matrices_last_sample/beta_effect_matrix_$(c).txt", A_vec[c], ',')
-                end
-                # Save Pi from last sample
-                mkpath(analysis_path * "pi_last_sample/")
-                for c in 1:nCategory
-                    open(analysis_path * "pi_last_sample/pi_$(c).txt", "w") do io
-                        writedlm(io, Pi[c], ',')
-                    end
-                end
-                ### Save delta (last column of mcmc_Delta)
-                mkpath(analysis_path * "last_sample_delta/")
-                for t in 1:nTraits
-                    last_delta = mcmc_Delta[t][:, end]  # extract last column
-                    open(analysis_path * "last_sample_delta/last_sample_delta$(t)_rank$(my_rank).txt", "w") do io
-                        writedlm(io, last_delta)
-                    end
-                end
+                write_nonmpi_restart_state(
+                    analysis_path,
+                    my_rank,
+                    my_nblk,
+                    nCategory,
+                    nTraits,
+                    betaArray,
+                    R_blk,
+                    A_vec,
+                    Pi,
+                    mcmc_Delta,
+                )
             end
         end
 
@@ -734,4 +758,7 @@ using SBayesAPP
     time_diff = (time_end - time_start).value / 60000 #milliseconds to min
     println("End time: ", time_end)
     println("Running Time (min): ", time_diff)
-run_nonmpi(parse_nonmpi_args(ARGS))
+    end
+
+    return @time runSBayesAPP()
+end
