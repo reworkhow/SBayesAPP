@@ -1,4 +1,4 @@
-module ConfigTypes
+module ConfigTypes 
 
 export NonMPIConfig, MPIConfig
 
@@ -15,6 +15,8 @@ struct NonMPIConfig
     secondary_starting_value_dir::String
     st_path::String
     thin::Int
+    n1::Int
+    n2::Int
     is_continue::Bool
 end
 

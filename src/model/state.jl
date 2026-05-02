@@ -7,6 +7,8 @@ function initialize_nonmpi_parameter_state(
     nTraits,
     Gprior_vec,
     startPi;
+    n1,
+    n2,
     estimate_vare=true,
     estimate_vara=true,
     estimate_Gscale=true,
@@ -35,7 +37,7 @@ function initialize_nonmpi_parameter_state(
         Pi = [deepcopy(startPi) for _ in 1:nCategory]
     end
 
-    Rprior = [1.0 0.0; 0.0 1.0]
+    Rprior = [1.0 / n1 0.0; 0.0 1.0 / n2]
     df_R = nothing
     scale_R = nothing
     if estimate_vare

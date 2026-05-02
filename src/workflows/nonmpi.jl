@@ -8,15 +8,14 @@ using Dates
 using JLD2
 
 
-function sample_variance_sumstats(ycorr_array, nobs, df, scale, nind_array)
+function sample_variance_sumstats(ycorr_array, nobs, df, scale)
     ntraits = length(ycorr_array)
     SSE = zeros(ntraits, ntraits)
     for traiti = 1:ntraits
         ycorri = ycorr_array[traiti]
         for traitj = traiti:ntraits
             ycorrj = ycorr_array[traitj]
-            # multiple the nInd for each trait
-            SSE[traiti, traitj] =  dot(ycorri, ycorrj) * sqrt(nind_array[traiti] * nind_array[traitj]) 
+            SSE[traiti, traitj] = dot(ycorri, ycorrj)
             SSE[traitj, traiti] = SSE[traiti, traitj]
         end
     end
@@ -24,7 +23,7 @@ function sample_variance_sumstats(ycorr_array, nobs, df, scale, nind_array)
     return R
 end
 
-function run_nonmpi_workflow(config::ConfigTypes.NonMPIConfig)
+function run_nonmpi_workflow(config::ConfigTypes.NonMPIConfig) 
     data_path = config.data_path
     analysis_path = config.analysis_path
     nIter = config.nIter
@@ -37,6 +36,8 @@ function run_nonmpi_workflow(config::ConfigTypes.NonMPIConfig)
     secondary_starting_value_dir = config.secondary_starting_value_dir
     ST_path = config.st_path
     thin = config.thin
+    N1 = config.n1
+    N2 = config.n2
     is_continue = config.is_continue
 
     annotation_metadata = load_annotation_metadata(data_path, annot_file)
@@ -99,6 +100,8 @@ function run_nonmpi_workflow(config::ConfigTypes.NonMPIConfig)
         nTraits,
         Gprior_vec,
         startPi;
+        n1=N1,
+        n2=N2,
         estimate_vare=estimate_vare,
         estimate_vara=estimate_vara,
         estimate_Gscale=estimate_Gscale,
@@ -306,14 +309,7 @@ function run_nonmpi_workflow(config::ConfigTypes.NonMPIConfig)
             xArrayc = xArray_vec[1] # nEigenb x nMarkerb matrix
             xpxc = xpx_vec[1]
 
-            R = deepcopy(R_blk[b])
-            for traiti = 1:nTraits
-                for traitj = traiti:nTraits
-                    R[traiti, traitj] = R[traiti, traitj] / sqrt(nInd[traiti] * nInd[traitj])
-                    R[traitj, traiti] = R[traiti, traitj]
-                end
-            end
-            Rinv = inv(R)
+            Rinv = inv(R_blk[b])
 
             MarkerOrder = shuffle(1:nMarkerb)
             for marker = MarkerOrder
@@ -438,7 +434,7 @@ function run_nonmpi_workflow(config::ConfigTypes.NonMPIConfig)
            
             if estimate_vare == true
                 # sample bivariate residual variance R 
-                sampled_R = sample_variance_sumstats(wArray, nEigenb, df_R, scale_R, nInd)
+                sampled_R = sample_variance_sumstats(wArray, nEigenb, df_R, scale_R)
                 R_blk[b] = sampled_R
                 Rcor = compute_correlation(sampled_R)
                 for traiti = 1:nTraits
@@ -446,7 +442,7 @@ function run_nonmpi_workflow(config::ConfigTypes.NonMPIConfig)
                     if (thres > 1.1)
                         R_blk[b][traiti, traiti] = sampled_R[traiti, traiti]
                     else
-                        R_blk[b][traiti, traiti] = 1.0
+                        R_blk[b][traiti, traiti] = 1.0 / nInd[traiti]
                     end
                 end
                 # tune covariance in R_blk
@@ -618,11 +614,6 @@ function run_nonmpi_workflow(config::ConfigTypes.NonMPIConfig)
                 R2 = (R_blkmean) .^ 2
                 meanR += (R_blkmean - meanR) * iIter
                 meanR2 += (R2 - meanR2) * iIter
-            end
-        
-            # update block-wize R by R_blkmean for next iteration
-            for b in 1:my_nblk
-                R_blk[b] = R_blkmean
             end
         end
 

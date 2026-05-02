@@ -16,6 +16,8 @@ using SBayesAPP
             "XXX",
             "XXX",
             string(joinpath(root, "example", "ST_res"), "/"),
+            300000,
+            300000,
             1,
             false,
         )
@@ -28,4 +30,4 @@ using SBayesAPP
         @test isfile(joinpath(analysis_dir, "estPi1.txt"))
         @test isfile(joinpath(analysis_dir, "estR.txt"))
     end
-end
+end 

@@ -13,7 +13,7 @@ include("model/block_setup.jl")
 include("model/utilities.jl")
 include("workflows/nonmpi.jl")
 
-using .ConfigTypes: MPIConfig, NonMPIConfig
+using .ConfigTypes: MPIConfig, NonMPIConfig 
 
 export MPIConfig,
        NonMPIConfig,
@@ -59,13 +59,15 @@ function example_nonmpi_config(; root::AbstractString=repo_root())
         "XXX",
         _dir_arg(joinpath(root, "example", "ST_res")),
         50,
+        300000,
+        300000,
         false,
     )
 end
 
 function parse_nonmpi_args(args::Vector{String})
-    length(args) == 13 || error(
-        "Expected 13 positional arguments for non-MPI mode: data_path analysis_path nIter seed nrank annot_file annot_dict outFreq starting_value_dir secondary_starting_value_dir ST_path thin is_continue",
+    length(args) == 15 || error(
+        "Expected 15 positional arguments for non-MPI mode: data_path analysis_path nIter seed nrank annot_file annot_dict outFreq starting_value_dir secondary_starting_value_dir ST_path thin N1 N2 is_continue",
     )
 
     return NonMPIConfig(
@@ -81,7 +83,9 @@ function parse_nonmpi_args(args::Vector{String})
         args[10],
         _dir_arg(args[11]),
         parse(Int, args[12]),
-        lowercase(args[13]) == "true",
+        parse(Int, args[13]),
+        parse(Int, args[14]),
+        lowercase(args[15]) == "true",
     )
 end
 
@@ -117,7 +121,7 @@ function parse_mpi_args(args::Vector{String})
 end
 
 function build_nonmpi_cmd(config::NonMPIConfig)
-    return `$(Base.julia_cmd()) --project=$(repo_root()) $(joinpath(source_root(), "app_nonMPI.jl")) $(config.data_path) $(config.analysis_path) $(string(config.nIter)) $(string(config.seed)) $(string(config.nrank)) $(config.annot_file) $(config.annot_dict) $(string(config.out_freq)) $(config.starting_value_dir) $(config.secondary_starting_value_dir) $(config.st_path) $(string(config.thin)) $(_bool_arg(config.is_continue))`
+    return `$(Base.julia_cmd()) --project=$(repo_root()) $(joinpath(source_root(), "app_nonMPI.jl")) $(config.data_path) $(config.analysis_path) $(string(config.nIter)) $(string(config.seed)) $(string(config.nrank)) $(config.annot_file) $(config.annot_dict) $(string(config.out_freq)) $(config.starting_value_dir) $(config.secondary_starting_value_dir) $(config.st_path) $(string(config.thin)) $(string(config.n1)) $(string(config.n2)) $(_bool_arg(config.is_continue))`
 end
 
 function build_mpi_cmd(config::MPIConfig)
