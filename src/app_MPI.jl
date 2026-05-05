@@ -45,17 +45,21 @@ N1 = parse(Int64, N1)
 N2 = ARGS[14] # average N for Trait 2
 N2 = parse(Int64, N2)
 
-estimate_pi = ARGS[15] # estimate pi
+has_nCon_input = length(ARGS) ≥ 16 && !(lowercase(ARGS[15]) in ("true", "false"))
+nCon_input = has_nCon_input ? parse(Int64, ARGS[15]) : 0
+estimate_pi_index = has_nCon_input ? 16 : 15
+
+estimate_pi = ARGS[estimate_pi_index] # estimate pi
 # convert estimate_pi to boolean
 estimate_pi = (estimate_pi == "true") ? true : false
 
-fixed_hyperparameters = length(ARGS) ≥ 16 ? ARGS[16] : "false"
+fixed_hyperparameters = length(ARGS) ≥ estimate_pi_index + 1 ? ARGS[estimate_pi_index + 1] : "false"
 fixed_hyperparameters = (fixed_hyperparameters == "true") ? true : false
 
-is_continue = length(ARGS) ≥ 17 ? ARGS[17] : "true"
+is_continue = length(ARGS) ≥ estimate_pi_index + 2 ? ARGS[estimate_pi_index + 2] : "true"
 is_continue = (is_continue == "true") ? true : false
 
-chr = length(ARGS) ≥ 18 ? ARGS[18] : ""
+chr = length(ARGS) ≥ estimate_pi_index + 3 ? ARGS[estimate_pi_index + 3] : ""
 
 if !isempty(chr)
     Split_chr = true
@@ -113,7 +117,7 @@ end
 nMarker = 1154522
 nBlocks = 591
 # Move this part to function my_rank == 0 
-annotation_metadata = load_annotation_metadata(data_path, annot_file)
+annotation_metadata = load_annotation_metadata(data_path, annot_file; nCon=nCon_input)
 annotationName = annotation_metadata.annotationName # ordered by continuous category then categorical category
 nLoci_annot = annotation_metadata.nLoci_annot
 nCon = annotation_metadata.nCon # number of continuous annotation

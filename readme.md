@@ -58,44 +58,53 @@ If you want to call the current entrypoint directly, the equivalent command is:
 
 ```bash
 julia --project=. src/app_nonMPI.jl \
-  example/SBayesAPP_input_first10blks/ \
-  example/SBayesAPP_res_first10blks/ \
-  1000 \
-  42 \
-  1 \
-  annotation_df.txt \
-  anno_matrix_dict \
-  100 \
-  XXX \
-  XXX \
-  example/ST_res/ \
-  50 \
-  false
+  --data_path example/SBayesAPP_input_first10blks/ \
+  --analysis_path example/SBayesAPP_res_first10blks/ \
+  --n_iter 1000 \
+  --seed 42 \
+  --nrank 1 \
+  --annot_file annotation_df.txt \
+  --annot_dict anno_matrix_dict \
+  --out_freq 100 \
+  --starting_value_dir XXX \
+  --secondary_starting_value_dir XXX \
+  --st_path example/ST_res/ \
+  --thin 50 \
+  --n1 300000 \
+  --n2 300000 \
+  --n_con 0 \
+  --is_continue false
 ```
 
-There is also a package-backed wrapper script that forwards those same positional arguments:
+There is also a package-backed wrapper script that forwards those same named arguments:
 
 ```bash
 julia --project=. scripts/run_nonmpi.jl \
-  example/SBayesAPP_input_first10blks/ \
-  example/SBayesAPP_res_first10blks/ \
-  1000 \
-  42 \
-  1 \
-  annotation_df.txt \
-  anno_matrix_dict \
-  100 \
-  XXX \
-  XXX \
-  example/ST_res/ \
-  50 \
-  false
+  --data_path example/SBayesAPP_input_first10blks/ \
+  --analysis_path example/SBayesAPP_res_first10blks/ \
+  --n_iter 1000 \
+  --seed 42 \
+  --nrank 1 \
+  --annot_file annotation_df.txt \
+  --annot_dict anno_matrix_dict \
+  --out_freq 100 \
+  --starting_value_dir XXX \
+  --secondary_starting_value_dir XXX \
+  --st_path example/ST_res/ \
+  --thin 50 \
+  --n1 300000 \
+  --n2 300000 \
+  --n_con 0 \
+  --is_continue false
 ```
 
 Notes:
 
 - The output directory should exist before launching `src/app_nonMPI.jl` directly.
 - `annot_file` is interpreted relative to `data_path`, which is why the example uses `annotation_df.txt` and keeps a copy inside `example/SBayesAPP_input_first10blks/`.
+- The optional `--n_con` argument tells SBayesAPP how many annotation columns, starting from the left after `SNP`, should be treated as continuous. Any remaining annotation columns are treated as categorical.
+- Non-MPI commands can optionally add `--estimate_vare`, `--estimate_vara`, `--estimate_pi`, `--estimate_gscale`, and `--estgscale_iter`. If `--estimate_vare false`, `secondary_starting_value_dir` should point to a directory containing `estR.txt`.
+- The old positional argument form is still accepted for backward compatibility.
 - `STARTING_VALUE_DIR` and `SECONDARY_STARTING_VALUE_DIR` are placeholders for continuation or fixed-hyperparameter workflows. They are not used in the provided fresh example run.
 
 ## MPI run
@@ -106,24 +115,25 @@ A typical invocation pattern is:
 
 ```bash
 mpiexec -n <ranks> julia --project=. scripts/run_mpi.jl \
-  <data_path>/ \
-  <analysis_path>/ \
-  <nIter> \
-  <seed> \
-  <ranks> \
-  <annot_file> \
-  <annot_dict> \
-  <outFreq> \
-  <starting_value_dir> \
-  <secondary_starting_value_dir> \
-  <ST_path>/ \
-  <thin> \
-  <N1> \
-  <N2> \
-  <estimate_pi> \
-  [fixed_hyperparameters] \
-  [is_continue] \
-  [chr]
+  --data_path <data_path>/ \
+  --analysis_path <analysis_path>/ \
+  --n_iter <nIter> \
+  --seed <seed> \
+  --nrank <ranks> \
+  --annot_file <annot_file> \
+  --annot_dict <annot_dict> \
+  --out_freq <outFreq> \
+  --starting_value_dir <starting_value_dir> \
+  --secondary_starting_value_dir <secondary_starting_value_dir> \
+  --st_path <ST_path>/ \
+  --thin <thin> \
+  --n1 <N1> \
+  --n2 <N2> \
+  --n_con [nCon] \
+  --estimate_pi <estimate_pi> \
+  --fixed_hyperparameters [fixed_hyperparameters] \
+  --is_continue [is_continue] \
+  --chr [chr]
 ```
 
 This path is intended for pre-sharded data, not for the small example in `example/`.
@@ -161,7 +171,7 @@ For a detailed walkthrough of how those files are produced and how the two Julia
 
 - The repository does not yet include a Julia project file for reproducible dependency installation.
 - `src/app_nonMPI.jl` parses a seed argument but does not currently call `Random.seed!`.
-- Both scripts currently run with categorical annotations only because `nCon` is hard-coded to `0`.
+- Mixed annotation runs are supported when the first `nCon` annotation columns are continuous and the remaining annotation columns are categorical.
 - The MPI code contains additional workflow modes, including split-chromosome and fixed-hyperparameter runs, but the checked-in example covers only the non-MPI path.
 
 ## Next documentation target

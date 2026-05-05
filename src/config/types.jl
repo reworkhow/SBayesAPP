@@ -17,7 +17,109 @@ struct NonMPIConfig
     thin::Int
     n1::Int
     n2::Int
+    n_con::Int
+    estimate_vare::Bool
+    estimate_vara::Bool
+    estimate_pi::Bool
+    estimate_Gscale::Bool
+    estGscale_iter::Int
     is_continue::Bool
+end
+
+function NonMPIConfig(
+    data_path::String,
+    analysis_path::String,
+    nIter::Int,
+    seed::Int,
+    nrank::Int,
+    annot_file::String,
+    annot_dict::String,
+    out_freq::Int,
+    starting_value_dir::String,
+    secondary_starting_value_dir::String,
+    st_path::String,
+    thin::Int,
+    n1::Int,
+    n2::Int,
+    is_continue::Bool;
+    n_con::Int=0,
+    estimate_vare::Bool=true,
+    estimate_vara::Bool=true,
+    estimate_pi::Bool=true,
+    estimate_Gscale::Bool=true,
+    estGscale_iter::Int=2000,
+)
+    return NonMPIConfig(
+        data_path,
+        analysis_path,
+        nIter,
+        seed,
+        nrank,
+        annot_file,
+        annot_dict,
+        out_freq,
+        starting_value_dir,
+        secondary_starting_value_dir,
+        st_path,
+        thin,
+        n1,
+        n2,
+        n_con,
+        estimate_vare,
+        estimate_vara,
+        estimate_pi,
+        estimate_Gscale,
+        estGscale_iter,
+        is_continue,
+    )
+end
+
+function NonMPIConfig(
+    data_path::String,
+    analysis_path::String,
+    nIter::Int,
+    seed::Int,
+    nrank::Int,
+    annot_file::String,
+    annot_dict::String,
+    out_freq::Int,
+    starting_value_dir::String,
+    secondary_starting_value_dir::String,
+    st_path::String,
+    thin::Int,
+    n1::Int,
+    n2::Int,
+    n_con::Int,
+    is_continue::Bool;
+    estimate_vare::Bool=true,
+    estimate_vara::Bool=true,
+    estimate_pi::Bool=true,
+    estimate_Gscale::Bool=true,
+    estGscale_iter::Int=2000,
+)
+    return NonMPIConfig(
+        data_path,
+        analysis_path,
+        nIter,
+        seed,
+        nrank,
+        annot_file,
+        annot_dict,
+        out_freq,
+        starting_value_dir,
+        secondary_starting_value_dir,
+        st_path,
+        thin,
+        n1,
+        n2,
+        n_con,
+        estimate_vare,
+        estimate_vara,
+        estimate_pi,
+        estimate_Gscale,
+        estGscale_iter,
+        is_continue,
+    )
 end
 
 struct MPIConfig
@@ -35,10 +137,52 @@ struct MPIConfig
     thin::Int
     n1::Int
     n2::Int
+    n_con::Int
     estimate_pi::Bool
     fixed_hyperparameters::Bool
     is_continue::Bool
     chr::String
 end
+
+MPIConfig(
+    data_path::String,
+    analysis_path::String,
+    nIter::Int,
+    seed::Int,
+    nrank::Int,
+    annot_file::String,
+    annot_dict::String,
+    out_freq::Int,
+    starting_value_dir::String,
+    secondary_starting_value_dir::String,
+    st_path::String,
+    thin::Int,
+    n1::Int,
+    n2::Int,
+    estimate_pi::Bool,
+    fixed_hyperparameters::Bool,
+    is_continue::Bool,
+    chr::String,
+) = MPIConfig(
+    data_path,
+    analysis_path,
+    nIter,
+    seed,
+    nrank,
+    annot_file,
+    annot_dict,
+    out_freq,
+    starting_value_dir,
+    secondary_starting_value_dir,
+    st_path,
+    thin,
+    n1,
+    n2,
+    0,
+    estimate_pi,
+    fixed_hyperparameters,
+    is_continue,
+    chr,
+)
 
 end

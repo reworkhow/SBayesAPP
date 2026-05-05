@@ -1,6 +1,92 @@
 using Test
 using SBayesAPP
 
+@testset "Named CLI args parse correctly" begin
+    nonmpi_config = SBayesAPP.parse_nonmpi_args([
+        "--data_path", "data/",
+        "--analysis_path", "out/",
+        "--n_iter", "10",
+        "--seed", "1",
+        "--nrank", "1",
+        "--annot_file", "annot.txt",
+        "--annot_dict", "annot_dict",
+        "--out_freq", "5",
+        "--starting_value_dir", "start",
+        "--secondary_starting_value_dir", "second",
+        "--st_path", "st/",
+        "--thin", "2",
+        "--n1", "100",
+        "--n2", "200",
+        "--n_con", "3",
+        "--is_continue", "true",
+        "--estimate_vare", "false",
+        "--estimate_vara", "true",
+        "--estimate_pi", "false",
+        "--estimate_gscale", "false",
+        "--estgscale_iter", "77",
+    ])
+
+    @test nonmpi_config.data_path == "data/"
+    @test nonmpi_config.analysis_path == "out/"
+    @test nonmpi_config.n_con == 3
+    @test nonmpi_config.is_continue
+    @test !nonmpi_config.estimate_vare
+    @test nonmpi_config.estimate_vara
+    @test !nonmpi_config.estimate_pi
+    @test !nonmpi_config.estimate_Gscale
+    @test nonmpi_config.estGscale_iter == 77
+    @test occursin("--analysis_path", string(SBayesAPP.build_nonmpi_cmd(nonmpi_config)))
+
+    mpi_config = SBayesAPP.parse_mpi_args([
+        "--data_path=data/",
+        "--analysis_path=out/",
+        "--n_iter=10",
+        "--seed=1",
+        "--nrank=2",
+        "--annot_file=annot.txt",
+        "--annot_dict=annot_dict",
+        "--out_freq=5",
+        "--starting_value_dir=start",
+        "--secondary_starting_value_dir=second",
+        "--st_path=st/",
+        "--thin=2",
+        "--n1=100",
+        "--n2=200",
+        "--n_con=1",
+        "--estimate_pi=true",
+        "--fixed_hyperparameters=false",
+        "--is_continue=true",
+        "--chr=22",
+    ])
+
+    @test mpi_config.data_path == "data/"
+    @test mpi_config.analysis_path == "out/"
+    @test mpi_config.n_con == 1
+    @test mpi_config.estimate_pi
+    @test !mpi_config.fixed_hyperparameters
+    @test mpi_config.is_continue
+    @test mpi_config.chr == "22"
+    @test occursin("--analysis_path", string(SBayesAPP.build_mpi_cmd(mpi_config)))
+end
+
+@testset "Annotation metadata supports mixed types" begin
+    mktempdir() do tmpdir
+        annot_path = joinpath(tmpdir, "mixed_annotations.txt")
+        write(
+            annot_path,
+            "SNP\tcontinuous1\tcategory1\nrs1\t0.5\t1\nrs2\t0.0\t0\nrs3\t1.5\t1\n",
+        )
+
+        metadata = SBayesAPP.load_annotation_metadata(string(tmpdir, "/"), "mixed_annotations.txt"; nCon=1)
+
+        @test metadata.annotationName == ["continuous1", "category1"]
+        @test metadata.nLoci_annot == [2, 2]
+        @test metadata.nCon == 1
+        @test metadata.nCat == 1
+        @test metadata.annotationType == ["continue", "category"]
+    end
+end
+
 @testset "Non-MPI smoke run" begin
     root = SBayesAPP.repo_root()
     mktempdir() do analysis_dir
@@ -16,9 +102,9 @@ using SBayesAPP
             "XXX",
             "XXX",
             string(joinpath(root, "example", "ST_res"), "/"),
-            300000,
-            300000,
             1,
+            300000,
+            300000,
             false,
         )
 

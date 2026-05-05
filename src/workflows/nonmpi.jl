@@ -23,7 +23,39 @@ function sample_variance_sumstats(ycorr_array, nobs, df, scale)
     return R
 end
 
-function run_nonmpi_workflow(config::ConfigTypes.NonMPIConfig) 
+function build_nonmpi_sampler_settings(config::ConfigTypes.NonMPIConfig)
+    estimate_vara = config.estimate_vara
+    return (
+        estimate_vare=config.estimate_vare,
+        estimate_vara=estimate_vara,
+        estimate_pi=config.estimate_pi,
+        estimate_Gscale=config.estimate_Gscale && estimate_vara,
+        estGscale_iter=config.estGscale_iter,
+    )
+end
+
+function build_nonmpi_run_context(config::ConfigTypes.NonMPIConfig)
+    annotation_metadata = load_annotation_metadata(config.data_path, config.annot_file; nCon=config.n_con)
+    settings = build_nonmpi_sampler_settings(config)
+    start_pi_result = build_start_pi(config.st_path; estimate_pi=settings.estimate_pi)
+    gprior_vec = build_gprior_vec(config.st_path, annotation_metadata.nLoci_annot, start_pi_result.Pi00)
+
+    return (
+        config=config,
+        annotation_metadata=annotation_metadata,
+        settings=settings,
+        startPi=start_pi_result.startPi,
+        Gprior_vec=gprior_vec,
+    )
+end
+
+function run_nonmpi_sampler!(context)
+    config = context.config
+    annotation_metadata = context.annotation_metadata
+    settings = context.settings
+    startPi = context.startPi
+    Gprior_vec = context.Gprior_vec
+
     data_path = config.data_path
     analysis_path = config.analysis_path
     nIter = config.nIter
@@ -40,34 +72,16 @@ function run_nonmpi_workflow(config::ConfigTypes.NonMPIConfig)
     N2 = config.n2
     is_continue = config.is_continue
 
-    annotation_metadata = load_annotation_metadata(data_path, annot_file)
     annotationName = annotation_metadata.annotationName
     nLoci_annot = annotation_metadata.nLoci_annot
     nCon = annotation_metadata.nCon
     nCat = annotation_metadata.nCat
     annotationType = annotation_metadata.annotationType
-    estimate_vare = true
-    estimate_vara = true
-    estimate_pi = true
-    estimate_Gscale = true
-    estGscale_iter = 2000
-
-    start_pi_result = build_start_pi(ST_path)
-    startPi = start_pi_result.startPi
-    Pi00 = start_pi_result.Pi00
-    Gprior_vec = build_gprior_vec(ST_path, nLoci_annot, Pi00)
-
-    function runSBayesAPP(; 
-        startPi=startPi,
-        nIter=nIter, outFreq=outFreq, seed=seed,
-        estimate_vare=estimate_vare, estimate_vara=estimate_vara,
-        estimate_pi=estimate_pi,
-        annotationType=annotationType, annotationName=annotationName,
-        nCon=nCon, nCat=nCat,
-        analysis_path=analysis_path, data_path=data_path,
-        Gprior_vec=Gprior_vec,
-        thin=thin, 
-        estimate_Gscale=estimate_Gscale, estGscale_iter=estGscale_iter)
+    estimate_vare = settings.estimate_vare
+    estimate_vara = settings.estimate_vara
+    estimate_pi = settings.estimate_pi
+    estimate_Gscale = settings.estimate_Gscale
+    estGscale_iter = settings.estGscale_iter
 
     ############################################################################
     #read data in current rank
@@ -243,6 +257,7 @@ function run_nonmpi_workflow(config::ConfigTypes.NonMPIConfig)
         Rprior;
         is_continue=is_continue,
         starting_value_dir=starting_value_dir,
+        fixed_r_dir=estimate_vare ? nothing : secondary_starting_value_dir,
     )
 
     estGscale_iter = min(estGscale_iter, nIter)
@@ -749,7 +764,10 @@ function run_nonmpi_workflow(config::ConfigTypes.NonMPIConfig)
     time_diff = (time_end - time_start).value / 60000 #milliseconds to min
     println("End time: ", time_end)
     println("Running Time (min): ", time_diff)
-    end
+    return nothing
+end
 
-    return @time runSBayesAPP()
+function run_nonmpi_workflow(config::ConfigTypes.NonMPIConfig)
+    context = build_nonmpi_run_context(config)
+    return @time run_nonmpi_sampler!(context)
 end
