@@ -92,7 +92,7 @@ That means the current checked-in code is operating in categorical-annotation mo
 7. `annot_dict`
 8. `outFreq`
 9. `starting_value_dir`
-10. `secondary_starting_value_dir`
+10. `gscale_value_dir`
 11. `ST_path`
 12. `thin`
 13. `is_continue` (optional, default `false`)

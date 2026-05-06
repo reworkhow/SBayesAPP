@@ -69,6 +69,7 @@ function run_nonmpi_sampler!(context)
     estimate_pi = settings.estimate_pi
     estimate_Gscale = settings.estimate_Gscale
     estGscale_iter = settings.estGscale_iter
+    report_pleiotropic_qtl_effect_matrix = config.report_pleiotropic_qtl_effect_matrix
 
     ############################################################################
     #read data in current rank
@@ -78,7 +79,6 @@ function run_nonmpi_sampler!(context)
     end
 
     block_data = load_nonmpi_block_data(config.data_path, config.annot_dict)
-    my_TransformedX_dict = block_data.transformed_x_dict
     my_TransformedY_dict = block_data.transformed_y_dict
     my_blkSNPsIndex_dict = block_data.blkSNPsIndex_dict
     my_blkID = block_data.blkID
@@ -108,7 +108,7 @@ function run_nonmpi_sampler!(context)
         estimate_Gscale=estimate_Gscale,
         is_continue=is_continue,
         starting_value_dir=starting_value_dir,
-        secondary_starting_value_dir=config.secondary_starting_value_dir,
+        gscale_value_dir=config.gscale_value_dir,
     )
     (; A_vec, Ainv_vec, Pi, Rprior, df_R, scale_R, df_G, scale_G_vec, estimate_Gscale) = parameter_state
 
@@ -118,7 +118,7 @@ function run_nonmpi_sampler!(context)
     xpx_dict, xArray_dict, my_anno_matrix_dict = prepare_block_state!(
         my_blkID,
         my_blkSNPsIndex_dict,
-        my_TransformedX_dict,
+        block_data.transformed_x_dict,
         my_anno_matrix_dict,
         nCon,
         annotation_metadata.annotationType,
@@ -147,7 +147,7 @@ function run_nonmpi_sampler!(context)
             nTraits,
             my_blkID,
             my_blkSNPsIndex_dict,
-            my_TransformedX_dict,
+            xArray_dict,
             my_TransformedY_dict,
         )
     end
@@ -176,7 +176,10 @@ function run_nonmpi_sampler!(context)
 
     file_names = nothing
     if my_rank == 0
-        file_names = prepare_mcmc_output_files(analysis_path)
+        file_names = prepare_mcmc_output_files(
+            analysis_path;
+            report_pleiotropic_qtl_effect_matrix=report_pleiotropic_qtl_effect_matrix,
+        )
     end
 
     if my_rank == 0
@@ -186,11 +189,12 @@ function run_nonmpi_sampler!(context)
         println("Number of ranks: ", config.nrank)
         println("estimate_vare=$estimate_vare,estimate_vara=$estimate_vara")
         println("estimate_pi=$estimate_pi")
-        println("estimate_Gscale=$estimate_Gscale")
         println("analysis_path=$analysis_path")
         println("data_path=$(config.data_path)")
+        println("report_pleiotropic_qtl_effect_matrix=$report_pleiotropic_qtl_effect_matrix")
         if estimate_vara
-            println("scale_G_vec is: ", scale_G_vec)
+            println("estimate_Gscale=$estimate_Gscale")
+            println("starting value of scale_G_vec is: ", scale_G_vec)
         end
         println("nCat = $(annotation_metadata.nCat), nCon = $nCon")
         println("thin = $thin")
@@ -211,7 +215,7 @@ function run_nonmpi_sampler!(context)
         Rprior;
         is_continue=is_continue,
         starting_value_dir=starting_value_dir,
-        fixed_r_dir=estimate_vare ? nothing : config.secondary_starting_value_dir,
+        fixed_r_dir=estimate_vare ? nothing : config.starting_value_dir,
     )
 
     estGscale_iter = min(estGscale_iter, nIter)
@@ -224,7 +228,6 @@ function run_nonmpi_sampler!(context)
 
     # ssq_blk_cat Computed as dot(\alpha, \alpha)
     ssq_blk_cat = [zeros(nTraits, nCategory) for _ in 1:my_nblk] # sum of square for different category & trait (saved for enrichment)
-    ssq_cov_blk_cat = [zeros(nCategory) for _ in 1:my_nblk] # sum of square for different category (saved for enrichment)
 
     nLoci_array_vec = [fill(0, nlabel) for c in 1:nCategory] # number of loci (pi) in each category for SNPs in this rank
     # SSE_vec Computed as dot(\beta, \beta) for whole rank
@@ -247,20 +250,11 @@ function run_nonmpi_sampler!(context)
             iIter_scaleG = 1.0 / iter
         end
 
-        # Zero-out per-block arrays
-        for b in 1:my_nblk
-            fill!(varg_blk_cat[b], 0.0)
-            fill!(varg_cov_blk_cat[b], 0.0)
-            fill!(totalvarg_blk[b], 0.0)
-            fill!(ssq_blk_cat[b], 0.0)
-            fill!(ssq_cov_blk_cat[b], 0.0)
-        end
+        need_block_totalvarg = estimate_vare || do_thin
 
-        # Zero-out per-category arrays
+        # Reset per-iteration counters that are updated incrementally.
         for c in 1:nCategory
             fill!(nLoci_array_vec[c], 0.0)
-            fill!(SSE_vec[c], 0.0)
-            fill!(G_vec[c], 0.0)
         end
 
         #for loop for LD blocks
@@ -271,7 +265,7 @@ function run_nonmpi_sampler!(context)
             wArray = my_TransformedY_dict[blk]
             annotationMatb = my_anno_matrix_dict[blk]  #annotation boolean data for current blk, nMarkerb-by-C
             SNPIndexb = my_blkSNPsIndex_dict[blk]
-            nEigenb, nMarkerb = size(my_TransformedX_dict[blk]) # q & nsnpb
+            nEigenb, nMarkerb = size(xArray_vec[end]) # q & nsnpb
             nInd = my_nGWAS_dict[blk] # n
 
             # # initialize xArrayc/xpxc 
@@ -305,8 +299,7 @@ function run_nonmpi_sampler!(context)
                             w[trait] = dot(x, wArray[trait]) + xpxc[marker] * oldα[trait] #w=xj'(ycorr+xj*αj) scaler
                         end
 
-                        TraitOrder = shuffle(1:nTraits)
-                        for k = TraitOrder
+                        for k = 1:nTraits
                             Ginv11 = Ginv[k, k]
                             nok = deleteat!(collect(1:nTraits), k)
                             Ginv12 = Ginv[k, nok] #this is not row vector!!, so this is Ginv21
@@ -369,39 +362,41 @@ function run_nonmpi_sampler!(context)
 
             my_TransformedY_dict[blk] = wArray
             
-            # compute genetic variance and heritability 
-            XAb = xArray_vec[1]
-            what_array_total = [zeros(size(XAb, 1)) for i in 1:nTraits] # used to compute total genetic variance
-            
-            for cat in 1:nCategory
-                if nCon != 0
-                    if cat <= nCon + 1 # continuous group + categorical group (after nCon+1, xArrayc/xpxc will not change)
+            if need_block_totalvarg
+                # compute genetic variance for each category and total genetic variance for current block based on alphaArray
+                XAb = xArray_vec[1]
+                what_array_total = [zeros(size(XAb, 1)) for _ in 1:nTraits] # used to compute total genetic variance
+
+                for cat in 1:nCategory
+                    if nCon != 0 && cat <= nCon + 1 # continuous group + categorical group (after nCon+1, xArrayc/xpxc will not change)
                         XAb = xArray_vec[cat]
                     end
+                    alphaArray_c = [alphaArray[i][(cat-1)*my_nsnp.+SNPIndexb] for i in 1:nTraits]
+                    what_array_c = [XAb * alphaArray_c[traiti] for traiti in 1:nTraits]
+                    for traiti = 1:nTraits
+                        if do_thin
+                            varg_blk_cat[b][traiti, cat] = dot(what_array_c[traiti], what_array_c[traiti]) # genetic variance for different category & trait in bth block
+                        end
+                        if estimate_vare
+                            ssq_blk_cat[b][traiti, cat] = dot(alphaArray_c[traiti], alphaArray_c[traiti])
+                        end
+                        what_array_total[traiti] += what_array_c[traiti]  # add up whati across category to compute total genetic variance
+                    end
+                    if do_thin
+                        varg_cov_blk_cat[b][cat] = dot(what_array_c[1], what_array_c[2]) # genetic covariance for different category in bth block
+                    end
                 end
-                what_array_c = [zeros(size(XAb, 1)) for i in 1:nTraits] # used to compute genetic variance for different category & trait
-                alphaArray_c = [alphaArray[i][(cat-1)*my_nsnp.+SNPIndexb] for i in 1:nTraits]
-                for traiti = 1:nTraits
-                    what_array_c[traiti][:] = XAb * alphaArray_c[traiti]
-                    varg_blk_cat[b][traiti, cat] = dot(what_array_c[traiti], what_array_c[traiti]) # genetic variance for different category & trait in bth block
-                    ssq_blk_cat[b][traiti, cat] = dot(alphaArray_c[traiti], alphaArray_c[traiti])
 
-                    what_array_total[traiti] += what_array_c[traiti]  # add up whati across category to compute total genetic variance
-                end
-                varg_cov_blk_cat[b][cat] = dot(what_array_c[1], what_array_c[2]) # genetic covariance for different category in bth block
-                ssq_cov_blk_cat[b][cat] = dot(alphaArray_c[1], alphaArray_c[2])
-            end
-        
-
-            # total genetic variance
-            for traiti in 1:nTraits
-                for traitj in traiti:nTraits
-                    totalvarg_blk[b][traiti, traitj] = dot(what_array_total[traiti], what_array_total[traitj])
-                    totalvarg_blk[b][traitj, traiti] = totalvarg_blk[b][traiti, traitj]
+                # total genetic variance
+                for traiti in 1:nTraits
+                    for traitj in traiti:nTraits
+                        totalvarg_blk[b][traiti, traitj] = dot(what_array_total[traiti], what_array_total[traitj])
+                        totalvarg_blk[b][traitj, traiti] = totalvarg_blk[b][traiti, traitj]
+                    end
                 end
             end
            
-            if estimate_vare == true
+            if estimate_vare
                 # sample bivariate residual variance R 
                 sampled_R = sample_variance_sumstats(wArray, nEigenb, df_R, scale_R)
                 R_blk[b] = sampled_R
@@ -420,14 +415,9 @@ function run_nonmpi_sampler!(context)
             end 
         end # end block loop 
 
-        # summing residual variance
-        if estimate_vare == true
-            R_blk_sum = sum(R_blk)
-        end
-
         # get true A matrix by alphaArray
         # use only pleiotropic markers to compute QTL effect variance matrix
-        if do_thin 
+        if do_thin && report_pleiotropic_qtl_effect_matrix
             Atrue_vec = [zeros(nTraits, nTraits) for c in 1:nCategory]
             nQTL = zeros(nCategory)
             for cat = 1:nCategory
@@ -450,7 +440,7 @@ function run_nonmpi_sampler!(context)
                         Atrue_cat = Atrue_vec[cat] / nQTL[cat]
                     end
                     meanA[cat] += (Atrue_cat - meanA[cat]) * iIter
-                    if estimate_vara == true
+                    if estimate_vara 
                         meanA2[cat] += (Atrue_cat .^ 2 - meanA2[cat]) * iIter
                     end
                     # correlation values
@@ -573,6 +563,11 @@ function run_nonmpi_sampler!(context)
         if estimate_vara == true 
             Ainv_vec[:] = [inv(A_vec[cat]) for cat in 1:nCategory]
         end
+
+        # summing residual variance
+        if estimate_vare
+            R_blk_sum = sum(R_blk)
+        end
         
         # sampling residual variance
         if estimate_vare
@@ -600,9 +595,6 @@ function run_nonmpi_sampler!(context)
                     open(file_names["beta_effects_variance"], "a") do io
                         writedlm(io, A_vec[cat], ',')
                     end
-                    open(file_names["genetic_effects_variance"], "a") do io
-                        writedlm(io, G_vec[cat], ',')
-                    end
                 end
                 
                 iout += 1
@@ -612,6 +604,11 @@ function run_nonmpi_sampler!(context)
                 if my_rank == 0
                     open(file_names["total_genetic_effects_variance"], "a") do io
                         writedlm(io, totalvarg, ',')
+                    end
+                    for cat in 1:nCategory
+                        open(file_names["genetic_effects_variance"], "a") do io
+                            writedlm(io, G_vec[cat], ',')
+                        end
                     end
                 end
                 iter_after_burnin_thin_index += 1
@@ -641,17 +638,21 @@ function run_nonmpi_sampler!(context)
     
     # save posterior mean
     for cat in 1:nCategory
-        # marker effect variance 
-        writedlm(analysis_path * "estA" * string(cat) * ".txt", meanA[cat])
-        meanAcor[cat] = mean(mcmcAtruecor_c[:, cat][.!isnan.(mcmcAtruecor_c[:, cat])])
         # beta effect variance
         writedlm(analysis_path * "estB" * string(cat) * ".txt", meanB[cat])
         meanBcor[cat] = mean(mcmcBcor_c[:, cat][.!isnan.(mcmcBcor_c[:, cat])])
-        if estimate_vara == true 
+        if report_pleiotropic_qtl_effect_matrix
+            # marker effect variance 
+            writedlm(analysis_path * "estA" * string(cat) * ".txt", meanA[cat])
+            meanAcor[cat] = mean(mcmcAtruecor_c[:, cat][.!isnan.(mcmcAtruecor_c[:, cat])])
+        end
+        if estimate_vara
             writedlm(analysis_path * "estB_std" * string(cat) * ".txt", sqrt.((meanB2[cat] .- (meanB[cat] .^ 2))))
-            writedlm(analysis_path * "estA_std" * string(cat) * ".txt", sqrt.((meanA2[cat] .- (meanA[cat] .^ 2))))
             meanBcor2[cat] = mean(mcmcBcor_c[:, cat][.!isnan.(mcmcBcor_c[:, cat])] .^ 2)
-            meanAcor2[cat] = mean(mcmcAtruecor_c[:, cat][.!isnan.(mcmcAtruecor_c[:, cat])].^2)
+            if report_pleiotropic_qtl_effect_matrix
+                writedlm(analysis_path * "estA_std" * string(cat) * ".txt", sqrt.((meanA2[cat] .- (meanA[cat] .^ 2))))
+                meanAcor2[cat] = mean(mcmcAtruecor_c[:, cat][.!isnan.(mcmcAtruecor_c[:, cat])].^2)
+            end
         end
     end
 
@@ -663,15 +664,18 @@ function run_nonmpi_sampler!(context)
     writedlm(analysis_path * "mcmcGcor_c.txt", mcmcGcor_c)
     writedlm(analysis_path * "mcmcGcor_total.txt", mcmcGcor_total)
 
-    # save mcmcAtruecor_c
-    writedlm(analysis_path * "mcmcAtruecor_c.txt", mcmcAtruecor_c)
-
-    writedlm(analysis_path * "estAcor.txt", meanAcor)
     writedlm(analysis_path * "estBcor.txt", meanBcor)
+    if report_pleiotropic_qtl_effect_matrix
+        # save mcmcAtruecor_c
+        writedlm(analysis_path * "mcmcAtruecor_c.txt", mcmcAtruecor_c)
+        writedlm(analysis_path * "estAcor.txt", meanAcor)
+    end
     
     if estimate_vara == true
         writedlm(analysis_path * "estBcor_std.txt", sqrt.(abs.(meanBcor2 .- (meanBcor .^ 2))))
-        writedlm(analysis_path * "estAcor_std.txt", sqrt.(abs.(meanAcor2 .- (meanAcor .^ 2))))
+        if report_pleiotropic_qtl_effect_matrix
+            writedlm(analysis_path * "estAcor_std.txt", sqrt.(abs.(meanAcor2 .- (meanAcor .^ 2))))
+        end
     end
 
     # genetic variance components

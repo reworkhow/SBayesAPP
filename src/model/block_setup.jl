@@ -8,7 +8,7 @@ function reorder_block_snp_indices!(blkID, blkSNPsIndex_dict)
             blkSNPsIndex_dict[key] = blkSNPsIndex_dict[key] .+ cumulative_snp_count
         end
     end
-    return blkSNPsIndex_dict
+    return nothing
 end
 
 function build_block_designs(transformed_x_dict, anno_matrix_dict, nCon)

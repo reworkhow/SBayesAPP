@@ -14,7 +14,7 @@ function initialize_nonmpi_parameter_state(
     estimate_Gscale=true,
     is_continue=false,
     starting_value_dir="",
-    secondary_starting_value_dir="",
+    gscale_value_dir="",
 )
     A_vec = [zeros(2, 2) for _ in 1:nCategory]
     if is_continue
@@ -49,16 +49,16 @@ function initialize_nonmpi_parameter_state(
     scale_G_vec = nothing
     if my_rank == 0 && estimate_vara
         df_G = 4 + nTraits
-        if is_continue && estimate_Gscale
+        if is_continue && !isempty(gscale_value_dir)
             scale_G_vec = [zeros(2, 2) for _ in 1:nCategory]
             for category in 1:nCategory
-                scale_G_vec[category] = readdlm(secondary_starting_value_dir * "scale_G$category.txt")
+                scale_G_vec[category] = readdlm(gscale_value_dir * "scale_G$category.txt")
             end
             estimate_Gscale = false
-            println("scale_G_vec is fixed as saved in $secondary_starting_value_dir")
+            println("scale_G_vec is fixed as saved in $gscale_value_dir")
         else
             scale_G_vec = [Gprior_vec[category] * (df_G - nTraits - 1) for category in 1:nCategory]
-            println("scale_G_vec is computed by ST h2.")
+            println("starting value of scale_G_vec is computed by ST h2.")
         end
     end
 

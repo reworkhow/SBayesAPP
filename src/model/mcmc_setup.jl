@@ -83,14 +83,16 @@ function initialize_rank0_mcmc_state(
     )
 end
 
-function prepare_mcmc_output_files(analysis_path)
+function prepare_mcmc_output_files(analysis_path; report_pleiotropic_qtl_effect_matrix=true)
     file_names = Dict(
         "pi" => analysis_path * "MCMC_samples_pi.txt",
         "beta_effects_variance" => analysis_path * "MCMC_samples_beta_effects_variance.txt",
         "genetic_effects_variance" => analysis_path * "MCMC_samples_genetic_effects_variance.txt",
-        "marker_effects_variance" => analysis_path * "MCMC_samples_marker_effects_variance.txt",
         "total_genetic_effects_variance" => analysis_path * "MCMC_samples_total_genetic_effects_variance.txt",
     )
+    if report_pleiotropic_qtl_effect_matrix
+        file_names["marker_effects_variance"] = analysis_path * "MCMC_samples_marker_effects_variance.txt"
+    end
     for path in values(file_names)
         if isfile(path)
             println("File $path already exists! It will be overwritten.")

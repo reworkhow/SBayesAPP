@@ -65,10 +65,10 @@ using SBayesAPP
             if is_continue && estimate_Gscale
                 scale_G_vec = [zeros(2, 2) for c in 1:nCategory]
                 for c in 1:nCategory
-                    scale_G_vec[c] = readdlm(secondary_starting_value_dir * "scale_G$c.txt")
+                    scale_G_vec[c] = readdlm(gscale_value_dir * "scale_G$c.txt")
                 end
                 estimate_Gscale = false # estimate_Gscale = false for continuous analysis
-                println("scale_G_vec is fixed as saved in $secondary_starting_value_dir")
+                println("scale_G_vec is fixed as saved in $gscale_value_dir")
             else
                 scale_G_vec = [Gprior_vec[c] * (df_G - nTraits - 1) for c in 1:nCategory]
                 println("scale_G_vec is computed by ST h2.")
@@ -111,7 +111,7 @@ using SBayesAPP
             nTraits,
             my_blkID,
             my_blkSNPsIndex_dict,
-            my_TransformedX_dict,
+            xArray_dict,
             my_TransformedY_dict,
         )
     end
@@ -235,20 +235,11 @@ using SBayesAPP
             iIter_scaleG = 1.0 / iter
         end
 
-        # Zero-out per-block arrays
-        for b in 1:my_nblk
-            fill!(varg_blk_cat[b], 0.0)
-            fill!(varg_cov_blk_cat[b], 0.0)
-            fill!(totalvarg_blk[b], 0.0)
-            fill!(ssq_blk_cat[b], 0.0)
-            fill!(ssq_cov_blk_cat[b], 0.0)
-        end
+        need_block_totalvarg = estimate_vare || do_thin
 
-        # Zero-out per-category arrays
+        # Reset per-iteration counters that are updated incrementally.
         for c in 1:nCategory
             fill!(nLoci_array_vec[c], 0.0)
-            fill!(SSE_vec[c], 0.0)
-            fill!(G_vec[c], 0.0)
         end
 
         #for loop for LD blocks
@@ -259,7 +250,7 @@ using SBayesAPP
             wArray = my_TransformedY_dict[blk]
             annotationMatb = my_anno_matrix_dict[blk]  #annotation boolean data for current blk, nMarkerb-by-C
             SNPIndexb = my_blkSNPsIndex_dict[blk]
-            nEigenb, nMarkerb = size(my_TransformedX_dict[blk]) # q & nsnpb
+            nEigenb, nMarkerb = size(xArray_vec[end]) # q & nsnpb
             nInd = my_nGWAS_dict[blk] # n
 
             # # initialize xArrayc/xpxc 
@@ -364,35 +355,38 @@ using SBayesAPP
 
             my_TransformedY_dict[blk] = wArray
             
-            # compute genetic variance and heritability 
-            XAb = xArray_vec[1]
-            what_array_total = [zeros(size(XAb, 1)) for i in 1:nTraits] # used to compute total genetic variance
-            
-            for cat in 1:nCategory
-                if nCon != 0
-                    if cat <= nCon + 1 # continuous group + categorical group (after nCon+1, xArrayc/xpxc will not change)
+            if need_block_totalvarg
+                # compute genetic variance and heritability 
+                XAb = xArray_vec[1]
+                what_array_total = [zeros(size(XAb, 1)) for _ in 1:nTraits] # used to compute total genetic variance
+
+                for cat in 1:nCategory
+                    if nCon != 0 && cat <= nCon + 1 # continuous group + categorical group (after nCon+1, xArrayc/xpxc will not change)
                         XAb = xArray_vec[cat]
                     end
+                    alphaArray_c = [alphaArray[i][(cat-1)*my_nsnp.+SNPIndexb] for i in 1:nTraits]
+                    what_array_c = [XAb * alphaArray_c[traiti] for traiti in 1:nTraits]
+                    for traiti = 1:nTraits
+                        if do_thin
+                            varg_blk_cat[b][traiti, cat] = dot(what_array_c[traiti], what_array_c[traiti]) # genetic variance for different category & trait in bth block
+                        end
+                        if estimate_vare == true
+                            ssq_blk_cat[b][traiti, cat] = dot(alphaArray_c[traiti], alphaArray_c[traiti])
+                        end
+                        what_array_total[traiti] += what_array_c[traiti]  # add up whati across category to compute total genetic variance
+                    end
+                    if do_thin
+                        varg_cov_blk_cat[b][cat] = dot(what_array_c[1], what_array_c[2]) # genetic covariance for different category in bth block
+                        ssq_cov_blk_cat[b][cat] = dot(alphaArray_c[1], alphaArray_c[2])
+                    end
                 end
-                what_array_c = [zeros(size(XAb, 1)) for i in 1:nTraits] # used to compute genetic variance for different category & trait
-                alphaArray_c = [alphaArray[i][(cat-1)*my_nsnp.+SNPIndexb] for i in 1:nTraits]
-                for traiti = 1:nTraits
-                    what_array_c[traiti][:] = XAb * alphaArray_c[traiti]
-                    varg_blk_cat[b][traiti, cat] = dot(what_array_c[traiti], what_array_c[traiti]) # genetic variance for different category & trait in bth block
-                    ssq_blk_cat[b][traiti, cat] = dot(alphaArray_c[traiti], alphaArray_c[traiti])
 
-                    what_array_total[traiti] += what_array_c[traiti]  # add up whati across category to compute total genetic variance
-                end
-                varg_cov_blk_cat[b][cat] = dot(what_array_c[1], what_array_c[2]) # genetic covariance for different category in bth block
-                ssq_cov_blk_cat[b][cat] = dot(alphaArray_c[1], alphaArray_c[2])
-            end
-        
-
-            # total genetic variance
-            for traiti in 1:nTraits
-                for traitj in traiti:nTraits
-                    totalvarg_blk[b][traiti, traitj] = dot(what_array_total[traiti], what_array_total[traitj])
-                    totalvarg_blk[b][traitj, traiti] = totalvarg_blk[b][traiti, traitj]
+                # total genetic variance
+                for traiti in 1:nTraits
+                    for traitj in traiti:nTraits
+                        totalvarg_blk[b][traiti, traitj] = dot(what_array_total[traiti], what_array_total[traitj])
+                        totalvarg_blk[b][traitj, traiti] = totalvarg_blk[b][traiti, traitj]
+                    end
                 end
             end
            
@@ -600,9 +594,6 @@ using SBayesAPP
                     open(file_names["beta_effects_variance"], "a") do io
                         writedlm(io, A_vec[cat], ',')
                     end
-                    open(file_names["genetic_effects_variance"], "a") do io
-                        writedlm(io, G_vec[cat], ',')
-                    end
                 end
                 
                 iout += 1
@@ -612,6 +603,11 @@ using SBayesAPP
                 if my_rank == 0
                     open(file_names["total_genetic_effects_variance"], "a") do io
                         writedlm(io, totalvarg, ',')
+                    end
+                    for cat in 1:nCategory
+                        open(file_names["genetic_effects_variance"], "a") do io
+                            writedlm(io, G_vec[cat], ',')
+                        end
                     end
                 end
                 iter_after_burnin_thin_index += 1

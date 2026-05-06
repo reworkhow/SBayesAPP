@@ -12,7 +12,7 @@ struct NonMPIConfig
     annot_dict::String
     out_freq::Int
     starting_value_dir::String
-    secondary_starting_value_dir::String
+    gscale_value_dir::String
     st_path::String
     thin::Int
     n1::Int
@@ -23,6 +23,7 @@ struct NonMPIConfig
     estimate_pi::Bool
     estimate_Gscale::Bool
     estGscale_iter::Int
+    report_pleiotropic_qtl_effect_matrix::Bool
     is_continue::Bool
 end
 
@@ -36,7 +37,7 @@ function NonMPIConfig(
     annot_dict::String,
     out_freq::Int,
     starting_value_dir::String,
-    secondary_starting_value_dir::String,
+    gscale_value_dir::String,
     st_path::String,
     thin::Int,
     n1::Int,
@@ -47,7 +48,8 @@ function NonMPIConfig(
     estimate_vara::Bool=true,
     estimate_pi::Bool=true,
     estimate_Gscale::Bool=true,
-    estGscale_iter::Int=2000,
+    estGscale_iter::Int=500,
+    report_pleiotropic_qtl_effect_matrix::Bool=true,
 )
     return NonMPIConfig(
         data_path,
@@ -59,7 +61,7 @@ function NonMPIConfig(
         annot_dict,
         out_freq,
         starting_value_dir,
-        secondary_starting_value_dir,
+        gscale_value_dir,
         st_path,
         thin,
         n1,
@@ -70,6 +72,7 @@ function NonMPIConfig(
         estimate_pi,
         estimate_Gscale,
         estGscale_iter,
+        report_pleiotropic_qtl_effect_matrix,
         is_continue,
     )
 end
@@ -84,7 +87,7 @@ function NonMPIConfig(
     annot_dict::String,
     out_freq::Int,
     starting_value_dir::String,
-    secondary_starting_value_dir::String,
+    gscale_value_dir::String,
     st_path::String,
     thin::Int,
     n1::Int,
@@ -95,7 +98,8 @@ function NonMPIConfig(
     estimate_vara::Bool=true,
     estimate_pi::Bool=true,
     estimate_Gscale::Bool=true,
-    estGscale_iter::Int=2000,
+    estGscale_iter::Int=500,
+    report_pleiotropic_qtl_effect_matrix::Bool=true,
 )
     return NonMPIConfig(
         data_path,
@@ -107,7 +111,7 @@ function NonMPIConfig(
         annot_dict,
         out_freq,
         starting_value_dir,
-        secondary_starting_value_dir,
+        gscale_value_dir,
         st_path,
         thin,
         n1,
@@ -118,6 +122,7 @@ function NonMPIConfig(
         estimate_pi,
         estimate_Gscale,
         estGscale_iter,
+        report_pleiotropic_qtl_effect_matrix,
         is_continue,
     )
 end

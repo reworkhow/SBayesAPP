@@ -67,7 +67,7 @@ julia --project=. src/app_nonMPI.jl \
   --annot_dict anno_matrix_dict \
   --out_freq 100 \
   --starting_value_dir XXX \
-  --secondary_starting_value_dir XXX \
+  --gscale_value_dir XXX \
   --st_path example/ST_res/ \
   --thin 50 \
   --n1 300000 \
@@ -89,7 +89,7 @@ julia --project=. scripts/run_nonmpi.jl \
   --annot_dict anno_matrix_dict \
   --out_freq 100 \
   --starting_value_dir XXX \
-  --secondary_starting_value_dir XXX \
+  --gscale_value_dir XXX \
   --st_path example/ST_res/ \
   --thin 50 \
   --n1 300000 \
@@ -103,8 +103,11 @@ Notes:
 - The output directory should exist before launching `src/app_nonMPI.jl` directly.
 - `annot_file` is interpreted relative to `data_path`, which is why the example uses `annotation_df.txt` and keeps a copy inside `example/SBayesAPP_input_first10blks/`.
 - The optional `--n_con` argument tells SBayesAPP how many annotation columns, starting from the left after `SNP`, should be treated as continuous. Any remaining annotation columns are treated as categorical.
-- Non-MPI commands can optionally add `--estimate_vare`, `--estimate_vara`, `--estimate_pi`, `--estimate_gscale`, and `--estgscale_iter`. If `--estimate_vare false`, `secondary_starting_value_dir` should point to a directory containing `estR.txt`.
-- `STARTING_VALUE_DIR` and `SECONDARY_STARTING_VALUE_DIR` are placeholders for continuation or fixed-hyperparameter workflows. They are not used in the provided fresh example run.
+- Non-MPI commands can optionally add `--estimate_vare`, `--estimate_vara`, `--estimate_pi`, `--estimate_gscale`, `--estgscale_iter`, and `--report_pleiotropic_qtl_effect_matrix`.
+- `--gscale_value_dir` is the non-MPI directory used to load fixed `scale_G*.txt` files when continuing with saved Gscale values.
+- Set `--report_pleiotropic_qtl_effect_matrix false` to skip the pleiotropic QTL effect-matrix reporting outputs (`MCMC_samples_marker_effects_variance.txt`, `estA*.txt`, `mcmcAtruecor_c.txt`, and related summaries).
+- If `--estimate_vare false`, `starting_value_dir` should point to a directory containing `estR.txt`.
+- `STARTING_VALUE_DIR` and `GSCALE_VALUE_DIR` are placeholders for continuation or fixed-Gscale workflows. They are not used in the provided fresh example run.
 
 ## MPI run
 

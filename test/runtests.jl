@@ -50,7 +50,7 @@ end
         "--annot_dict", "annot_dict",
         "--out_freq", "5",
         "--starting_value_dir", "start",
-        "--secondary_starting_value_dir", "second",
+        "--gscale_value_dir", "second",
         "--st_path", "st/",
         "--thin", "2",
         "--n1", "100",
@@ -62,6 +62,7 @@ end
         "--estimate_pi", "false",
         "--estimate_gscale", "false",
         "--estgscale_iter", "77",
+        "--report_pleiotropic_qtl_effect_matrix", "false",
     ])
 
     @test nonmpi_config.data_path == "data/"
@@ -70,10 +71,14 @@ end
     @test nonmpi_config.is_continue
     @test !nonmpi_config.estimate_vare
     @test nonmpi_config.estimate_vara
+    @test nonmpi_config.gscale_value_dir == "second"
     @test !nonmpi_config.estimate_pi
     @test !nonmpi_config.estimate_Gscale
     @test nonmpi_config.estGscale_iter == 77
+    @test !nonmpi_config.report_pleiotropic_qtl_effect_matrix
     @test occursin("--analysis_path", string(SBayesAPP.build_nonmpi_cmd(nonmpi_config)))
+    @test occursin("--gscale_value_dir", string(SBayesAPP.build_nonmpi_cmd(nonmpi_config)))
+    @test occursin("--report_pleiotropic_qtl_effect_matrix false", string(SBayesAPP.build_nonmpi_cmd(nonmpi_config)))
 
     mpi_config = SBayesAPP.parse_mpi_args([
         "--data_path=data/",
@@ -152,6 +157,7 @@ end
             300000,
             300000,
             false,
+            report_pleiotropic_qtl_effect_matrix=false,
         )
 
         mkpath(config.analysis_path)
@@ -161,5 +167,8 @@ end
         @test isfile(joinpath(analysis_dir, "MCMC_samples_pi.txt"))
         @test isfile(joinpath(analysis_dir, "estPi1.txt"))
         @test isfile(joinpath(analysis_dir, "estR.txt"))
+        @test !isfile(joinpath(analysis_dir, "MCMC_samples_marker_effects_variance.txt"))
+        @test !isfile(joinpath(analysis_dir, "mcmcAtruecor_c.txt"))
+        @test !isfile(joinpath(analysis_dir, "estA1.txt"))
     end
 end 

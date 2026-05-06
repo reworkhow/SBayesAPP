@@ -313,7 +313,7 @@ function runMPI(;
             nTraits,
             my_blkID,
             my_blkSNPsIndex_dict,
-            my_TransformedX_dict,
+            xArray_dict,
             my_TransformedY_dict,
         )
     end
@@ -471,7 +471,7 @@ function runMPI(;
             wArray = my_TransformedY_dict[blk]
             annotationMatb = my_anno_matrix_dict[blk]  #annotation boolean data for current blk, nMarkerb-by-C
             SNPIndexb = my_blkSNPsIndex_dict[blk]
-            nEigenb, nMarkerb = size(my_TransformedX_dict[blk]) # q & nsnpb
+            nEigenb, nMarkerb = size(xArray_vec[end]) # q & nsnpb
             nInd = my_nGWAS_dict[blk] # n
 
             # # initialize xArrayc/xpxc 
