@@ -13,8 +13,18 @@
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SUBMIT_DIR="${SLURM_SUBMIT_DIR:-$(pwd)}"
+
+if [[ -f "$SUBMIT_DIR/run.sh" ]]; then
+	SCRIPT_DIR="$SUBMIT_DIR"
+elif [[ -f "$SUBMIT_DIR/script/run.sh" ]]; then
+	SCRIPT_DIR="$SUBMIT_DIR/script"
+else
+	echo "Could not locate run.sh from submit directory: $SUBMIT_DIR" >&2
+	exit 1
+fi
+
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 cd "$REPO_ROOT"
-bash "$REPO_ROOT/script/run.sh"
+bash "$SCRIPT_DIR/run.sh"
