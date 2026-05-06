@@ -42,7 +42,7 @@ using SBayesAPP
 
     if is_continue
         Pi_starting_path = starting_value_dir * "pi_last_sample/"
-        Pi = [Dict{Vector{Float64},Float64}() for c in 1:nCategory]
+        Pi = [Dict{NTuple{2,Float64},Float64}() for c in 1:nCategory]
         for c in 1:nCategory
             Pi[c] = read_to_dict(Pi_starting_path * "pi_$c.txt")
         end
@@ -189,7 +189,7 @@ using SBayesAPP
     end
     println("In rank$my_rank, there are $my_nblk LD blocks, and $my_nsnp SNPs in total.")
 
-    nlabel = 4 # number of labels for Pi: [1.0; 1.0], [1.0; 0.0], [0.0; 1.0], [0.0; 0.0]
+    nlabel = 4 # number of labels for Pi: (1.0, 1.0), (1.0, 0.0), (0.0, 1.0), (0.0, 0.0)
     iout = 1 
     iter_after_burnin_thin_index = 1
     last_saved_iter = nIter - (nIter - burnin) % outFreq
@@ -322,8 +322,8 @@ using SBayesAPP
                             d1[k] = 1.0
 
                             #sample δj
-                            logDelta0 = -0.5 * (log(Ginv11) - gHat0^2 * Ginv11) + log(BigPi[d0]) #logPi
-                            logDelta1 = -0.5 * (log(C11) - gHat1^2 * C11) + log(BigPi[d1]) #logPiComp
+                            logDelta0 = -0.5 * (log(Ginv11) - gHat0^2 * Ginv11) + log(BigPi[SBayesAPP.pi_key(d0)]) #logPi
+                            logDelta1 = -0.5 * (log(C11) - gHat1^2 * C11) + log(BigPi[SBayesAPP.pi_key(d1)]) #logPiComp
                             probDelta1 = 1.0 / (1.0 + exp(logDelta0 - logDelta1))
 
                             #sample marker effects
@@ -342,12 +342,12 @@ using SBayesAPP
                         end
 
                         # add to nLoci_array_vec based on δ
-                        pi_index = 1
-                        for key in keys(BigPi)
-                            if δ == key
+                        state_key = SBayesAPP.pi_key(δ)
+                        for (pi_index, key) in enumerate(SBayesAPP.pi_key_order())
+                            if state_key == key
                                 nLoci_array_vec[cat][pi_index] += 1
+                                break
                             end
-                            pi_index += 1
                         end
 
                         for trait = 1:nTraits
@@ -467,9 +467,9 @@ using SBayesAPP
                 tempPi_vec[cat] = rand(Dirichlet(nLoci_array_vec[cat] .+ 1))
                 if do_thin
                     tempPi2 = tempPi_vec[cat] .^ 2
-                    for (iCategori, i) in enumerate(keys(Pi[cat]))
-                        mean_pi[cat][i] += (tempPi_vec[cat][iCategori] - mean_pi[cat][i]) * iIter
-                        mean_pi2[cat][i] += (tempPi2[iCategori] - mean_pi2[cat][i]) * iIter
+                    for (iCategori, key) in enumerate(SBayesAPP.pi_key_order())
+                        mean_pi[cat][key] += (tempPi_vec[cat][iCategori] - mean_pi[cat][key]) * iIter
+                        mean_pi2[cat][key] += (tempPi2[iCategori] - mean_pi2[cat][key]) * iIter
                     end
                 end   
             end
@@ -478,10 +478,8 @@ using SBayesAPP
             # reformat the tempPi_vec into the Pi dictionary
             ############################################################
             for cat = 1:nCategory
-                iCategori = 1
-                for i in keys(Pi[cat])
-                    Pi[cat][i] = tempPi_vec[cat][iCategori] #annotation specific pi
-                    iCategori = iCategori + 1
+                for (iCategori, key) in enumerate(SBayesAPP.pi_key_order())
+                    Pi[cat][key] = tempPi_vec[cat][iCategori] #annotation specific pi
                 end
             end
         end
@@ -597,7 +595,7 @@ using SBayesAPP
 
                 for cat = 1:nCategory
                     open(file_names["pi"], "a") do io
-                        writedlm(io, Pi[cat], ',')
+                        SBayesAPP.write_pi_dict(io, Pi[cat])
                     end
                     open(file_names["beta_effects_variance"], "a") do io
                         writedlm(io, A_vec[cat], ',')
@@ -636,9 +634,7 @@ using SBayesAPP
                 # Save Pi from last sample
                 mkpath(analysis_path * "pi_last_sample/")
                 for c in 1:nCategory
-                    open(analysis_path * "pi_last_sample/pi_$(c).txt", "w") do io
-                        writedlm(io, Pi[c], ',')
-                    end
+                    SBayesAPP.write_pi_dict(analysis_path * "pi_last_sample/pi_$(c).txt", Pi[c])
                 end
                 ### Save delta (last column of mcmc_Delta)
                 mkpath(analysis_path * "last_sample_delta/")
@@ -716,12 +712,12 @@ using SBayesAPP
     end
     if estimate_pi == true
         for cat in 1:nCategory
-            writedlm(analysis_path * "estPi" * string(cat) * ".txt", mean_pi[cat])
+            SBayesAPP.write_pi_dict(analysis_path * "estPi" * string(cat) * ".txt", mean_pi[cat])
             std_pi = deepcopy(mean_pi[cat])
-            for i in keys(mean_pi[cat])
-                std_pi[i] = sqrt(mean_pi2[cat][i] - mean_pi[cat][i]^2)
+            for key in SBayesAPP.pi_key_order()
+                std_pi[key] = sqrt(mean_pi2[cat][key] - mean_pi[cat][key]^2)
             end
-            writedlm(analysis_path * "estPi_std" * string(cat) * ".txt", std_pi)
+            SBayesAPP.write_pi_dict(analysis_path * "estPi_std" * string(cat) * ".txt", std_pi)
         end
     end
 

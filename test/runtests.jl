@@ -1,6 +1,44 @@
 using Test
 using SBayesAPP
 
+@testset "Pi dict IO is consistent" begin
+    pi_dict = Dict(
+        (0.0, 0.0) => 0.1,
+        (1.0, 1.0) => 0.2,
+        (1.0, 0.0) => 0.3,
+        (0.0, 1.0) => 0.4,
+    )
+
+    mktempdir() do tmpdir
+        canonical_path = joinpath(tmpdir, "pi_canonical.txt")
+        SBayesAPP.write_pi_dict(canonical_path, pi_dict)
+        canonical_read = SBayesAPP.read_to_dict(canonical_path)
+        for key in ((0.0, 0.0), (1.0, 1.0), (1.0, 0.0), (0.0, 1.0))
+            @test canonical_read[key] == pi_dict[key]
+        end
+
+        legacy_tab_path = joinpath(tmpdir, "pi_legacy_tab.txt")
+        write(
+            legacy_tab_path,
+            "[0.0, 0.0]\t0.1\n[1.0, 1.0]\t0.2\n[1.0, 0.0]\t0.3\n[0.0, 1.0]\t0.4\n",
+        )
+        legacy_tab_read = SBayesAPP.read_to_dict(legacy_tab_path)
+        for key in ((0.0, 0.0), (1.0, 1.0), (1.0, 0.0), (0.0, 1.0))
+            @test legacy_tab_read[key] == pi_dict[key]
+        end
+
+        legacy_csv_path = joinpath(tmpdir, "pi_legacy_csv.txt")
+        write(
+            legacy_csv_path,
+            "[0.0,0.0],0.1\n[1.0,1.0],0.2\n[1.0,0.0],0.3\n[0.0,1.0],0.4\n",
+        )
+        legacy_csv_read = SBayesAPP.read_to_dict(legacy_csv_path)
+        for key in ((0.0, 0.0), (1.0, 1.0), (1.0, 0.0), (0.0, 1.0))
+            @test legacy_csv_read[key] == pi_dict[key]
+        end
+    end
+end
+
 @testset "Named CLI args parse correctly" begin
     nonmpi_config = SBayesAPP.parse_nonmpi_args([
         "--data_path", "data/",
@@ -67,6 +105,14 @@ using SBayesAPP
     @test mpi_config.is_continue
     @test mpi_config.chr == "22"
     @test occursin("--analysis_path", string(SBayesAPP.build_mpi_cmd(mpi_config)))
+
+    @test_throws ErrorException SBayesAPP.parse_nonmpi_args([
+        "data/", "out/", "10", "1", "1", "annot.txt", "annot_dict", "5", "start", "second", "st/", "2", "100", "200", "false",
+    ])
+
+    @test_throws ErrorException SBayesAPP.parse_mpi_args([
+        "data/", "out/", "10", "1", "2", "annot.txt", "annot_dict", "5", "start", "second", "st/", "2", "100", "200", "true",
+    ])
 end
 
 @testset "Annotation metadata supports mixed types" begin

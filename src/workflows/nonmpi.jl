@@ -53,30 +53,17 @@ function run_nonmpi_sampler!(context)
     config = context.config
     annotation_metadata = context.annotation_metadata
     settings = context.settings
-    startPi = context.startPi
     Gprior_vec = context.Gprior_vec
 
-    data_path = config.data_path
     analysis_path = config.analysis_path
     nIter = config.nIter
-    seed = config.seed
-    nrank = config.nrank
-    annot_file = config.annot_file
-    annot_dict = config.annot_dict
     outFreq = config.out_freq
     starting_value_dir = config.starting_value_dir
-    secondary_starting_value_dir = config.secondary_starting_value_dir
-    ST_path = config.st_path
     thin = config.thin
-    N1 = config.n1
-    N2 = config.n2
     is_continue = config.is_continue
 
-    annotationName = annotation_metadata.annotationName
     nLoci_annot = annotation_metadata.nLoci_annot
     nCon = annotation_metadata.nCon
-    nCat = annotation_metadata.nCat
-    annotationType = annotation_metadata.annotationType
     estimate_vare = settings.estimate_vare
     estimate_vara = settings.estimate_vara
     estimate_pi = settings.estimate_pi
@@ -86,11 +73,11 @@ function run_nonmpi_sampler!(context)
     ############################################################################
     #read data in current rank
     ############################################################################
-    if nrank == 1
+    if config.nrank == 1
         my_rank = 0
     end
 
-    block_data = load_nonmpi_block_data(data_path, annot_dict)
+    block_data = load_nonmpi_block_data(config.data_path, config.annot_dict)
     my_TransformedX_dict = block_data.transformed_x_dict
     my_TransformedY_dict = block_data.transformed_y_dict
     my_blkSNPsIndex_dict = block_data.blkSNPsIndex_dict
@@ -106,35 +93,27 @@ function run_nonmpi_sampler!(context)
         burnin = floor(Int, nIter * 0.4)
     end
 
-    nCategory = nCat + nCon
+    nCategory = annotation_metadata.nCat + nCon
     nTraits = 2
     parameter_state = initialize_nonmpi_parameter_state(
         my_rank,
         nCategory,
         nTraits,
         Gprior_vec,
-        startPi;
-        n1=N1,
-        n2=N2,
+        context.startPi;
+        n1=config.n1,
+        n2=config.n2,
         estimate_vare=estimate_vare,
         estimate_vara=estimate_vara,
         estimate_Gscale=estimate_Gscale,
         is_continue=is_continue,
         starting_value_dir=starting_value_dir,
-        secondary_starting_value_dir=secondary_starting_value_dir,
+        secondary_starting_value_dir=config.secondary_starting_value_dir,
     )
-    A_vec = parameter_state.A_vec
-    Ainv_vec = parameter_state.Ainv_vec
-    Pi = parameter_state.Pi
-    Rprior = parameter_state.Rprior
-    df_R = parameter_state.df_R
-    scale_R = parameter_state.scale_R
-    df_G = parameter_state.df_G
-    scale_G_vec = parameter_state.scale_G_vec
-    estimate_Gscale = parameter_state.estimate_Gscale
+    (; A_vec, Ainv_vec, Pi, Rprior, df_R, scale_R, df_G, scale_G_vec, estimate_Gscale) = parameter_state
 
     if my_rank == 0
-        writedlm(analysis_path * "annotationName.txt", annotationName)
+        writedlm(analysis_path * "annotationName.txt", annotation_metadata.annotationName)
     end
     xpx_dict, xArray_dict, my_anno_matrix_dict = prepare_block_state!(
         my_blkID,
@@ -142,7 +121,7 @@ function run_nonmpi_sampler!(context)
         my_TransformedX_dict,
         my_anno_matrix_dict,
         nCon,
-        annotationType,
+        annotation_metadata.annotationType,
     )
 
     #output
@@ -192,32 +171,7 @@ function run_nonmpi_sampler!(context)
             estimate_vara=estimate_vara,
             estimate_vare=estimate_vare,
         )
-        nsample4mean = rank0_mcmc_state.nsample4mean
-        mean_pi = rank0_mcmc_state.mean_pi
-        mean_pi2 = rank0_mcmc_state.mean_pi2
-        meanB2 = rank0_mcmc_state.meanB2
-        meanA2 = rank0_mcmc_state.meanA2
-        meanBcor2 = rank0_mcmc_state.meanBcor2
-        meanAcor2 = rank0_mcmc_state.meanAcor2
-        meanA = rank0_mcmc_state.meanA
-        meanAcor = rank0_mcmc_state.meanAcor
-        meanB = rank0_mcmc_state.meanB
-        meanBcor = rank0_mcmc_state.meanBcor
-        meanG = rank0_mcmc_state.meanG
-        meanG2 = rank0_mcmc_state.meanG2
-        meanGcor = rank0_mcmc_state.meanGcor
-        meanGcor2 = rank0_mcmc_state.meanGcor2
-        meanSSE = rank0_mcmc_state.meanSSE
-        meanGtotal = rank0_mcmc_state.meanGtotal
-        meanGtotal2 = rank0_mcmc_state.meanGtotal2
-        mcmcAtruecor_c = rank0_mcmc_state.mcmcAtruecor_c
-        mcmcBcor_c = rank0_mcmc_state.mcmcBcor_c
-        mcmcGcov_c = rank0_mcmc_state.mcmcGcov_c
-        mcmcGcor_c = rank0_mcmc_state.mcmcGcor_c
-        mcmcGcov_total = rank0_mcmc_state.mcmcGcov_total
-        mcmcGcor_total = rank0_mcmc_state.mcmcGcor_total
-        meanR = rank0_mcmc_state.meanR
-        meanR2 = rank0_mcmc_state.meanR2
+        (; mean_pi, mean_pi2, meanB2, meanA2, meanBcor2, meanAcor2, meanA, meanAcor, meanB, meanBcor, meanG, meanG2, meanGcor, meanGcor2, meanSSE, meanGtotal, meanGtotal2, mcmcAtruecor_c, mcmcBcor_c, mcmcGcov_c, mcmcGcor_c, mcmcGcov_total, mcmcGcor_total, meanR, meanR2) = rank0_mcmc_state
     end
 
     file_names = nothing
@@ -227,18 +181,18 @@ function run_nonmpi_sampler!(context)
 
     if my_rank == 0
         println("---------------- Summary Start --------------")
-        println("nIter=$nIter, outFreq=$outFreq, seed=$seed, burnin = $burnin")
+        println("nIter=$nIter, outFreq=$outFreq, seed=$(config.seed), burnin = $burnin")
         println("startPi is: $Pi")
-        println("Number of ranks: ", nrank)
+        println("Number of ranks: ", config.nrank)
         println("estimate_vare=$estimate_vare,estimate_vara=$estimate_vara")
         println("estimate_pi=$estimate_pi")
         println("estimate_Gscale=$estimate_Gscale")
         println("analysis_path=$analysis_path")
-        println("data_path=$data_path")
+        println("data_path=$(config.data_path)")
         if estimate_vara
             println("scale_G_vec is: ", scale_G_vec)
         end
-        println("nCat = $nCat, nCon = $nCon")
+        println("nCat = $(annotation_metadata.nCat), nCon = $nCon")
         println("thin = $thin")
         time_start = now()
         println("Start time: ", time_start)
@@ -246,7 +200,7 @@ function run_nonmpi_sampler!(context)
     end
     println("In rank$my_rank, there are $my_nblk LD blocks, and $my_nsnp SNPs in total.")
 
-    nlabel = 4 # number of labels for Pi: [1.0; 1.0], [1.0; 0.0], [0.0; 1.0], [0.0; 0.0]
+    nlabel = 4 # number of labels for Pi: (1.0, 1.0), (1.0, 0.0), (0.0, 1.0), (0.0, 0.0)
     iout = 1 
     iter_after_burnin_thin_index = 1
     last_saved_iter = nIter - (nIter - burnin) % outFreq
@@ -257,7 +211,7 @@ function run_nonmpi_sampler!(context)
         Rprior;
         is_continue=is_continue,
         starting_value_dir=starting_value_dir,
-        fixed_r_dir=estimate_vare ? nothing : secondary_starting_value_dir,
+        fixed_r_dir=estimate_vare ? nothing : config.secondary_starting_value_dir,
     )
 
     estGscale_iter = min(estGscale_iter, nIter)
@@ -373,8 +327,8 @@ function run_nonmpi_sampler!(context)
                             d1[k] = 1.0
 
                             #sample δj
-                            logDelta0 = -0.5 * (log(Ginv11) - gHat0^2 * Ginv11) + log(BigPi[d0]) #logPi
-                            logDelta1 = -0.5 * (log(C11) - gHat1^2 * C11) + log(BigPi[d1]) #logPiComp
+                            logDelta0 = -0.5 * (log(Ginv11) - gHat0^2 * Ginv11) + log(BigPi[pi_key(d0)]) #logPi
+                            logDelta1 = -0.5 * (log(C11) - gHat1^2 * C11) + log(BigPi[pi_key(d1)]) #logPiComp
                             probDelta1 = 1.0 / (1.0 + exp(logDelta0 - logDelta1))
 
                             #sample marker effects
@@ -393,12 +347,12 @@ function run_nonmpi_sampler!(context)
                         end
 
                         # add to nLoci_array_vec based on δ
-                        pi_index = 1
-                        for key in keys(BigPi)
-                            if δ == key
+                        state_key = pi_key(δ)
+                        for (pi_index, key) in enumerate(pi_key_order())
+                            if state_key == key
                                 nLoci_array_vec[cat][pi_index] += 1
+                                break
                             end
-                            pi_index += 1
                         end
 
                         for trait = 1:nTraits
@@ -518,9 +472,9 @@ function run_nonmpi_sampler!(context)
                 tempPi_vec[cat] = rand(Dirichlet(nLoci_array_vec[cat] .+ 1))
                 if do_thin
                     tempPi2 = tempPi_vec[cat] .^ 2
-                    for (iCategori, i) in enumerate(keys(Pi[cat]))
-                        mean_pi[cat][i] += (tempPi_vec[cat][iCategori] - mean_pi[cat][i]) * iIter
-                        mean_pi2[cat][i] += (tempPi2[iCategori] - mean_pi2[cat][i]) * iIter
+                    for (iCategori, key) in enumerate(pi_key_order())
+                        mean_pi[cat][key] += (tempPi_vec[cat][iCategori] - mean_pi[cat][key]) * iIter
+                        mean_pi2[cat][key] += (tempPi2[iCategori] - mean_pi2[cat][key]) * iIter
                     end
                 end   
             end
@@ -529,10 +483,8 @@ function run_nonmpi_sampler!(context)
             # reformat the tempPi_vec into the Pi dictionary
             ############################################################
             for cat = 1:nCategory
-                iCategori = 1
-                for i in keys(Pi[cat])
-                    Pi[cat][i] = tempPi_vec[cat][iCategori] #annotation specific pi
-                    iCategori = iCategori + 1
+                for (iCategori, key) in enumerate(pi_key_order())
+                    Pi[cat][key] = tempPi_vec[cat][iCategori] #annotation specific pi
                 end
             end
         end
@@ -643,7 +595,7 @@ function run_nonmpi_sampler!(context)
 
                 for cat = 1:nCategory
                     open(file_names["pi"], "a") do io
-                        writedlm(io, Pi[cat], ',')
+                        write_pi_dict(io, Pi[cat])
                     end
                     open(file_names["beta_effects_variance"], "a") do io
                         writedlm(io, A_vec[cat], ',')
@@ -746,12 +698,12 @@ function run_nonmpi_sampler!(context)
     end
     if estimate_pi == true
         for cat in 1:nCategory
-            writedlm(analysis_path * "estPi" * string(cat) * ".txt", mean_pi[cat])
+            write_pi_dict(analysis_path * "estPi" * string(cat) * ".txt", mean_pi[cat])
             std_pi = deepcopy(mean_pi[cat])
-            for i in keys(mean_pi[cat])
-                std_pi[i] = sqrt(mean_pi2[cat][i] - mean_pi[cat][i]^2)
+            for key in pi_key_order()
+                std_pi[key] = sqrt(mean_pi2[cat][key] - mean_pi[cat][key]^2)
             end
-            writedlm(analysis_path * "estPi_std" * string(cat) * ".txt", std_pi)
+            write_pi_dict(analysis_path * "estPi_std" * string(cat) * ".txt", std_pi)
         end
     end
 

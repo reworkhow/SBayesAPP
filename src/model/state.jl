@@ -29,7 +29,7 @@ function initialize_nonmpi_parameter_state(
 
     if is_continue
         Pi_starting_path = starting_value_dir * "pi_last_sample/"
-        Pi = [Dict{Vector{Float64},Float64}() for _ in 1:nCategory]
+        Pi = [Dict{NTuple{2,Float64},Float64}() for _ in 1:nCategory]
         for category in 1:nCategory
             Pi[category] = read_to_dict(Pi_starting_path * "pi_$category.txt")
         end

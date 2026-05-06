@@ -28,9 +28,7 @@ function write_nonmpi_restart_state(
 
     mkpath(analysis_path * "pi_last_sample/")
     for category in 1:nCategory
-        open(analysis_path * "pi_last_sample/pi_$(category).txt", "w") do io
-            writedlm(io, Pi[category], ',')
-        end
+        write_pi_dict(analysis_path * "pi_last_sample/pi_$(category).txt", Pi[category])
     end
 
     mkpath(analysis_path * "last_sample_delta/")

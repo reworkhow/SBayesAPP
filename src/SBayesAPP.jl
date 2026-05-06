@@ -136,145 +136,65 @@ function example_nonmpi_config(; root::AbstractString=repo_root())
 end
 
 function parse_nonmpi_args(args::Vector{String})
-    if _has_named_cli_args(args)
-        parsed = _parse_named_cli_args(args)
-        defaults = _default_nonmpi_cli_settings()
-
-        return NonMPIConfig(
-            _dir_arg(_lookup_named_arg(parsed, ["data_path"]; required=true)),
-            _dir_arg(_lookup_named_arg(parsed, ["analysis_path"]; required=true)),
-            _parse_int_arg(_lookup_named_arg(parsed, ["n_iter", "niter"]; required=true), "n_iter"),
-            _parse_int_arg(_lookup_named_arg(parsed, ["seed"]; required=true), "seed"),
-            _parse_int_arg(_lookup_named_arg(parsed, ["nrank"]; required=true), "nrank"),
-            _lookup_named_arg(parsed, ["annot_file"]; required=true),
-            _lookup_named_arg(parsed, ["annot_dict"]; required=true),
-            _parse_int_arg(_lookup_named_arg(parsed, ["out_freq", "outfreq"]; required=true), "out_freq"),
-            _lookup_named_arg(parsed, ["starting_value_dir"]; required=true),
-            _lookup_named_arg(parsed, ["secondary_starting_value_dir"]; required=true),
-            _dir_arg(_lookup_named_arg(parsed, ["st_path"]; required=true)),
-            _parse_int_arg(_lookup_named_arg(parsed, ["thin"]; required=true), "thin"),
-            _parse_int_arg(_lookup_named_arg(parsed, ["n1"]; required=true), "n1"),
-            _parse_int_arg(_lookup_named_arg(parsed, ["n2"]; required=true), "n2"),
-            _parse_bool_arg(_lookup_named_arg(parsed, ["is_continue"]; required=true)),
-            n_con=_parse_int_arg(string(_lookup_named_arg(parsed, ["n_con", "ncon"]; default=string(defaults.n_con))), "n_con"),
-            estimate_vare=_parse_bool_arg(string(_lookup_named_arg(parsed, ["estimate_vare"]; default=string(defaults.estimate_vare)))),
-            estimate_vara=_parse_bool_arg(string(_lookup_named_arg(parsed, ["estimate_vara"]; default=string(defaults.estimate_vara)))),
-            estimate_pi=_parse_bool_arg(string(_lookup_named_arg(parsed, ["estimate_pi"]; default=string(defaults.estimate_pi)))),
-            estimate_Gscale=_parse_bool_arg(string(_lookup_named_arg(parsed, ["estimate_gscale"]; default=string(defaults.estimate_Gscale)))),
-            estGscale_iter=_parse_int_arg(string(_lookup_named_arg(parsed, ["estgscale_iter"]; default=string(defaults.estGscale_iter))), "estGscale_iter"),
-        )
-    end
-
-    length(args) in (15, 16, 20, 21) || error(
-        "Expected positional arguments or named options like --data_path/--analysis_path for non-MPI mode. Positional form: data_path analysis_path nIter seed nrank annot_file annot_dict outFreq starting_value_dir secondary_starting_value_dir ST_path thin N1 N2 [nCon] is_continue [estimate_vare estimate_vara estimate_pi estimate_Gscale estGscale_iter]",
+    _has_named_cli_args(args) || error(
+        "Expected named options for non-MPI mode, for example --data_path ... --analysis_path ...",
     )
 
+    parsed = _parse_named_cli_args(args)
     defaults = _default_nonmpi_cli_settings()
-    has_n_con = length(args) in (16, 21)
-    n_con = has_n_con ? parse(Int, args[15]) : defaults.n_con
-    is_continue_index = has_n_con ? 16 : 15
-    is_continue = _parse_bool_arg(args[is_continue_index])
-
-    estimate_vare = defaults.estimate_vare
-    estimate_vara = defaults.estimate_vara
-    estimate_pi = defaults.estimate_pi
-    estimate_Gscale = defaults.estimate_Gscale
-    estGscale_iter = defaults.estGscale_iter
-    if length(args) > is_continue_index
-        estimate_vare = _parse_bool_arg(args[is_continue_index + 1])
-        estimate_vara = _parse_bool_arg(args[is_continue_index + 2])
-        estimate_pi = _parse_bool_arg(args[is_continue_index + 3])
-        estimate_Gscale = _parse_bool_arg(args[is_continue_index + 4])
-        estGscale_iter = parse(Int, args[is_continue_index + 5])
-    end
 
     return NonMPIConfig(
-        _dir_arg(args[1]),
-        _dir_arg(args[2]),
-        parse(Int, args[3]),
-        parse(Int, args[4]),
-        parse(Int, args[5]),
-        args[6],
-        args[7],
-        parse(Int, args[8]),
-        args[9],
-        args[10],
-        _dir_arg(args[11]),
-        parse(Int, args[12]),
-        parse(Int, args[13]),
-        parse(Int, args[14]),
-        is_continue,
-        n_con=n_con,
-        estimate_vare=estimate_vare,
-        estimate_vara=estimate_vara,
-        estimate_pi=estimate_pi,
-        estimate_Gscale=estimate_Gscale,
-        estGscale_iter=estGscale_iter,
+        _dir_arg(_lookup_named_arg(parsed, ["data_path"]; required=true)),
+        _dir_arg(_lookup_named_arg(parsed, ["analysis_path"]; required=true)),
+        _parse_int_arg(_lookup_named_arg(parsed, ["n_iter", "niter"]; required=true), "n_iter"),
+        _parse_int_arg(_lookup_named_arg(parsed, ["seed"]; required=true), "seed"),
+        _parse_int_arg(_lookup_named_arg(parsed, ["nrank"]; required=true), "nrank"),
+        _lookup_named_arg(parsed, ["annot_file"]; required=true),
+        _lookup_named_arg(parsed, ["annot_dict"]; required=true),
+        _parse_int_arg(_lookup_named_arg(parsed, ["out_freq", "outfreq"]; required=true), "out_freq"),
+        _lookup_named_arg(parsed, ["starting_value_dir"]; required=true),
+        _lookup_named_arg(parsed, ["secondary_starting_value_dir"]; required=true),
+        _dir_arg(_lookup_named_arg(parsed, ["st_path"]; required=true)),
+        _parse_int_arg(_lookup_named_arg(parsed, ["thin"]; required=true), "thin"),
+        _parse_int_arg(_lookup_named_arg(parsed, ["n1"]; required=true), "n1"),
+        _parse_int_arg(_lookup_named_arg(parsed, ["n2"]; required=true), "n2"),
+        _parse_bool_arg(_lookup_named_arg(parsed, ["is_continue"]; required=true)),
+        n_con=_parse_int_arg(string(_lookup_named_arg(parsed, ["n_con", "ncon"]; default=string(defaults.n_con))), "n_con"),
+        estimate_vare=_parse_bool_arg(string(_lookup_named_arg(parsed, ["estimate_vare"]; default=string(defaults.estimate_vare)))),
+        estimate_vara=_parse_bool_arg(string(_lookup_named_arg(parsed, ["estimate_vara"]; default=string(defaults.estimate_vara)))),
+        estimate_pi=_parse_bool_arg(string(_lookup_named_arg(parsed, ["estimate_pi"]; default=string(defaults.estimate_pi)))),
+        estimate_Gscale=_parse_bool_arg(string(_lookup_named_arg(parsed, ["estimate_gscale"]; default=string(defaults.estimate_Gscale)))),
+        estGscale_iter=_parse_int_arg(string(_lookup_named_arg(parsed, ["estgscale_iter"]; default=string(defaults.estGscale_iter))), "estGscale_iter"),
     )
 end
 
 function parse_mpi_args(args::Vector{String})
-    if _has_named_cli_args(args)
-        parsed = _parse_named_cli_args(args)
-
-        return MPIConfig(
-            _dir_arg(_lookup_named_arg(parsed, ["data_path"]; required=true)),
-            _dir_arg(_lookup_named_arg(parsed, ["analysis_path"]; required=true)),
-            _parse_int_arg(_lookup_named_arg(parsed, ["n_iter", "niter"]; required=true), "n_iter"),
-            _parse_int_arg(_lookup_named_arg(parsed, ["seed"]; required=true), "seed"),
-            _parse_int_arg(_lookup_named_arg(parsed, ["nrank"]; required=true), "nrank"),
-            _lookup_named_arg(parsed, ["annot_file"]; required=true),
-            _lookup_named_arg(parsed, ["annot_dict"]; required=true),
-            _parse_int_arg(_lookup_named_arg(parsed, ["out_freq", "outfreq"]; required=true), "out_freq"),
-            _lookup_named_arg(parsed, ["starting_value_dir"]; required=true),
-            _lookup_named_arg(parsed, ["secondary_starting_value_dir"]; required=true),
-            _dir_arg(_lookup_named_arg(parsed, ["st_path"]; required=true)),
-            _parse_int_arg(_lookup_named_arg(parsed, ["thin"]; required=true), "thin"),
-            _parse_int_arg(_lookup_named_arg(parsed, ["n1"]; required=true), "n1"),
-            _parse_int_arg(_lookup_named_arg(parsed, ["n2"]; required=true), "n2"),
-            _parse_int_arg(string(_lookup_named_arg(parsed, ["n_con", "ncon"]; default="0")), "n_con"),
-            _parse_bool_arg(_lookup_named_arg(parsed, ["estimate_pi"]; required=true)),
-            _parse_bool_arg(string(_lookup_named_arg(parsed, ["fixed_hyperparameters"]; default="false"))),
-            _parse_bool_arg(string(_lookup_named_arg(parsed, ["is_continue"]; default="true"))),
-            string(_lookup_named_arg(parsed, ["chr"]; default="")),
-        )
-    end
-
-    length(args) >= 15 || error(
-        "Expected positional arguments or named options like --data_path/--analysis_path for MPI mode. Positional form: data_path analysis_path nIter seed nrank annot_file annot_dict outFreq starting_value_dir secondary_starting_value_dir ST_path thin N1 N2 [nCon] estimate_pi [fixed_hyperparameters] [is_continue] [chr]",
+    _has_named_cli_args(args) || error(
+        "Expected named options for MPI mode, for example --data_path ... --analysis_path ...",
     )
 
-    has_n_con = length(args) >= 16 && lowercase(args[15]) ∉ ("true", "false")
-    n_con = has_n_con ? parse(Int, args[15]) : 0
-    estimate_pi_index = has_n_con ? 16 : 15
-    fixed_hyperparameters_index = estimate_pi_index + 1
-    is_continue_index = estimate_pi_index + 2
-    chr_index = estimate_pi_index + 3
-
-    fixed_hyperparameters = length(args) >= fixed_hyperparameters_index ? lowercase(args[fixed_hyperparameters_index]) == "true" : false
-    is_continue = length(args) >= is_continue_index ? lowercase(args[is_continue_index]) == "true" : true
-    chr = length(args) >= chr_index ? args[chr_index] : ""
+    parsed = _parse_named_cli_args(args)
 
     return MPIConfig(
-        _dir_arg(args[1]),
-        _dir_arg(args[2]),
-        parse(Int, args[3]),
-        parse(Int, args[4]),
-        parse(Int, args[5]),
-        args[6],
-        args[7],
-        parse(Int, args[8]),
-        args[9],
-        args[10],
-        _dir_arg(args[11]),
-        parse(Int, args[12]),
-        parse(Int, args[13]),
-        parse(Int, args[14]),
-        n_con,
-        lowercase(args[estimate_pi_index]) == "true",
-        fixed_hyperparameters,
-        is_continue,
-        chr,
+        _dir_arg(_lookup_named_arg(parsed, ["data_path"]; required=true)),
+        _dir_arg(_lookup_named_arg(parsed, ["analysis_path"]; required=true)),
+        _parse_int_arg(_lookup_named_arg(parsed, ["n_iter", "niter"]; required=true), "n_iter"),
+        _parse_int_arg(_lookup_named_arg(parsed, ["seed"]; required=true), "seed"),
+        _parse_int_arg(_lookup_named_arg(parsed, ["nrank"]; required=true), "nrank"),
+        _lookup_named_arg(parsed, ["annot_file"]; required=true),
+        _lookup_named_arg(parsed, ["annot_dict"]; required=true),
+        _parse_int_arg(_lookup_named_arg(parsed, ["out_freq", "outfreq"]; required=true), "out_freq"),
+        _lookup_named_arg(parsed, ["starting_value_dir"]; required=true),
+        _lookup_named_arg(parsed, ["secondary_starting_value_dir"]; required=true),
+        _dir_arg(_lookup_named_arg(parsed, ["st_path"]; required=true)),
+        _parse_int_arg(_lookup_named_arg(parsed, ["thin"]; required=true), "thin"),
+        _parse_int_arg(_lookup_named_arg(parsed, ["n1"]; required=true), "n1"),
+        _parse_int_arg(_lookup_named_arg(parsed, ["n2"]; required=true), "n2"),
+        _parse_int_arg(string(_lookup_named_arg(parsed, ["n_con", "ncon"]; default="0")), "n_con"),
+        _parse_bool_arg(_lookup_named_arg(parsed, ["estimate_pi"]; required=true)),
+        _parse_bool_arg(string(_lookup_named_arg(parsed, ["fixed_hyperparameters"]; default="false"))),
+        _parse_bool_arg(string(_lookup_named_arg(parsed, ["is_continue"]; default="true"))),
+        string(_lookup_named_arg(parsed, ["chr"]; default="")),
     )
 end
 

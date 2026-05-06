@@ -104,7 +104,6 @@ Notes:
 - `annot_file` is interpreted relative to `data_path`, which is why the example uses `annotation_df.txt` and keeps a copy inside `example/SBayesAPP_input_first10blks/`.
 - The optional `--n_con` argument tells SBayesAPP how many annotation columns, starting from the left after `SNP`, should be treated as continuous. Any remaining annotation columns are treated as categorical.
 - Non-MPI commands can optionally add `--estimate_vare`, `--estimate_vara`, `--estimate_pi`, `--estimate_gscale`, and `--estgscale_iter`. If `--estimate_vare false`, `secondary_starting_value_dir` should point to a directory containing `estR.txt`.
-- The old positional argument form is still accepted for backward compatibility.
 - `STARTING_VALUE_DIR` and `SECONDARY_STARTING_VALUE_DIR` are placeholders for continuation or fixed-hyperparameter workflows. They are not used in the provided fresh example run.
 
 ## MPI run
