@@ -70,6 +70,7 @@ function run_nonmpi_sampler!(context)
     estimate_Gscale = settings.estimate_Gscale
     estGscale_iter = settings.estGscale_iter
     report_pleiotropic_qtl_effect_matrix = config.report_pleiotropic_qtl_effect_matrix
+    output_mcmc_delta = config.output_mcmc_delta
 
     ############################################################################
     #read data in current rank
@@ -123,6 +124,8 @@ function run_nonmpi_sampler!(context)
         nCon,
         annotation_metadata.annotationType,
     )
+    block_data = nothing
+    GC.gc()
 
     #output
     β = zeros(nTraits)
@@ -156,23 +159,26 @@ function run_nonmpi_sampler!(context)
     meanAlpha = [zeros(my_nsnp * nCategory) for t in 1:nTraits]
     
     # mcmc samples for delta -> used to compute PP of SNPs 
-    nOutput = Int(floor((nIter-burnin) / outFreq))
-    mcmc_Delta = [zeros(my_nsnp * nCategory, nOutput) for t in 1:nTraits]
-
-    if my_rank == 0
-        rank0_mcmc_state = initialize_rank0_mcmc_state(
-            Pi,
-            nIter,
-            burnin,
-            thin,
-            nTraits,
-            nCategory;
-            estimate_pi=estimate_pi,
-            estimate_vara=estimate_vara,
-            estimate_vare=estimate_vare,
-        )
-        (; mean_pi, mean_pi2, meanB2, meanA2, meanBcor2, meanAcor2, meanA, meanAcor, meanB, meanBcor, meanG, meanG2, meanGcor, meanGcor2, meanSSE, meanGtotal, meanGtotal2, mcmcAtruecor_c, mcmcBcor_c, mcmcGcov_c, mcmcGcor_c, mcmcGcov_total, mcmcGcor_total, meanR, meanR2) = rank0_mcmc_state
+    mcmc_Delta = nothing
+    if output_mcmc_delta
+        nOutput = Int(floor((nIter - burnin) / outFreq))
+        mcmc_Delta = [zeros(my_nsnp * nCategory, nOutput) for _ in 1:nTraits]
     end
+
+    rank0_mcmc_state = nothing
+    rank0_mcmc_state = initialize_rank0_mcmc_state(
+        Pi,
+        nIter,
+        burnin,
+        thin,
+        nTraits,
+        nCategory;
+        estimate_pi=estimate_pi,
+        estimate_vara=estimate_vara,
+        estimate_vare=estimate_vare,
+        report_pleiotropic_qtl_effect_matrix=report_pleiotropic_qtl_effect_matrix,
+    )
+    (; mean_pi, mean_pi2, meanB2, meanA2, meanBcor2, meanAcor2, meanA, meanAcor, meanB, meanBcor, meanG, meanG2, meanGcor, meanGcor2, meanSSE, meanGtotal, meanGtotal2, mcmcAtruecor_c, mcmcBcor_c, mcmcGcov_c, mcmcGcor_c, mcmcGcov_total, mcmcGcor_total, meanR, meanR2) = rank0_mcmc_state
 
     file_names = nothing
     if my_rank == 0
@@ -192,6 +198,7 @@ function run_nonmpi_sampler!(context)
         println("analysis_path=$analysis_path")
         println("data_path=$(config.data_path)")
         println("report_pleiotropic_qtl_effect_matrix=$report_pleiotropic_qtl_effect_matrix")
+        println("output_mcmc_delta=$output_mcmc_delta")
         if estimate_vara
             println("estimate_Gscale=$estimate_Gscale")
             println("starting value of scale_G_vec is: ", scale_G_vec)
@@ -454,9 +461,9 @@ function run_nonmpi_sampler!(context)
         end
 
         ########################
-        ### Step2. sample Pi ###
+        ### Step1. sample Pi ###
         ########################        
-        if estimate_pi == true
+        if estimate_pi
             tempPi_vec = [zeros(nlabel) for cat = 1:nCategory]
             for cat = 1:nCategory
                 tempPi_vec[cat] = rand(Dirichlet(nLoci_array_vec[cat] .+ 1))
@@ -468,10 +475,7 @@ function run_nonmpi_sampler!(context)
                     end
                 end   
             end
-            
-            ############################################################
-            # reformat the tempPi_vec into the Pi dictionary
-            ############################################################
+
             for cat = 1:nCategory
                 for (iCategori, key) in enumerate(pi_key_order())
                     Pi[cat][key] = tempPi_vec[cat][iCategori] #annotation specific pi
@@ -479,6 +483,84 @@ function run_nonmpi_sampler!(context)
             end
         end
 
+        ########################################################################
+        ### Step2. sample beta effect covariance matrix and Gscale #############
+        ########################################################################   
+        
+        # get SSE_vec (beta'beta) to sample A and to estimate Gscale
+        for cat in 1:nCategory
+            for traiti in 1:nTraits
+                beta_i = betaArray[traiti][((cat-1)*my_nsnp+1):((cat-1)*my_nsnp+my_nsnp)]
+                for traitj in traiti:nTraits
+                    beta_j = betaArray[traitj][((cat-1)*my_nsnp+1):((cat-1)*my_nsnp+my_nsnp)]
+                    SSE_vec[cat][traiti, traitj] = dot(beta_i, beta_j)
+                    SSE_vec[cat][traitj, traiti] = SSE_vec[cat][traiti, traitj]
+                end
+            end
+        end
+        
+        # get the running average of SSE to sample Gscale
+        if within_estGscale
+            if my_rank == 0
+                for cat = 1:nCategory
+                    meanSSE[cat] += (SSE_vec[cat] - meanSSE[cat]) * iIter_scaleG
+                end
+            end
+
+            Gprior_vec = deepcopy(meanSSE)
+            for cat = 1:nCategory
+                Gprior_vec[cat] = meanSSE[cat] / nLoci_annot[cat]
+                scale_G_vec[cat] = Gprior_vec[cat] * (df_G - nTraits - 1)
+            end
+            if iter == estGscale_iter
+                # save the scale_G_vec
+                for cat = 1:nCategory
+                    writedlm(analysis_path * "scale_G" * string(cat) * ".txt", scale_G_vec[cat])
+                end
+            end
+        end
+
+        ### sample beta covariance matrix ###
+        for cat = 1:nCategory
+            if estimate_vara 
+                A_vec_sampler = convert(Array, Symmetric(scale_G_vec[cat] + SSE_vec[cat]))
+                A_vec[cat] = rand(InverseWishart(df_G + nLoci_annot[cat], A_vec_sampler))  
+            end
+            if do_thin
+                # save mean for beta effect variance 
+                meanB[cat] += (A_vec[cat] - meanB[cat]) * iIter
+                # correlation values
+                mcmcBcor_c[iter_after_burnin_thin_index, cat] = compute_correlation(A_vec[cat])
+                if estimate_vara 
+                    meanB2[cat] += (A_vec[cat] .^ 2 - meanB2[cat]) * iIter
+                end
+            end
+        end
+        
+        # update Ainv_vec if needed for sampling beta in next iteration
+        if estimate_vara 
+            Ainv_vec[:] = [inv(A_vec[cat]) for cat in 1:nCategory]
+        end
+        # gc after sampling A
+        GC.gc()
+
+        ########################################################################
+        ### Step3. get average residual variance across blocks ##################
+        ########################################################################  
+        # summing residual variance
+        if estimate_vare
+            if do_thin
+                R_blk_sum = sum(R_blk)
+                R_blkmean = R_blk_sum / my_nblk
+                R2 = (R_blkmean) .^ 2
+                meanR += (R_blkmean - meanR) * iIter
+                meanR2 += (R2 - meanR2) * iIter
+            end
+        end
+
+        ########################################################################################
+        ### Step4. get annotation-specific & total genetic variance across blocks ##############
+        ########################################################################################
         if do_thin
             varg_cat = sum(varg_blk_cat) # sum varg_blk_cat to get varg for different category across blocks
             varg_cov_cat = sum(varg_cov_blk_cat) # sum varg_cov_blk_cat to get genetic covariance for different category across blocks
@@ -504,88 +586,14 @@ function run_nonmpi_sampler!(context)
             meanGtotal2 += (totalvarg .^ 2 - meanGtotal2) * iIter
         end
 
-        # get SSE_vec to sample A and to estGscale
-        for cat in 1:nCategory
-            for traiti in 1:nTraits
-                beta_i = betaArray[traiti][((cat-1)*my_nsnp+1):((cat-1)*my_nsnp+my_nsnp)]
-                for traitj in traiti:nTraits
-                    beta_j = betaArray[traitj][((cat-1)*my_nsnp+1):((cat-1)*my_nsnp+my_nsnp)]
-                    SSE_vec[cat][traiti, traitj] = dot(beta_i, beta_j)
-                    SSE_vec[cat][traitj, traiti] = SSE_vec[cat][traiti, traitj]
-                end
-            end
-        end
-        
-        # summing genetic variance
-        if within_estGscale
-            if my_rank == 0
-                for cat = 1:nCategory
-                    meanSSE[cat] += (SSE_vec[cat] - meanSSE[cat]) * iIter_scaleG
-                end
-            end
-        end
-
-        ########################
-        ### sample scale_G ###
-        ########################
-        # use empirical SSE to estimate scale_G_vec
-        if within_estGscale
-            Gprior_vec = deepcopy(meanSSE)
-            for cat = 1:nCategory
-                Gprior_vec[cat] = meanSSE[cat] / nLoci_annot[cat]
-                scale_G_vec[cat] = Gprior_vec[cat] * (df_G - nTraits - 1)
-            end
-            if iter == estGscale_iter
-                # save the scale_G_vec
-                for cat = 1:nCategory
-                    writedlm(analysis_path * "scale_G" * string(cat) * ".txt", scale_G_vec[cat])
-                end
-            end
-        end
-
-        ### Step3. sample variance ###
-        for cat = 1:nCategory
-            if estimate_vara == true
-                A_vec_sampler = convert(Array, Symmetric(scale_G_vec[cat] + SSE_vec[cat]))
-                A_vec[cat] = rand(InverseWishart(df_G + nLoci_annot[cat], A_vec_sampler))  
-            end
-            if do_thin
-                # save mean for beta effect variance 
-                meanB[cat] += (A_vec[cat] - meanB[cat]) * iIter
-                # correlation values
-                mcmcBcor_c[iter_after_burnin_thin_index, cat] = compute_correlation(A_vec[cat])
-                if estimate_vara == true
-                    meanB2[cat] += (A_vec[cat] .^ 2 - meanB2[cat]) * iIter
-                end
-            end
-        end
-        
-        if estimate_vara == true 
-            Ainv_vec[:] = [inv(A_vec[cat]) for cat in 1:nCategory]
-        end
-
-        # summing residual variance
-        if estimate_vare
-            R_blk_sum = sum(R_blk)
-        end
-        
-        # sampling residual variance
-        if estimate_vare
-            R_blkmean = R_blk_sum / my_nblk
-            if do_thin
-                R2 = (R_blkmean) .^ 2
-                meanR += (R_blkmean - meanR) * iIter
-                meanR2 += (R2 - meanR2) * iIter
-            end
-        end
-
-
         # save MCMC samples & last samples
         if iter > burnin 
-            if iter - burnin > 0 && (iter - burnin) % outFreq == 0
+            if iter > burnin && (iter - burnin) % outFreq == 0
                 println("iter $iter")
-                for trait = 1:nTraits
-                    mcmc_Delta[trait][:, iout] = deltaArray[trait]
+                if output_mcmc_delta
+                    for trait = 1:nTraits
+                        mcmc_Delta[trait][:, iout] = deltaArray[trait]
+                    end
                 end
 
                 for cat = 1:nCategory
@@ -597,7 +605,9 @@ function run_nonmpi_sampler!(context)
                     end
                 end
                 
-                iout += 1
+                if output_mcmc_delta
+                    iout += 1
+                end
             end
 
             if do_thin
@@ -625,7 +635,7 @@ function run_nonmpi_sampler!(context)
                     R_blk,
                     A_vec,
                     Pi,
-                    mcmc_Delta,
+                    deltaArray,   
                 )
             end
         end
@@ -635,86 +645,50 @@ function run_nonmpi_sampler!(context)
             GC.gc()
         end
     end # end MCMC iteration loop
-    
-    # save posterior mean
-    for cat in 1:nCategory
-        # beta effect variance
-        writedlm(analysis_path * "estB" * string(cat) * ".txt", meanB[cat])
-        meanBcor[cat] = mean(mcmcBcor_c[:, cat][.!isnan.(mcmcBcor_c[:, cat])])
-        if report_pleiotropic_qtl_effect_matrix
-            # marker effect variance 
-            writedlm(analysis_path * "estA" * string(cat) * ".txt", meanA[cat])
-            meanAcor[cat] = mean(mcmcAtruecor_c[:, cat][.!isnan.(mcmcAtruecor_c[:, cat])])
-        end
-        if estimate_vara
-            writedlm(analysis_path * "estB_std" * string(cat) * ".txt", sqrt.((meanB2[cat] .- (meanB[cat] .^ 2))))
-            meanBcor2[cat] = mean(mcmcBcor_c[:, cat][.!isnan.(mcmcBcor_c[:, cat])] .^ 2)
-            if report_pleiotropic_qtl_effect_matrix
-                writedlm(analysis_path * "estA_std" * string(cat) * ".txt", sqrt.((meanA2[cat] .- (meanA[cat] .^ 2))))
-                meanAcor2[cat] = mean(mcmcAtruecor_c[:, cat][.!isnan.(mcmcAtruecor_c[:, cat])].^2)
-            end
-        end
+
+    posterior_mean_state = (
+        mean_pi=mean_pi,
+        mean_pi2=mean_pi2,
+        meanB2=meanB2,
+        meanA2=meanA2,
+        meanBcor2=meanBcor2,
+        meanAcor2=meanAcor2,
+        meanA=meanA,
+        meanAcor=meanAcor,
+        meanB=meanB,
+        meanBcor=meanBcor,
+        meanG=meanG,
+        meanG2=meanG2,
+        meanGcor=meanGcor,
+        meanGcor2=meanGcor2,
+        meanGtotal=meanGtotal,
+        meanGtotal2=meanGtotal2,
+        mcmcAtruecor_c=mcmcAtruecor_c,
+        mcmcBcor_c=mcmcBcor_c,
+        mcmcGcov_c=mcmcGcov_c,
+        mcmcGcor_c=mcmcGcor_c,
+        mcmcGcov_total=mcmcGcov_total,
+        mcmcGcor_total=mcmcGcor_total,
+        meanR=meanR,
+        meanR2=meanR2,
+    )
+
+    save_nonmpi_posterior_mean!(
+        analysis_path,
+        my_rank,
+        nCategory,
+        meanAlpha,
+        posterior_mean_state;
+        estimate_vara=estimate_vara,
+        estimate_vare=estimate_vare,
+        estimate_pi=estimate_pi,
+        report_pleiotropic_qtl_effect_matrix=report_pleiotropic_qtl_effect_matrix,
+    )
+
+    if output_mcmc_delta
+        writedlm(analysis_path * "mcmc_Delta1.rank$my_rank.txt", mcmc_Delta[1])
+        writedlm(analysis_path * "mcmc_Delta2.rank$my_rank.txt", mcmc_Delta[2])
     end
-
-    # save mcmcGcov_c and mcmcGcov_total
-    writedlm(analysis_path * "mcmcGcov_c.txt", mcmcGcov_c)
-    writedlm(analysis_path * "mcmcGcov_total.txt", mcmcGcov_total)
-
-    # save mcmcGcor_c and mcmcGcor_total
-    writedlm(analysis_path * "mcmcGcor_c.txt", mcmcGcor_c)
-    writedlm(analysis_path * "mcmcGcor_total.txt", mcmcGcor_total)
-
-    writedlm(analysis_path * "estBcor.txt", meanBcor)
-    if report_pleiotropic_qtl_effect_matrix
-        # save mcmcAtruecor_c
-        writedlm(analysis_path * "mcmcAtruecor_c.txt", mcmcAtruecor_c)
-        writedlm(analysis_path * "estAcor.txt", meanAcor)
-    end
-    
-    if estimate_vara == true
-        writedlm(analysis_path * "estBcor_std.txt", sqrt.(abs.(meanBcor2 .- (meanBcor .^ 2))))
-        if report_pleiotropic_qtl_effect_matrix
-            writedlm(analysis_path * "estAcor_std.txt", sqrt.(abs.(meanAcor2 .- (meanAcor .^ 2))))
-        end
-    end
-
-    # genetic variance components
-    for cat in 1:nCategory
-        writedlm(analysis_path * "estG" * string(cat) * ".txt", meanG[cat])
-        writedlm(analysis_path * "estG_std" * string(cat) * ".txt", sqrt.(abs.(meanG2[cat] .- (meanG[cat] .^ 2))))
-        meanGcor[cat] = mean(mcmcGcor_c[:, cat][.!isnan.(mcmcGcor_c[:, cat])])
-        meanGcor2[cat] = mean(mcmcGcor_c[:, cat][.!isnan.(mcmcGcor_c[:, cat])] .^ 2)
-    end
-    writedlm(analysis_path * "estGcor.txt", meanGcor)
-    writedlm(analysis_path * "estGcor_std.txt", sqrt.(meanGcor2 .- (meanGcor .^ 2)))
-
-    #  total genetic variance
-    writedlm(analysis_path * "estGtotal.txt", meanGtotal, ',')
-    writedlm(analysis_path * "estGtotal_std.txt", sqrt.((meanGtotal2 .- (meanGtotal .^ 2))), ',')
-    meanGcor_total = mean(mcmcGcor_total[.!isnan.(mcmcGcor_total)])
-    meanGcor_total2 = mean(mcmcGcor_total[.!isnan.(mcmcGcor_total)] .^ 2)
-    writedlm(analysis_path * "estGcor_total.txt", meanGcor_total)
-    writedlm(analysis_path * "estGcor_total_std.txt", sqrt(meanGcor_total2 - (meanGcor_total^2)))
-
-    if estimate_vare == true
-        writedlm(analysis_path * "estR.txt", meanR)
-        writedlm(analysis_path * "estR_std.txt", sqrt.((meanR2 .- (meanR .^ 2))))
-    end
-    if estimate_pi == true
-        for cat in 1:nCategory
-            write_pi_dict(analysis_path * "estPi" * string(cat) * ".txt", mean_pi[cat])
-            std_pi = deepcopy(mean_pi[cat])
-            for key in pi_key_order()
-                std_pi[key] = sqrt(mean_pi2[cat][key] - mean_pi[cat][key]^2)
-            end
-            write_pi_dict(analysis_path * "estPi_std" * string(cat) * ".txt", std_pi)
-        end
-    end
-
-    writedlm(analysis_path * "mcmc_Delta1.rank$my_rank.txt", mcmc_Delta[1])
-    writedlm(analysis_path * "mcmc_Delta2.rank$my_rank.txt", mcmc_Delta[2])
-    writedlm(analysis_path * "meanAlpha1.rank$my_rank.txt", meanAlpha[1])
-    writedlm(analysis_path * "meanAlpha2.rank$my_rank.txt", meanAlpha[2])
 
     time_end = now()
     time_diff = (time_end - time_start).value / 60000 #milliseconds to min

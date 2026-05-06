@@ -1,5 +1,6 @@
 using Test
 using SBayesAPP
+using DelimitedFiles
 
 @testset "Pi dict IO is consistent" begin
     pi_dict = Dict(
@@ -63,6 +64,7 @@ end
         "--estimate_gscale", "false",
         "--estgscale_iter", "77",
         "--report_pleiotropic_qtl_effect_matrix", "false",
+        "--output_mcmc_delta", "false",
     ])
 
     @test nonmpi_config.data_path == "data/"
@@ -76,9 +78,11 @@ end
     @test !nonmpi_config.estimate_Gscale
     @test nonmpi_config.estGscale_iter == 77
     @test !nonmpi_config.report_pleiotropic_qtl_effect_matrix
+    @test !nonmpi_config.output_mcmc_delta
     @test occursin("--analysis_path", string(SBayesAPP.build_nonmpi_cmd(nonmpi_config)))
     @test occursin("--gscale_value_dir", string(SBayesAPP.build_nonmpi_cmd(nonmpi_config)))
     @test occursin("--report_pleiotropic_qtl_effect_matrix false", string(SBayesAPP.build_nonmpi_cmd(nonmpi_config)))
+    @test occursin("--output_mcmc_delta false", string(SBayesAPP.build_nonmpi_cmd(nonmpi_config)))
 
     mpi_config = SBayesAPP.parse_mpi_args([
         "--data_path=data/",
@@ -138,6 +142,76 @@ end
     end
 end
 
+@testset "Rank-0 state skips pleiotropic accumulators" begin
+    pi = [Dict((0.0, 0.0) => 1.0, (1.0, 1.0) => 0.0, (1.0, 0.0) => 0.0, (0.0, 1.0) => 0.0)]
+    state = SBayesAPP.initialize_rank0_mcmc_state(
+        pi,
+        10,
+        0,
+        2,
+        2,
+        1;
+        estimate_pi=true,
+        estimate_vara=true,
+        estimate_vare=true,
+        report_pleiotropic_qtl_effect_matrix=false,
+    )
+
+    @test state.meanA === nothing
+    @test state.meanA2 === nothing
+    @test state.meanAcor === nothing
+    @test state.meanAcor2 === nothing
+    @test state.mcmcAtruecor_c === nothing
+    @test state.meanB !== nothing
+    @test state.mcmcBcor_c !== nothing
+end
+
+@testset "Posterior mean save uses current summary values" begin
+    pi = [Dict((0.0, 0.0) => 1.0, (1.0, 1.0) => 0.0, (1.0, 0.0) => 0.0, (0.0, 1.0) => 0.0)]
+    base_state = SBayesAPP.initialize_rank0_mcmc_state(
+        pi,
+        4,
+        0,
+        1,
+        2,
+        1;
+        estimate_pi=false,
+        estimate_vara=false,
+        estimate_vare=true,
+        report_pleiotropic_qtl_effect_matrix=false,
+    )
+
+    expected_gtotal = [1.0 0.2; 0.2 2.0]
+    expected_gtotal2 = expected_gtotal .^ 2
+    expected_r = [0.5 0.1; 0.1 0.7]
+    expected_r2 = expected_r .^ 2
+    posterior_state = (
+        ;
+        base_state...,
+        meanGtotal=expected_gtotal,
+        meanGtotal2=expected_gtotal2,
+        meanR=expected_r,
+        meanR2=expected_r2,
+    )
+
+    mktempdir() do analysis_dir
+        SBayesAPP.save_nonmpi_posterior_mean!(
+            string(analysis_dir, "/"),
+            0,
+            1,
+            [zeros(2), zeros(2)],
+            posterior_state;
+            estimate_vara=false,
+            estimate_vare=true,
+            estimate_pi=false,
+            report_pleiotropic_qtl_effect_matrix=false,
+        )
+
+        @test readdlm(joinpath(analysis_dir, "estGtotal.txt"), ',') == expected_gtotal
+        @test readdlm(joinpath(analysis_dir, "estR.txt")) == expected_r
+    end
+end
+
 @testset "Non-MPI smoke run" begin
     root = SBayesAPP.repo_root()
     mktempdir() do analysis_dir
@@ -158,6 +232,7 @@ end
             300000,
             false,
             report_pleiotropic_qtl_effect_matrix=false,
+            output_mcmc_delta=false,
         )
 
         mkpath(config.analysis_path)
@@ -167,8 +242,10 @@ end
         @test isfile(joinpath(analysis_dir, "MCMC_samples_pi.txt"))
         @test isfile(joinpath(analysis_dir, "estPi1.txt"))
         @test isfile(joinpath(analysis_dir, "estR.txt"))
+        @test isfile(joinpath(analysis_dir, "last_sample_delta", "last_sample_delta1_rank0.txt"))
         @test !isfile(joinpath(analysis_dir, "MCMC_samples_marker_effects_variance.txt"))
         @test !isfile(joinpath(analysis_dir, "mcmcAtruecor_c.txt"))
+        @test !isfile(joinpath(analysis_dir, "mcmc_Delta1.rank0.txt"))
         @test !isfile(joinpath(analysis_dir, "estA1.txt"))
     end
 end 

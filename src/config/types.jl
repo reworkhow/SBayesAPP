@@ -24,6 +24,7 @@ struct NonMPIConfig
     estimate_Gscale::Bool
     estGscale_iter::Int
     report_pleiotropic_qtl_effect_matrix::Bool
+    output_mcmc_delta::Bool
     is_continue::Bool
 end
 
@@ -50,6 +51,7 @@ function NonMPIConfig(
     estimate_Gscale::Bool=true,
     estGscale_iter::Int=500,
     report_pleiotropic_qtl_effect_matrix::Bool=true,
+    output_mcmc_delta::Bool=true,
 )
     return NonMPIConfig(
         data_path,
@@ -73,6 +75,7 @@ function NonMPIConfig(
         estimate_Gscale,
         estGscale_iter,
         report_pleiotropic_qtl_effect_matrix,
+        output_mcmc_delta,
         is_continue,
     )
 end
@@ -100,6 +103,7 @@ function NonMPIConfig(
     estimate_Gscale::Bool=true,
     estGscale_iter::Int=500,
     report_pleiotropic_qtl_effect_matrix::Bool=true,
+    output_mcmc_delta::Bool=true,
 )
     return NonMPIConfig(
         data_path,
@@ -123,6 +127,7 @@ function NonMPIConfig(
         estimate_Gscale,
         estGscale_iter,
         report_pleiotropic_qtl_effect_matrix,
+        output_mcmc_delta,
         is_continue,
     )
 end

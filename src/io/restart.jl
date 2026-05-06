@@ -10,7 +10,7 @@ function write_nonmpi_restart_state(
     R_blk,
     A_vec,
     Pi,
-    mcmc_Delta,
+    deltaArray,
 )
     for trait in 1:nTraits
         writedlm(analysis_path * "last_mcmc_betaArray$trait.rank$my_rank.txt", betaArray[trait])
@@ -33,9 +33,6 @@ function write_nonmpi_restart_state(
 
     mkpath(analysis_path * "last_sample_delta/")
     for trait in 1:nTraits
-        last_delta = mcmc_Delta[trait][:, end]
-        open(analysis_path * "last_sample_delta/last_sample_delta$(trait)_rank$(my_rank).txt", "w") do io
-            writedlm(io, last_delta)
-        end
+        writedlm(analysis_path * "last_sample_delta/last_sample_delta$(trait)_rank$(my_rank).txt", deltaArray[trait])
     end
 end

@@ -20,6 +20,7 @@ function initialize_rank0_mcmc_state(
     estimate_pi=true,
     estimate_vara=true,
     estimate_vare=true,
+    report_pleiotropic_qtl_effect_matrix=true,
 )
     nsample4mean = Int(floor((nIter - burnin) / thin))
     mean_pi = nothing
@@ -29,12 +30,12 @@ function initialize_rank0_mcmc_state(
     end
 
     meanB2 = estimate_vara ? [zeros(nTraits, nTraits) for _ in 1:nCategory] : nothing
-    meanA2 = estimate_vara ? [zeros(nTraits, nTraits) for _ in 1:nCategory] : nothing
+    meanA2 = estimate_vara && report_pleiotropic_qtl_effect_matrix ? [zeros(nTraits, nTraits) for _ in 1:nCategory] : nothing
     meanBcor2 = estimate_vara ? zeros(nCategory) : nothing
-    meanAcor2 = estimate_vara ? zeros(nCategory) : nothing
+    meanAcor2 = estimate_vara && report_pleiotropic_qtl_effect_matrix ? zeros(nCategory) : nothing
 
-    meanA = [zeros(nTraits, nTraits) for _ in 1:nCategory]
-    meanAcor = zeros(nCategory)
+    meanA = report_pleiotropic_qtl_effect_matrix ? [zeros(nTraits, nTraits) for _ in 1:nCategory] : nothing
+    meanAcor = report_pleiotropic_qtl_effect_matrix ? zeros(nCategory) : nothing
     meanB = [zeros(nTraits, nTraits) for _ in 1:nCategory]
     meanBcor = zeros(nCategory)
     meanG = [zeros(nTraits, nTraits) for _ in 1:nCategory]
@@ -44,7 +45,7 @@ function initialize_rank0_mcmc_state(
     meanSSE = [zeros(nTraits, nTraits) for _ in 1:nCategory]
     meanGtotal = zeros(nTraits, nTraits)
     meanGtotal2 = zeros(nTraits, nTraits)
-    mcmcAtruecor_c = zeros(nsample4mean, nCategory)
+    mcmcAtruecor_c = report_pleiotropic_qtl_effect_matrix ? zeros(nsample4mean, nCategory) : nothing
     mcmcBcor_c = zeros(nsample4mean, nCategory)
     mcmcGcov_c = zeros(nsample4mean, nCategory)
     mcmcGcor_c = zeros(nsample4mean, nCategory)
