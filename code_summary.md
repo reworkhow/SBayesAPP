@@ -10,16 +10,11 @@ SBayesAPP implements a bivariate BayesC-style sampler that uses annotation-defin
 - total genetic covariance matrices across the genome,
 - residual covariance matrices, when that component is enabled.
 
-The repository currently exposes two Julia entrypoints:
-
-- `src/app_nonMPI.jl`: single-process version that assumes all LD blocks are stored in one input directory.
-- `src/app_MPI.jl`: MPI-distributed version that uses the same core sampler, but splits LD blocks across ranks and synchronizes global parameters through MPI reductions and broadcasts.
-
-The MPI code is not a different model. It is the same model with distributed data loading and distributed updates for global quantities.
+The repository now focuses on the package-backed non-MPI workflow, exposed through `scripts/run_nonmpi.jl`.
 
 ## Shared model objects
 
-Both scripts organize the sampler around the same parameterization.
+The current non-MPI workflow organizes the sampler around the same parameterization used throughout the package.
 
 - `betaArray`: latent Gaussian marker effects, stored separately for each trait, and within each trait vector the effects are ordered by annotation category, for example `[SNP1_c1 SNP2_c1 SNP1_c2 SNP2_c2]`, where `SNPi_cj` is the effect of marker `i` in category `j`.
 - `deltaArray`: binary inclusion indicators for each trait at each SNP ordered by category. The ordering matches `betaArray`.
@@ -36,13 +31,13 @@ For two traits, each SNP in each category belongs to one of four mixture states:
 - `[1, 0]`: included only in trait 1
 - `[0, 1]`: included only in trait 2
 
-The code stores those probabilities in dictionaries keyed by the corresponding length-2 vectors.
+The code stores those probabilities in dictionaries keyed by the corresponding length-2 tuples.
 
 ## Input contract
 
 ### Shared data inputs
 
-Both scripts expect transformed block-wise inputs that have already been prepared upstream.
+The non-MPI workflow expects transformed block-wise inputs that have already been prepared upstream.
 
 - `TransformedX_dict.jld2`: dictionary from block id to transformed genotype basis `X`.
 - `TransformedY_dict.jld2`: dictionary from block id to transformed response vectors for trait 1 and trait 2.
@@ -52,11 +47,11 @@ Both scripts expect transformed block-wise inputs that have already been prepare
 - annotation matrix dictionary: a per-block annotation membership matrix saved as JLD2.
 - annotation table: used to determine the annotation order and the number of SNPs in each annotation.
 
-The current example input directory under `example/SBayesAPP_input_first10blks/` matches the non-MPI loader in `src/app_nonMPI.jl`.
+The current example input directory under `example/SBayesAPP_input_first10blks/` matches the current non-MPI loader.
 
 ### Single-trait initialization inputs
 
-Both scripts set up several priors from a single-trait result directory `ST_path`, specifically:
+The workflow sets up several priors from a single-trait result directory `ST_path`, specifically:
 
 - `Trait1/mean_pi.txt`
 - `Trait2/mean_pi.txt`
@@ -70,38 +65,43 @@ These files are used to build:
 
 ### Annotation handling
 
-Both scripts currently hard-code:
+The current package path supports both categorical-only annotations and mixed continuous-plus-categorical annotations.
 
-- `nCon = 0`
-- `annotationType = repeat(["category"], nCat)`
+- `--n_con` controls how many annotation columns, starting from the left after `SNP`, are treated as continuous.
+- Any remaining annotation columns are treated as categorical.
+- Annotation metadata is loaded once and then used to build the per-block masks and transformed design views consumed by the sampler.
 
-That means the current checked-in code is operating in categorical-annotation mode only, even though helper logic exists for continuous annotations.
-
-## `app_nonMPI.jl`
+## `scripts/run_nonmpi.jl`
 
 ### Command-line interface
 
-`src/app_nonMPI.jl` reads 13 positional arguments:
+`scripts/run_nonmpi.jl` forwards named CLI arguments into `parse_nonmpi_args(ARGS)` and then calls `run_nonmpi(...)`.
 
-1. `data_path`
-2. `analysis_path`
-3. `nIter`
-4. `seed`
-5. `nrank`
-6. `annot_file`
-7. `annot_dict`
-8. `outFreq`
-9. `starting_value_dir`
-10. `gscale_value_dir`
-11. `ST_path`
-12. `thin`
-13. `is_continue` (optional, default `false`)
+The required options are:
+
+1. `--data_path`
+2. `--analysis_path`
+3. `--n_iter`
+4. `--seed`
+5. `--nrank`
+6. `--annot_file`
+7. `--annot_dict`
+8. `--out_freq`
+9. `--starting_value_dir`
+10. `--gscale_value_dir`
+11. `--st_path`
+12. `--thin`
+13. `--n1`
+14. `--n2`
+15. `--is_continue`
+
+Optional flags extend that contract with `--n_con`, `--estimate_vare`, `--estimate_vara`, `--estimate_pi`, `--estimate_gscale`, `--estgscale_iter`, `--report_pleiotropic_qtl_effect_matrix`, and `--output_mcmc_delta`.
 
 In practice, `nrank` is expected to be `1` in this file.
 
 ### Setup phase
 
-The single-process script does the following before entering MCMC:
+The non-MPI workflow does the following before entering MCMC:
 
 1. Reads the annotation table and derives the ordered annotation names and annotation sizes.
 2. Reads single-trait outputs to initialize `startPi` and `Gprior_vec`.
@@ -125,7 +125,7 @@ It then subtracts the previously loaded effects from `my_TransformedY_dict` so t
 
 ### Main MCMC loop
 
-The heart of the program is `runSBayesAPP`, whose iteration loop starts at `for iter = 1:nIter`.
+The heart of the program is `run_nonmpi_sampler!`, whose iteration loop starts at `for iter = 1:nIter`.
 
 Each iteration does the following.
 
@@ -241,7 +241,7 @@ At the final save point it also writes restart files, including:
 
 ### Final outputs
 
-At the end of the run, `app_nonMPI.jl` writes posterior summaries such as:
+At the end of the run, the non-MPI workflow writes posterior summaries such as:
 
 - `estA*.txt`: annotation-specific mean marker-effect covariance estimated from pleiotropic realized effects
 - `estB*.txt`: annotation-specific mean sampled covariance of latent beta effects
@@ -254,133 +254,19 @@ At the end of the run, `app_nonMPI.jl` writes posterior summaries such as:
 
 ### Important implementation details
 
-- The script parses `seed`, but unlike the MPI version it does not call `Random.seed!`. The argument is currently informational unless that is added later.
-- The script assumes `analysis_path` already exists. The example shell script handles that with `mkdir -p`.
-- Dictionary iteration order is relied on when matching the four `Pi` states to output rows. In modern Julia this is insertion-ordered, but it is still a fragile representation for a model parameter with fixed semantics.
+- The workflow accepts `seed`, but it does not currently call `Random.seed!`. The argument is currently informational unless that is added later.
+- The workflow creates `analysis_path` before writing outputs.
+- `Pi` state ordering is stabilized by helper functions such as `pi_key`, `pi_key_order`, and `write_pi_dict` rather than raw dictionary iteration order.
 
-## `app_MPI.jl`
+## Practical focus
 
-### Command-line interface
-
-`src/app_MPI.jl` extends the non-MPI argument list. It expects:
-
-1. `data_path`
-2. `analysis_path`
-3. `nIter`
-4. `seed`
-5. `nrank`
-6. `annot_file`
-7. `annot_dict`
-8. `outFreq`
-9. `starting_value_dir`
-10. `secondary_starting_value_dir`
-11. `ST_path`
-12. `thin`
-13. `N1`
-14. `N2`
-15. `estimate_pi`
-16. `fixed_hyperparameters` (optional)
-17. `is_continue` (optional)
-
-The extra arguments support:
-
-- residual scaling based on average sample sizes `N1` and `N2`,
-- turning `Pi` estimation on or off,
-- fixing hyperparameters,
-- continuing chains.
-
-### Setup phase
-
-The MPI script follows the same general preparation steps as the non-MPI version, with these additions.
-
-#### MPI bootstrap
-
-- `MPI.Init()` and `MPI.Finalize()` wrap the run.
-- Each rank identifies `my_rank` and `cluster_size`.
-- Random seeds are rank-specific via `Random.seed!(seed + my_rank)`.
-
-#### Rank-local data loading
-
-Each rank reads only its own shard from a directory structure of the form:
-
-- `nrank<cluster_size>.eigen/bhatXsj/995Eigen/rank<my_rank>.*`
-
-This is the key data-layout difference from the non-MPI script.
-
-#### Optional execution modes
-
-The MPI script also supports a fixed-hyperparameter mode.
-
-- `fixed_hyperparameters`: disables updates for `Pi`, `A_vec`, and optionally `R`, and instead reads fixed values from prior outputs.
-
-### How the sampler differs from `app_nonMPI.jl`
-
-The local within-rank marker updates are almost the same as in `app_nonMPI.jl`. The main difference is what gets synchronized across ranks.
-
-#### Quantities reduced to rank 0
-
-At different stages of each iteration, the MPI script gathers and reduces to rank 0:
-
-- `Atrue_vec` and pleiotropic marker counts `nQTL`
-- annotation-state counts `nLoci_array_vec`
-- annotation-specific genetic covariance `G_vec`
-- total genetic covariance `G_total`
-- beta sum-of-squares `SSE_vec`
-- residual covariance totals `R_blk_sum`
-
-These reductions let rank 0 update the global hyperparameters using statistics from the full data set rather than only its local shard.
-
-#### Quantities broadcast from rank 0
-
-After updating global parameters on rank 0, the script broadcasts:
-
-- `Pi`
-- `A_vec`
-
-That keeps all ranks synchronized before the next marker-update pass.
-
-#### Residual covariance handling
-
-The residual covariance logic is slightly different from the non-MPI version.
-
-- The prior starts at `diag(1/N1, 1/N2)`.
-- Rank 0 averages residual covariance across all blocks using the total block count `nBlocks`.
-- After reducing `R_blk_sum` and averaging it into `R_blkmean` on rank 0, the code currently does not broadcast `R_blkmean` back to all ranks. The relevant broadcast lines are commented out. As written, each rank keeps using its local `R_blk` values after the global summary is computed.
-
-That point is an implementation detail worth remembering when comparing MPI and non-MPI behavior.
-
-### Final outputs
-
-Rank 0 writes global summaries analogous to the non-MPI outputs:
-
-- `estA*.txt`, `estB*.txt`, `estG*.txt`, `estGtotal.txt`, `estR.txt`, `estPi*.txt`
-- `mcmcGcov_*.txt`, `mcmcGcor_*.txt`, `mcmcAtruecor_c.txt`
-
-Each rank also writes its own local posterior mean effects:
-
-- `meanAlpha1.rank<rank>.txt`
-- `meanAlpha2.rank<rank>.txt`
-
-If delta saving is enabled, each rank also writes:
-
-- `mcmc_Delta1.rank<rank>.txt`
-- `mcmc_Delta2.rank<rank>.txt`
-
-## Practical difference between the two entrypoints
-
-### Use `app_nonMPI.jl` when
+### Use `scripts/run_nonmpi.jl` when
 
 - you want the smallest runnable example,
 - all transformed data fit into one process,
 - you are debugging model logic or file conventions,
-- you want to use the provided example under `example/`.
-
-### Use `app_MPI.jl` when
-
-- your transformed input has already been partitioned by rank,
-- you want to run many LD blocks in parallel,
-- you need a distributed version or fixed-hyperparameter workflows,
-- you are running on a cluster with MPI available.
+- you want to use the provided example under `example/`,
+- you plan to add thread-level parallelism inside the current single-process workflow.
 
 ## Optimization-relevant observations
 
@@ -388,7 +274,7 @@ These points matter if the next step is code or repository optimization.
 
 - The dominant compute cost is the nested loop over blocks, markers, categories, and traits.
 - The code allocates many temporary vectors and slices inside hot loops, especially around `alphaArray`, `betaArray`, dictionary lookups, and per-marker trait updates.
-- Both scripts duplicate a large amount of logic, so maintainability improvements should prioritize factoring out shared sampler code.
+- The next performance refactor should target thread-safe parallelism inside the current non-MPI workflow rather than reviving a second distributed entrypoint.
 - The current restart and output format is text-heavy, which is convenient for inspection but expensive for large runs.
 - The model state is stored in large dense vectors of length `my_nsnp * nCategory` for each trait, so memory pressure will rise quickly as the number of annotations grows.
 

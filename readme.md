@@ -2,18 +2,17 @@
 
 SBayesAPP contains Julia implementations of a bivariate BayesC sampler that uses SNP annotations to model annotation-specific sharing patterns across two traits.
 
-This repository currently has two main execution paths:
+This repository now focuses on a single package-backed execution path that can be optimized further with Julia threads:
 
-- `src/app_nonMPI.jl`: single-process sampler for a local or small example run.
-- `src/app_MPI.jl`: MPI-enabled sampler for distributed runs where LD blocks are split across ranks.
+- `scripts/run_nonmpi.jl`: primary command-line entrypoint for local and future threaded runs.
 
-The checked-in example under `example/` is set up for the non-MPI path.
+The checked-in example under `example/` is set up for this single-process path.
 
 ## Repository layout
 
-- `src/`: Julia source files and package entrypoints.
+- `src/`: Julia package source files.
 - `scripts/`: Julia workflow entry scripts.
-- `script/`: compatibility shell launcher.
+- `script/`: convenience shell launchers.
 - `example/`: demonstration inputs and outputs.
 - `context.md`: short repository note describing the intended example workflow.
 
@@ -43,40 +42,10 @@ The current shell launcher is intended to run the single-process example and wri
 From the repository root:
 
 ```bash
-julia --project=. scripts/run_example.jl
-```
-
-If you prefer the compatibility shell wrapper, this still works:
-
-```bash
 bash script/run.sh
 ```
 
-## Direct non-MPI run
-
-If you want to call the current entrypoint directly, the equivalent command is:
-
-```bash
-julia --project=. src/app_nonMPI.jl \
-  --data_path example/SBayesAPP_input_first10blks/ \
-  --analysis_path example/SBayesAPP_res_first10blks/ \
-  --n_iter 1000 \
-  --seed 42 \
-  --nrank 1 \
-  --annot_file annotation_df.txt \
-  --annot_dict anno_matrix_dict \
-  --out_freq 100 \
-  --starting_value_dir XXX \
-  --gscale_value_dir XXX \
-  --st_path example/ST_res/ \
-  --thin 50 \
-  --n1 300000 \
-  --n2 300000 \
-  --n_con 0 \
-  --is_continue false
-```
-
-There is also a package-backed wrapper script that forwards those same named arguments:
+If you prefer to call the package entrypoint directly, use:
 
 ```bash
 julia --project=. scripts/run_nonmpi.jl \
@@ -98,9 +67,31 @@ julia --project=. scripts/run_nonmpi.jl \
   --is_continue false
 ```
 
+To prepare for thread-based acceleration, run the same entrypoint with Julia threads enabled:
+
+```bash
+julia --project=. --threads auto scripts/run_nonmpi.jl \
+  --data_path example/SBayesAPP_input_first10blks/ \
+  --analysis_path example/SBayesAPP_res_first10blks/ \
+  --n_iter 1000 \
+  --seed 42 \
+  --nrank 1 \
+  --annot_file annotation_df.txt \
+  --annot_dict anno_matrix_dict \
+  --out_freq 100 \
+  --starting_value_dir XXX \
+  --gscale_value_dir XXX \
+  --st_path example/ST_res/ \
+  --thin 50 \
+  --n1 300000 \
+  --n2 300000 \
+  --n_con 0 \
+  --is_continue false
+```
+
 Notes:
 
-- The output directory should exist before launching `src/app_nonMPI.jl` directly.
+- The workflow creates `analysis_path` automatically if it does not exist.
 - `annot_file` is interpreted relative to `data_path`, which is why the example uses `annotation_df.txt` and keeps a copy inside `example/SBayesAPP_input_first10blks/`.
 - The optional `--n_con` argument tells SBayesAPP how many annotation columns, starting from the left after `SNP`, should be treated as continuous. Any remaining annotation columns are treated as categorical.
 - Non-MPI commands can optionally add `--estimate_vare`, `--estimate_vara`, `--estimate_pi`, `--estimate_gscale`, `--estgscale_iter`, `--report_pleiotropic_qtl_effect_matrix`, and `--output_mcmc_delta`.
@@ -109,37 +100,6 @@ Notes:
 - Set `--output_mcmc_delta false` to skip writing `mcmc_Delta*.rank*.txt`; restart output still writes `last_sample_delta/` from the current `deltaArray`.
 - If `--estimate_vare false`, `starting_value_dir` should point to a directory containing `estR.txt`.
 - `STARTING_VALUE_DIR` and `GSCALE_VALUE_DIR` are placeholders for continuation or fixed-Gscale workflows. They are not used in the provided fresh example run.
-
-## MPI run
-
-The MPI entrypoint is `src/app_MPI.jl`. It expects rank-partitioned input files and a few extra arguments beyond the non-MPI version, including average sample sizes and flags controlling whether hyperparameters are estimated or fixed.
-
-A typical invocation pattern is:
-
-```bash
-mpiexec -n <ranks> julia --project=. scripts/run_mpi.jl \
-  --data_path <data_path>/ \
-  --analysis_path <analysis_path>/ \
-  --n_iter <nIter> \
-  --seed <seed> \
-  --nrank <ranks> \
-  --annot_file <annot_file> \
-  --annot_dict <annot_dict> \
-  --out_freq <outFreq> \
-  --starting_value_dir <starting_value_dir> \
-  --secondary_starting_value_dir <secondary_starting_value_dir> \
-  --st_path <ST_path>/ \
-  --thin <thin> \
-  --n1 <N1> \
-  --n2 <N2> \
-  --n_con [nCon] \
-  --estimate_pi <estimate_pi> \
-  --fixed_hyperparameters [fixed_hyperparameters] \
-  --is_continue [is_continue] \
-  --chr [chr]
-```
-
-This path is intended for pre-sharded data, not for the small example in `example/`.
 
 ## Required inputs
 
@@ -168,14 +128,13 @@ The samplers write three kinds of outputs.
 - Posterior summaries such as `estPi*.txt`, `estG*.txt`, `estGtotal.txt`, and `estR.txt`.
 - Restart files such as `last_mcmc_betaArray*.rank*.txt`, `pi_last_sample/`, `beta_effect_var_matrices_last_sample/`, and `last_sample_delta/`.
 
-For a detailed walkthrough of how those files are produced and how the two Julia entrypoints differ, see `code_summary.md`.
+For a detailed walkthrough of the current non-MPI workflow, see `code_summary.md`.
 
 ## Current caveats
 
-- The repository does not yet include a Julia project file for reproducible dependency installation.
-- `src/app_nonMPI.jl` parses a seed argument but does not currently call `Random.seed!`.
+- The current non-MPI workflow accepts a seed argument but does not currently call `Random.seed!`.
 - Mixed annotation runs are supported when the first `nCon` annotation columns are continuous and the remaining annotation columns are categorical.
-- The MPI code contains additional workflow modes, including split-chromosome and fixed-hyperparameter runs, but the checked-in example covers only the non-MPI path.
+- Thread-based speedups still need to be implemented inside the current non-MPI workflow; removing the MPI path is a packaging cleanup rather than a finished threading refactor.
 
 ## Next documentation target
 

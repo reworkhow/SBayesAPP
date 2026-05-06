@@ -1,6 +1,6 @@
 module ConfigTypes 
 
-export NonMPIConfig, MPIConfig
+export NonMPIConfig
 
 struct NonMPIConfig
     data_path::String
@@ -131,68 +131,5 @@ function NonMPIConfig(
         is_continue,
     )
 end
-
-struct MPIConfig
-    data_path::String
-    analysis_path::String
-    nIter::Int
-    seed::Int
-    nrank::Int
-    annot_file::String
-    annot_dict::String
-    out_freq::Int
-    starting_value_dir::String
-    secondary_starting_value_dir::String
-    st_path::String
-    thin::Int
-    n1::Int
-    n2::Int
-    n_con::Int
-    estimate_pi::Bool
-    fixed_hyperparameters::Bool
-    is_continue::Bool
-    chr::String
-end
-
-MPIConfig(
-    data_path::String,
-    analysis_path::String,
-    nIter::Int,
-    seed::Int,
-    nrank::Int,
-    annot_file::String,
-    annot_dict::String,
-    out_freq::Int,
-    starting_value_dir::String,
-    secondary_starting_value_dir::String,
-    st_path::String,
-    thin::Int,
-    n1::Int,
-    n2::Int,
-    estimate_pi::Bool,
-    fixed_hyperparameters::Bool,
-    is_continue::Bool,
-    chr::String,
-) = MPIConfig(
-    data_path,
-    analysis_path,
-    nIter,
-    seed,
-    nrank,
-    annot_file,
-    annot_dict,
-    out_freq,
-    starting_value_dir,
-    secondary_starting_value_dir,
-    st_path,
-    thin,
-    n1,
-    n2,
-    0,
-    estimate_pi,
-    fixed_hyperparameters,
-    is_continue,
-    chr,
-)
 
 end

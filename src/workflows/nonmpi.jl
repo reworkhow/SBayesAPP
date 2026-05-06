@@ -113,6 +113,8 @@ function run_nonmpi_sampler!(context)
     )
     (; A_vec, Ainv_vec, Pi, Rprior, df_R, scale_R, df_G, scale_G_vec, estimate_Gscale) = parameter_state
 
+    mkpath(analysis_path)
+
     if my_rank == 0
         writedlm(analysis_path * "annotationName.txt", annotation_metadata.annotationName)
     end

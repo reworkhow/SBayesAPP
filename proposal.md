@@ -1,4 +1,4 @@
-# Proposal: Refactoring SBayesAPP into a Package-Ready Julia Repository
+# Proposal: Refactoring SBayesAPP into a Package-Ready, Threaded Julia Repository
 
 ## Objective
 
@@ -7,19 +7,20 @@ The end goal is not only to optimize the current code, but to turn this reposito
 - installable and reproducible,
 - organized around reusable modules instead of large scripts,
 - easier to test, benchmark, and document,
-- prepared for both single-process and parallel execution modes,
-- maintainable enough that future optimization does not require editing two giant entrypoint files in parallel.
+- prepared for both serial and shared-memory parallel execution,
+- maintainable enough that future optimization does not require carrying a second distributed implementation in parallel.
 
-The current repository already has the key scientific ingredients:
+The repository already has the key scientific ingredients:
 
-- a non-MPI sampler in `src/app_nonMPI.jl`,
-- an MPI sampler in `src/app_MPI.jl`,
+- a package-backed non-MPI workflow centered on `src/workflows/nonmpi.jl`,
+- command-line wrappers under `scripts/`,
 - a runnable example under `example/`,
+- tests under `test/`,
 - a code-level description in `code_summary.md`.
 
-What it does not yet have is package structure, dependency management, clean module boundaries, or a refactor plan that separates model logic from execution mode, file I/O, and workflow orchestration.
+What it still needs is a refactor plan that treats the current non-MPI workflow as the single reference implementation and adds Julia thread-based parallelism around that shared kernel instead of maintaining an MPI-specific code path.
 
-This proposal focuses on that packaging and refactoring work.
+This proposal focuses on that packaging and threading work.
 
 ## What package-ready should mean for this repository
 
@@ -38,7 +39,7 @@ The repository should behave like a normal Julia package, with:
 
 ### 2. Reusable internal API
 
-The current scientific logic should be callable from Julia functions, not only from top-level scripts driven by `ARGS`.
+The scientific logic should be callable from Julia functions, not only from top-level scripts driven by `ARGS`.
 
 That means the repository should expose functions such as:
 
@@ -47,7 +48,7 @@ That means the repository should expose functions such as:
 - initializing priors and sampler state,
 - running the MCMC sampler,
 - writing outputs and restart files,
-- launching specific execution modes such as serial or MPI.
+- launching either a serial or threaded execution policy over the same sampler core.
 
 ### 3. Reproducible environment
 
@@ -55,7 +56,7 @@ A user should be able to clone the repository, activate the Julia environment, i
 
 ### 4. Clear separation of concerns
 
-The code summary already shows that the current large scripts mix together:
+The current workflow still mixes together:
 
 - command-line parsing,
 - data loading,
@@ -64,9 +65,18 @@ The code summary already shows that the current large scripts mix together:
 - the core marker-update loop,
 - posterior summary accumulation,
 - checkpoint writing,
-- MPI communication.
+- and future parallel execution concerns.
 
 Those concerns should be separated into modules so that each part can be tested and optimized independently.
+
+### 5. Thread-safe parallel design
+
+Because the intended parallel strategy is Julia multi-threading rather than MPI, package-ready for this repository must also mean:
+
+- no hidden data races in the sampler core,
+- no dependence on mutating shared `Dict` or `Vector` state from multiple tasks without a clear ownership rule,
+- explicit local reductions for quantities that are accumulated across blocks,
+- a serial fallback path that remains the reference for correctness.
 
 ## Proposed repository structure
 
@@ -86,9 +96,7 @@ SBayesAPP/
 │   ├── annotation_df.txt
 │   └── SBayesAPP_res_first10blks/
 ├── scripts/
-│   ├── run_example.jl
-│   ├── run_nonmpi.jl
-│   └── run_mpi.jl
+│   └── run_nonmpi.jl
 ├── src/
 │   ├── SBayesAPP.jl
 │   ├── config/
@@ -104,19 +112,19 @@ SBayesAPP/
 │   │   ├── priors.jl
 │   │   ├── state.jl
 │   │   ├── statistics.jl
-│   │   └── utilities.jl
+│   │   ├── utilities.jl
+│   │   └── block_data.jl
 │   ├── sampler/
 │   │   ├── marker_updates.jl
 │   │   ├── block_updates.jl
 │   │   ├── hyperparameter_updates.jl
 │   │   ├── summaries.jl
-│   │   └── run_serial.jl
+│   │   ├── run_serial.jl
+│   │   └── reductions.jl
 │   ├── parallel/
-│   │   ├── mpi.jl
-│   │   └── threaded.jl               # later phase
+│   │   └── threaded.jl
 │   └── workflows/
 │       ├── nonmpi.jl
-│       ├── mpi.jl
 │       └── example.jl
 ├── test/
 │   ├── runtests.jl
@@ -124,21 +132,23 @@ SBayesAPP/
 │   ├── test_priors.jl
 │   ├── test_io.jl
 │   ├── test_statistics.jl
-│   └── test_small_run.jl
+│   ├── test_small_run.jl
+│   └── test_threaded_run.jl
 └── benchmark/
 	├── run_example_benchmark.jl
-	└── compare_outputs.jl
+	├── compare_outputs.jl
+	└── benchmark_threaded_scaling.jl
 ```
 
-This structure is intentionally not minimal. It is meant to separate the package core from example data and from user-facing scripts.
+This structure is intentionally not minimal. It is meant to separate the package core from example data and from user-facing scripts while reserving one small area for threading-specific orchestration.
 
-## Why this structure fits the current code summary
+## Why this structure fits the current code
 
-The existing `code_summary.md` already provides the natural decomposition.
+The current code already suggests the right decomposition.
 
 ### Configuration layer
 
-The current scripts begin by reading many positional arguments and then converting them into typed values such as:
+The current workflow reads many named arguments and converts them into typed values such as:
 
 - paths,
 - booleans,
@@ -146,7 +156,8 @@ The current scripts begin by reading many positional arguments and then converti
 - output frequency,
 - thinning,
 - continuation flags,
-- MPI-specific parameters.
+- output toggles,
+- and future execution policy settings.
 
 This should become a typed configuration layer, for example:
 
@@ -155,11 +166,19 @@ This should become a typed configuration layer, for example:
 - `PathConfig`
 - `ParallelConfig`
 
-That change alone would remove a large amount of top-level script noise from both `app_nonMPI.jl` and `app_MPI.jl`.
+For the threaded path, `ParallelConfig` should describe behavior such as:
+
+- `mode = :serial | :threads`,
+- block chunk size,
+- scheduling policy,
+- whether block updates are threaded,
+- whether certain summaries remain serial.
+
+The number of Julia threads itself should not be treated as a normal runtime argument, because Julia thread count is configured before startup via `--threads` or `JULIA_NUM_THREADS`.
 
 ### Input and output layer
 
-The code summary shows that both scripts spend substantial code on:
+The current workflow spends substantial code on:
 
 - reading annotation tables,
 - reading transformed block dictionaries,
@@ -173,7 +192,7 @@ Those tasks belong in an I/O layer, not inside the sampler loop or entrypoint sc
 
 ### Model layer
 
-The code summary identifies stable model concepts that should become named types or structured containers:
+The current code has stable model concepts that should become named types or structured containers:
 
 - `Pi`,
 - `A_vec`,
@@ -191,14 +210,15 @@ Instead of passing many loose arrays and dictionaries through a giant function, 
 - `BlockWorkspace`
 - `PosteriorAccumulator`
 - `PriorState`
+- `ThreadLocalAccumulator`
 
 These do not need to hide the math. They only need to make ownership and update responsibility explicit.
 
 ### Sampler layer
 
-The core MCMC logic described in the code summary is the real heart of the package. That is the code that should eventually be optimized and reused by all execution modes.
+The core MCMC logic is the real heart of the package. That is the code that should be optimized and reused by both serial and threaded execution.
 
-From the current summary, the sampler naturally breaks into these units:
+From the current workflow, the sampler naturally breaks into these units:
 
 - per-marker update logic,
 - per-block update logic,
@@ -208,18 +228,136 @@ From the current summary, the sampler naturally breaks into these units:
 - posterior summary accumulation,
 - checkpoint writing triggers.
 
-Those should each become explicit functions. The current giant loop should become orchestration code that calls them.
+Those should each become explicit functions. The current large loop should become orchestration code that calls them.
 
 ### Parallel layer
 
-The MPI version should not duplicate the scientific kernel. It should wrap the shared sampler logic with:
+The threaded version should not become a second implementation of the model. It should wrap the shared sampler logic with:
 
-- rank-local data loading,
-- reductions to rank 0,
-- broadcasts of shared parameters,
-- MPI-specific orchestration only.
+- block partitioning,
+- per-task local accumulators,
+- explicit reduction of block-level summaries,
+- thread-safe orchestration only.
 
-That means the MPI code should eventually become a thin layer around a common sampler core, not a second implementation of the same algorithm.
+That means the threaded code should be a thin layer around a common sampler core, not a fork of the model implementation.
+
+## Thread-based execution plan
+
+This is the key design shift relative to the older MPI-oriented plan.
+
+### Guiding principle
+
+The correct reference behavior should remain the serial non-MPI workflow. Threading should be added by parallelizing independent block work inside each iteration, while keeping global hyperparameter updates and final reductions explicit and testable.
+
+### Recommended parallel unit: LD blocks
+
+The best first threading target is the block loop, not the inner marker loop.
+
+That is the right first cut because:
+
+- LD blocks are already the natural decomposition of the data,
+- each block owns its own transformed design and response state,
+- block-local updates can be run with shared global hyperparameters but independent local residual and effect updates,
+- the resulting quantities can be reduced after the threaded region.
+
+In other words, the intended iteration shape should become:
+
+1. freeze global parameters for the current iteration,
+2. process blocks in parallel,
+3. return local block summaries from each task,
+4. reduce those summaries,
+5. update global hyperparameters serially,
+6. write outputs and checkpoints as before.
+
+### Data layout changes needed before threading
+
+Before threading the block loop, the package should stop relying on mutable `Dict` objects inside hot parallel regions.
+
+In particular, block-aligned vectors or structs should replace repeated keyed access such as:
+
+- transformed `Y` by block,
+- annotation masks by block,
+- SNP indices by block,
+- per-block sample sizes,
+- per-block working buffers.
+
+This is important for two reasons:
+
+- it reduces lookup overhead in the hot path,
+- it avoids unsafe concurrent mutation of base collections like `Dict`.
+
+The package should construct a `Vector{BlockData}` or similar once during setup, where each entry contains the full state for one block.
+
+### Local accumulation strategy
+
+Julia threading does not provide an automatic reduction argument for `Threads.@threads`, and shared mutation is the main correctness risk. Therefore, the threaded design should use per-task local accumulators rather than shared counters.
+
+Examples of quantities that should be accumulated locally and then reduced include:
+
+- `nLoci_array_vec`,
+- `SSE_vec`,
+- any block-level summaries that currently aggregate into global counters,
+- temporary genetic covariance summaries when they are not stored in explicitly block-owned slots.
+
+This suggests a design where each task returns a small reduction object, for example:
+
+- `ThreadLocalAccumulator`
+- `ThreadLocalHyperStats`
+- `ThreadLocalOutputState`
+
+These objects can then be merged serially after `fetch`.
+
+### Safe shared writes
+
+Some writes can remain in place during threaded execution, but only if ownership is explicit.
+
+Safe examples include writing to disjoint block-owned or SNP-slice-owned storage such as:
+
+- `R_blk[b]`,
+- block-indexed variance arrays like `varg_blk_cat[b]`,
+- disjoint SNP slices of `betaArray`, `alphaArray`, and `deltaArray` corresponding to non-overlapping `SNPIndexb`.
+
+Unsafe examples include:
+
+- mutating a shared `Dict` from multiple tasks,
+- `push!` into shared arrays,
+- using one global temporary buffer across tasks,
+- relying on `threadid()` to choose a buffer for a yielding task.
+
+### Scheduling recommendation
+
+The first implementation should prefer task-based chunking with `Threads.@spawn` over a naive `Threads.@threads` rewrite of the full loop.
+
+That is the safer route because:
+
+- block sizes are heterogeneous,
+- chunked tasks make local reductions straightforward,
+- task-returned results are easier to reason about than shared mutable state,
+- Julia task migration makes `threadid()`-indexed buffers fragile.
+
+The intended pattern is:
+
+1. partition blocks into chunks,
+2. `Threads.@spawn` one task per chunk,
+3. allocate local accumulators inside the task,
+4. process the assigned blocks,
+5. return local summaries,
+6. reduce on the caller.
+
+Only once that path is correct should finer-grained scheduling experiments be considered.
+
+### Threading constraints from Julia's model
+
+The official Julia threading model implies several design constraints that should be made explicit in the package plan.
+
+- Julia thread count is configured before startup using `--threads` or `JULIA_NUM_THREADS`; it is not a normal package parameter.
+- `Threads.@threads` does not provide a built-in reduction clause, so reductions must be implemented explicitly.
+- Task migration means code should not rely on `threadid()` being stable across yields.
+- Base collections such as `Dict` require manual locking if they are modified from multiple threads.
+- Side-effect-heavy code must be audited carefully before being moved into threaded regions.
+- Locks or atomics should be a last resort in the hot path; per-task local state plus serial reduction is preferable for most sampler summaries.
+
+These constraints argue for a reduction-oriented block scheduler rather than shared-state threading.
 
 ## Environment and dependency plan
 
@@ -227,16 +365,17 @@ The repository also needs a clean environment story.
 
 ### Immediate environment tasks
 
-I would first create a real Julia `Project.toml` with the currently used dependencies, which appear to include:
+The Julia environment should include the packages already needed by the current non-MPI path, such as:
 
 - `CSV`
 - `DataFrames`
 - `Distributions`
 - `ProgressMeter`
 - `JLD2`
-- `MPI` for the MPI workflow only
 
-Standard libraries such as `LinearAlgebra`, `Random`, `Statistics`, `Dates`, and `DelimitedFiles` do not need to be added as external package dependencies, but the package environment should still clearly document what is required.
+Standard libraries such as `LinearAlgebra`, `Random`, `Statistics`, `Dates`, `DelimitedFiles`, and `Base.Threads` do not need to be added as external dependencies.
+
+Unlike MPI, Julia threads do not require a separate communication package for the initial implementation.
 
 ### Environment policy
 
@@ -244,8 +383,8 @@ I recommend this policy.
 
 - `Project.toml` is committed.
 - `Manifest.toml` is committed if exact reproducibility is important for paper or pipeline runs.
-- MPI is treated as an optional dependency path in the user documentation, even if the code includes MPI support.
-- the README documents one minimal install path for non-MPI users and one MPI path for cluster users.
+- Threaded execution is documented as the preferred acceleration path.
+- README examples show both a normal serial launch and a threaded launch using Julia's startup flags.
 
 ### Example environment workflow
 
@@ -260,16 +399,14 @@ Pkg.instantiate()
 Then either:
 
 ```bash
-julia scripts/run_example.jl
+bash script/run.sh
 ```
 
 or:
 
 ```bash
-julia scripts/run_nonmpi.jl --data-path ...
+julia --project=. --threads auto scripts/run_nonmpi.jl --data_path ...
 ```
-
-with a separate documented MPI workflow for cluster execution.
 
 ### Optional future environment improvements
 
@@ -277,24 +414,25 @@ Later, I would also consider:
 
 - a `docs/` environment for documentation builds,
 - a `benchmark/Project.toml` if benchmarking grows more complex,
-- CI checks for package instantiation and tests.
+- CI checks for package instantiation and tests,
+- documented guidance for `--gcthreads` once the threaded sampler starts allocating heavily enough that GC tuning matters.
 
-## How to break down the current giant Julia scripts
+## How to break down the current workflow code
 
-The current refactor should be guided directly by the code summary rather than by cosmetic file splitting.
+The current refactor should be guided directly by the model structure rather than by cosmetic file splitting.
 
 ### Current problem
 
-Right now `app_nonMPI.jl` and `app_MPI.jl` each combine:
+Right now the non-MPI path still combines:
 
 - argument parsing,
 - initialization logic,
-- all helper functions,
+- helper functions,
 - file I/O,
 - the main MCMC loop,
 - summary bookkeeping,
 - restart writing,
-- execution-mode concerns.
+- and future parallel-execution concerns.
 
 That makes the code hard to:
 
@@ -302,11 +440,12 @@ That makes the code hard to:
 - optimize,
 - profile,
 - reuse,
-- package.
+- package,
+- and thread safely.
 
-### Proposed decomposition of the non-MPI script
+### Proposed decomposition of the non-MPI workflow
 
-I would break `app_nonMPI.jl` into the following logical units.
+I would break the current path into the following logical units.
 
 #### 1. `config/`
 
@@ -317,7 +456,7 @@ Responsibility:
 - validate required paths and options,
 - fill defaults.
 
-This replaces most direct `ARGS[...]` access.
+This replaces direct `ARGS[...]` access and keeps future execution-policy settings centralized.
 
 #### 2. `io/inputs.jl`
 
@@ -329,7 +468,7 @@ Responsibility:
 - load block-level sample size inputs,
 - normalize file naming conventions.
 
-This moves all file-loading logic out of the main sampler script.
+This moves all file-loading logic out of the main sampler workflow.
 
 #### 3. `io/restart.jl`
 
@@ -358,25 +497,36 @@ Responsibility:
 - initialize arrays for `betaArray`, `deltaArray`, `alphaArray`, `R_blk`, and working buffers,
 - expose constructors for fresh runs and continuation runs.
 
-#### 6. `sampler/marker_updates.jl`
+#### 6. `model/block_data.jl`
+
+Responsibility:
+
+- transform block dictionaries into a block-aligned vector representation,
+- make block ownership explicit,
+- prepare thread-safe read-mostly inputs before entering the sampler.
+
+This is a key prerequisite for threading.
+
+#### 7. `sampler/marker_updates.jl`
 
 Responsibility:
 
 - the per-marker, per-category, per-trait update logic,
-- updating `beta`, `delta`, `alpha`, and residual vectors,
-- counting mixture states.
+- updating `beta`, `delta`, `alpha`, and block-local residual vectors,
+- counting mixture states for the current local accumulator.
 
 This is the most important future optimization target and should be isolated early.
 
-#### 7. `sampler/block_updates.jl`
+#### 8. `sampler/block_updates.jl`
 
 Responsibility:
 
 - per-block orchestration,
 - reconstruction of block-level genetic covariance summaries,
-- residual covariance updates.
+- residual covariance updates,
+- returning block-local reduction statistics.
 
-#### 8. `sampler/hyperparameter_updates.jl`
+#### 9. `sampler/hyperparameter_updates.jl`
 
 Responsibility:
 
@@ -385,7 +535,9 @@ Responsibility:
 - empirical `scale_G_vec` updates,
 - related matrix inversions and validation.
 
-#### 9. `sampler/summaries.jl`
+These remain serial until there is a compelling reason to parallelize them.
+
+#### 10. `sampler/summaries.jl`
 
 Responsibility:
 
@@ -394,43 +546,33 @@ Responsibility:
 - prepare final summary objects,
 - keep all output-accumulation rules in one place.
 
-#### 10. `io/outputs.jl`
+#### 11. `sampler/reductions.jl`
 
 Responsibility:
 
-- write final `estA*`, `estB*`, `estG*`, `estPi*`, `estR`, and trace files,
-- write MCMC sample files,
-- manage output directories and filenames.
+- define merge rules for thread-local accumulators,
+- keep serial and threaded reductions consistent,
+- make correctness checks and regression tests easier.
 
-#### 11. `workflows/nonmpi.jl`
+#### 12. `parallel/threaded.jl`
+
+Responsibility:
+
+- partition blocks into chunks,
+- spawn tasks,
+- allocate per-task workspaces and local accumulators,
+- collect and reduce task results,
+- provide one thread-aware execution policy without changing the model code.
+
+#### 13. `workflows/nonmpi.jl`
 
 Responsibility:
 
 - take a typed config,
 - call initialization,
-- call the shared serial sampler,
+- choose a serial or threaded block execution policy,
 - call output writers,
 - provide one public function such as `run_nonmpi(config)`.
-
-### Proposed decomposition of the MPI script
-
-The MPI script should be decomposed differently: not by copying the non-MPI code into more files, but by wrapping the same shared kernel with MPI-specific coordination.
-
-I would keep MPI responsibilities limited to:
-
-- MPI initialization and finalization,
-- determining `my_rank` and `cluster_size`,
-- rank-local input loading,
-- reduction of block- and category-level summaries to rank 0,
-- broadcast of updated shared parameters back to ranks,
-- MPI-specific run orchestration.
-
-This should live under:
-
-- `parallel/mpi.jl`
-- `workflows/mpi.jl`
-
-The marker updates, block summaries, hyperparameter updates, and output formatting should not be reimplemented in the MPI file.
 
 ## Proposed package API shape
 
@@ -439,16 +581,22 @@ I would aim for a small but clear public API.
 At the package level:
 
 - `run_nonmpi(config)`
-- `run_mpi(config)`
-- `load_example_config()`
+- `example_nonmpi_config()`
 - `build_config(; kwargs...)`
+
+Optionally, after the threaded path exists:
+
+- `run_nonmpi(config; execution=:serial)`
+- `run_nonmpi(config; execution=:threads)`
 
 Potential internal APIs:
 
 - `load_inputs(config)`
 - `initialize_priors(config, inputs)`
 - `initialize_state(config, inputs, priors)`
-- `run_sampler!(state, inputs, config)`
+- `run_iteration_serial!(state, inputs, config)`
+- `run_iteration_threaded!(state, inputs, config)`
+- `reduce_thread_locals!(...)`
 - `write_outputs(state, accumulators, config)`
 
 This package API would make the code usable from:
@@ -457,11 +605,11 @@ This package API would make the code usable from:
 - notebooks,
 - tests,
 - benchmarking harnesses,
-- future wrappers.
+- and future wrappers.
 
-## Testing strategy for package readiness
+## Testing strategy for package readiness and threading
 
-A package-ready refactor without tests would still be fragile. I would add tests in layers.
+A package-ready refactor without tests would still be fragile. Threading raises that bar further.
 
 ### Unit tests
 
@@ -472,42 +620,67 @@ Test the isolated building blocks:
 - annotation loading and ordering,
 - flatten and unflatten helpers,
 - correlation and variance helper functions,
-- restart serialization and deserialization.
+- restart serialization and deserialization,
+- local reduction merge logic.
 
 ### Small integration tests
 
-Run a very small serial workflow using the example input or a smaller synthetic fixture to confirm:
+Run a very small workflow using the example input or a smaller synthetic fixture to confirm:
 
 - outputs are created,
 - shapes are correct,
 - continuation mode can reload prior state,
 - summary files are internally consistent.
 
-### Regression tests
+### Serial versus threaded regression tests
 
-Use the current example as the initial behavioral baseline.
+This is the most important new test category.
 
-The goal is not exact chain identity for every stochastic output unless seeds and update order make that possible. The goal is to preserve:
+The threaded path should be checked against the serial path on a fixed small run for:
 
-- expected output structure,
-- stable interpretation of files,
-- reasonable agreement of posterior summaries under controlled settings.
+- matching output structure,
+- agreement of posterior summaries within a documented tolerance,
+- consistent restart outputs,
+- correct behavior for `Threads.nthreads() == 1`, `2`, and a larger count.
+
+The goal is not necessarily bitwise equality once scheduling changes, but it should be possible to verify that:
+
+- the same algorithm is being run,
+- reductions are correct,
+- no thread-specific file or state corruption appears,
+- outputs remain statistically compatible.
+
+### Benchmark tests
+
+Benchmarking should measure:
+
+- total runtime,
+- allocation count,
+- scaling with thread count,
+- whether thread overhead dominates on small examples,
+- and whether block-size imbalance hurts scaling.
 
 ## Script and CLI plan
 
-The repository should still provide easy command-line entrypoints, but these should become thin wrappers around package functions.
+The repository should still provide easy command-line entrypoints, but these should remain thin wrappers around package functions.
 
 ### Recommended change
 
-- replace ad hoc shell-first invocation with Julia scripts in `scripts/`,
-- keep `script/run.sh` only as a convenience launcher if needed,
-- make shell scripts call `julia scripts/run_example.jl` or `julia scripts/run_nonmpi.jl` rather than pointing directly at internal source files.
+- keep `scripts/run_nonmpi.jl` as the main entrypoint,
+- keep `script/run.sh` only as a convenience launcher if desired,
+- document threaded runs by changing how Julia is launched, not by reviving a separate MPI script.
 
-That keeps the package source clean and makes future changes less brittle.
+That means the recommended threaded invocation becomes:
+
+```bash
+julia --project=. --threads auto scripts/run_nonmpi.jl --data_path ...
+```
+
+If a convenience wrapper is desired later, it should only validate that Julia was started with more than one thread. It should not attempt to create threads itself, because thread count is fixed at process startup.
 
 ## Documentation plan
 
-The current repository now has a good start with `README.md` and `code_summary.md`. To support a package-ready repo, documentation should be split by purpose.
+The current repository already has a good start with `README.md` and `code_summary.md`. To support a package-ready threaded repo, documentation should be split by purpose.
 
 ### README
 
@@ -516,12 +689,19 @@ Should answer:
 - what SBayesAPP does,
 - how to install the environment,
 - how to run the example,
+- how to run with `--threads auto`,
 - where outputs go,
 - where to find detailed code and method notes.
 
 ### `code_summary.md`
 
 Should remain the internal developer-oriented description of the current algorithm and current execution flow.
+
+It should eventually include a short note describing:
+
+- which iteration stages are block-parallel,
+- which accumulators are reduced after the threaded region,
+- which steps remain intentionally serial.
 
 ### Future docs
 
@@ -531,82 +711,94 @@ I would eventually add:
 - output file documentation,
 - continuation workflow documentation,
 - package API usage examples,
-- parallel execution notes.
+- threaded execution notes,
+- performance tuning notes for thread count and chunk size.
 
 ## Phased implementation plan
 
-I would implement the full refactor in phases.
+I would implement the refactor in the following phases.
 
-### Phase 1: Make the repository a real Julia project
+### Phase 1: Consolidate the repository around the current package-backed non-MPI path
 
 Deliverables:
 
-- `Project.toml`
-- package module entry file `src/SBayesAPP.jl`
-- initial README environment instructions
-- scripts moved to a stable `scripts/` directory
+- one clear package module entry file `src/SBayesAPP.jl`,
+- one primary CLI wrapper in `scripts/run_nonmpi.jl`,
+- README wording aligned to the non-MPI path,
+- removal of any remaining MPI-first design assumptions from planning and docs.
 
-This phase makes the repository installable before the deeper refactor starts.
+This phase makes the non-MPI workflow the single reference implementation.
 
-### Phase 2: Extract non-MPI code into reusable modules
+### Phase 2: Extract the serial sampler into reusable modules
 
 Deliverables:
 
 - typed configuration objects,
 - input/output modules,
 - prior and state modules,
-- serial workflow function,
-- non-MPI script reduced to a thin wrapper.
+- a serial workflow function,
+- block-aligned input/state containers,
+- the current non-MPI script reduced to a thin wrapper.
 
 This phase creates the package core.
 
-### Phase 3: Refactor MPI around the shared kernel
+### Phase 3: Make the serial core thread-ready
 
 Deliverables:
 
-- MPI-specific orchestration layer,
-- shared sampler logic reused from the serial path,
-- clearer separation between communication and model updates.
+- no mutable `Dict` dependence in hot loop ownership,
+- explicit per-block state containers,
+- explicit local reduction objects,
+- serial helper functions that already follow block ownership boundaries,
+- a documented list of which arrays may be written concurrently and which may not.
 
-This phase prevents long-term divergence between serial and parallel code.
+This phase is about correctness scaffolding, not speed.
 
-### Phase 4: Add tests, benchmarks, and regression harnesses
+### Phase 4: Add threaded block execution around the shared kernel
 
 Deliverables:
 
-- `test/` suite,
-- example benchmark script,
-- baseline output comparison tooling.
+- `parallel/threaded.jl`,
+- block chunking and task spawning,
+- per-task local accumulators,
+- serial reduction of local results,
+- one package option to select serial or threaded execution.
+
+This phase should preserve the serial algorithm while changing only execution policy.
+
+### Phase 5: Add regression tests and scaling benchmarks
+
+Deliverables:
+
+- serial versus threaded regression tests,
+- test coverage for output structure and restart behavior,
+- benchmark scripts for thread scaling,
+- baseline comparisons on the example data.
 
 This phase makes later optimization safe.
 
-### Phase 5: Optimize the refactored sampler core
+### Phase 6: Optimize the threaded sampler core
 
 Only after the package structure and tests exist should the main performance work begin.
 
 Targets:
 
-- inner marker-update loop,
-- allocation reduction,
-- summary accumulation,
+- inner marker-update allocation reduction,
+- block scheduling and chunk-size tuning,
+- reduction overhead,
+- summary accumulation cost,
 - restart I/O efficiency,
-- potential threaded execution path.
-
-### Phase 6: Add a user-friendly shared-memory parallel path
-
-At this phase, I would consider a threaded serial-core variant as the first easier-to-use alternative to MPI.
-
-I would not start with this before the package refactor, because parallelizing unstable large scripts would make the code harder to clean up later.
+- GC and memory-pressure tuning when many threads are active.
 
 ## Recommendation
 
-The right way to package this repository is:
+The right way to evolve this repository is:
 
-1. convert it into a real Julia project,
-2. factor the current scripts into modules based on the boundaries already identified in `code_summary.md`,
-3. make non-MPI the clean reference workflow,
-4. rebuild MPI as a thin distributed layer around the shared kernel,
-5. add tests and benchmarks before serious optimization,
-6. then optimize and parallelize the refactored core.
+1. keep the current non-MPI package workflow as the single source of truth,
+2. refactor that workflow into reusable modules,
+3. redesign block data and summaries so they are thread-safe,
+4. add Julia multi-threading as a thin execution layer around the shared kernel,
+5. validate serial and threaded behavior against each other,
+6. then optimize the threaded core.
 
-This path aligns with the actual structure of the current code and gives a realistic route from a working research repository to a package-ready scientific software project.
+This path matches the actual shape of the current code, avoids maintaining a second MPI implementation, and gives a practical route from a working research repository to a package-ready scientific software project with a clear shared-memory parallel strategy.
