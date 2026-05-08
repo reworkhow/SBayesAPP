@@ -11,6 +11,7 @@ include("model/r_blk_state.jl")
 include("model/state.jl")
 include("model/block_setup.jl")
 include("model/utilities.jl")
+include("model/annotation_prior.jl")
 include("io/outputs.jl")
 include("workflows/nonmpi.jl")
 
@@ -18,23 +19,23 @@ using .ConfigTypes: NonMPIConfig
 
 export NonMPIConfig,
        build_nonmpi_cmd,
-    build_gprior_vec,
-    build_start_pi,
+       build_gprior_vec,
+       build_start_pi,
        example_nonmpi_config,
-    flatten,
-    flatten_matrices,
-    compute_correlation,
-    is_positive_definite,
-    load_annotation_metadata,
-     load_nonmpi_block_data,
+       flatten,
+       flatten_matrices,
+       compute_correlation,
+       is_positive_definite,
+       load_annotation_metadata,
+       load_nonmpi_block_data,
        parse_nonmpi_args,
-    read_to_dict,
-    read_to_dict_posterior_mean,
+       read_to_dict,
+       read_to_dict_posterior_mean,
        repo_root,
        run_nonmpi,
-    source_root,
-    unflatten,
-    unflatten_matrices
+       source_root,
+       unflatten,
+       unflatten_matrices
 
 repo_root() = normpath(joinpath(@__DIR__, ".."))
 source_root() = joinpath(repo_root(), "src")
@@ -99,6 +100,7 @@ _has_named_cli_args(args::Vector{String}) = any(startswith(arg, "--") for arg in
 
 _default_nonmpi_cli_settings() = (
     n_con=0,
+    annotation_prior_model=:group_dirichlet,
     estimate_vare=true,
     estimate_vara=true,
     estimate_pi=true,
@@ -126,6 +128,7 @@ function example_nonmpi_config(; root::AbstractString=repo_root())
         300000,
         false,
         n_con=0,
+        annotation_prior_model=:group_dirichlet,
         estimate_vare=true,
         estimate_vara=true,
         estimate_pi=true,
@@ -161,6 +164,7 @@ function parse_nonmpi_args(args::Vector{String})
         _parse_int_arg(_lookup_named_arg(parsed, ["n2"]; required=true), "n2"),
         _parse_bool_arg(_lookup_named_arg(parsed, ["is_continue"]; required=true)),
         n_con=_parse_int_arg(string(_lookup_named_arg(parsed, ["n_con", "ncon"]; default=string(defaults.n_con))), "n_con"),
+        annotation_prior_model=ConfigTypes.normalize_annotation_prior_model(string(_lookup_named_arg(parsed, ["annotation_prior_model"]; default=string(defaults.annotation_prior_model)))),
         estimate_vare=_parse_bool_arg(string(_lookup_named_arg(parsed, ["estimate_vare"]; default=string(defaults.estimate_vare)))),
         estimate_vara=_parse_bool_arg(string(_lookup_named_arg(parsed, ["estimate_vara"]; default=string(defaults.estimate_vara)))),
         estimate_pi=_parse_bool_arg(string(_lookup_named_arg(parsed, ["estimate_pi"]; default=string(defaults.estimate_pi)))),
@@ -172,7 +176,7 @@ function parse_nonmpi_args(args::Vector{String})
 end
 
 function build_nonmpi_cmd(config::NonMPIConfig)
-    return `$(Base.julia_cmd()) --project=$(repo_root()) $(joinpath(repo_root(), "scripts", "run_nonmpi.jl")) --data_path $(config.data_path) --analysis_path $(config.analysis_path) --n_iter $(string(config.nIter)) --seed $(string(config.seed)) --nrank $(string(config.nrank)) --annot_file $(config.annot_file) --annot_dict $(config.annot_dict) --out_freq $(string(config.out_freq)) --starting_value_dir $(config.starting_value_dir) --gscale_value_dir $(config.gscale_value_dir) --st_path $(config.st_path) --thin $(string(config.thin)) --n1 $(string(config.n1)) --n2 $(string(config.n2)) --n_con $(string(config.n_con)) --is_continue $(_bool_arg(config.is_continue)) --estimate_vare $(_bool_arg(config.estimate_vare)) --estimate_vara $(_bool_arg(config.estimate_vara)) --estimate_pi $(_bool_arg(config.estimate_pi)) --estimate_gscale $(_bool_arg(config.estimate_Gscale)) --estgscale_iter $(string(config.estGscale_iter)) --report_pleiotropic_qtl_effect_matrix $(_bool_arg(config.report_pleiotropic_qtl_effect_matrix)) --output_mcmc_delta $(_bool_arg(config.output_mcmc_delta))`
+    return `$(Base.julia_cmd()) --project=$(repo_root()) $(joinpath(repo_root(), "scripts", "run_nonmpi.jl")) --data_path $(config.data_path) --analysis_path $(config.analysis_path) --n_iter $(string(config.nIter)) --seed $(string(config.seed)) --nrank $(string(config.nrank)) --annot_file $(config.annot_file) --annot_dict $(config.annot_dict) --out_freq $(string(config.out_freq)) --starting_value_dir $(config.starting_value_dir) --gscale_value_dir $(config.gscale_value_dir) --st_path $(config.st_path) --thin $(string(config.thin)) --n1 $(string(config.n1)) --n2 $(string(config.n2)) --n_con $(string(config.n_con)) --annotation_prior_model $(String(config.annotation_prior_model)) --is_continue $(_bool_arg(config.is_continue)) --estimate_vare $(_bool_arg(config.estimate_vare)) --estimate_vara $(_bool_arg(config.estimate_vara)) --estimate_pi $(_bool_arg(config.estimate_pi)) --estimate_gscale $(_bool_arg(config.estimate_Gscale)) --estgscale_iter $(string(config.estGscale_iter)) --report_pleiotropic_qtl_effect_matrix $(_bool_arg(config.report_pleiotropic_qtl_effect_matrix)) --output_mcmc_delta $(_bool_arg(config.output_mcmc_delta))`
 end
 
 run_nonmpi(config::NonMPIConfig; dry_run::Bool=false) = dry_run ? build_nonmpi_cmd(config) : run_nonmpi_workflow(config)
