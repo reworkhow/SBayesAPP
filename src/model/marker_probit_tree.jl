@@ -7,19 +7,6 @@ const MARKER_PROBIT_TREE_STEP_LABELS = (
     "step3_10_vs_01",
 )
 
-mutable struct MarkerProbitTreeState
-    design_matrix::Matrix{Float64}
-    coefficients::Matrix{Float64}
-    mean_coefficients::Matrix{Float64}
-    mean_coefficients2::Matrix{Float64}
-    variance::Vector{Float64}
-    liability::Matrix{Float64}
-    mu::Matrix{Float64}
-    lower_bound::Matrix{Float64}
-    upper_bound::Matrix{Float64}
-    snp_pi::Matrix{Float64}
-end
-
 marker_probit_tree_step_labels() = collect(MARKER_PROBIT_TREE_STEP_LABELS)
 
 function marker_probit_tree_state_index(state)
@@ -126,7 +113,7 @@ function update_marker_probit_tree_coefficients!(
 )
     nobs = size(design_matrix, 1)
     old_intercept = coefficients[1]
-    
+
     rhs = sum(latent_residual) + nobs * old_intercept
     inv_lhs = 1.0 / nobs
     ahat = inv_lhs * rhs
@@ -149,7 +136,7 @@ end
 
 function sample_marker_probit_tree_step_variance!(state::MarkerProbitTreeState, step::Int)
     coeffs = view(state.coefficients, :, step)
-    n_random_coef = length(coeffs) - 1 
+    n_random_coef = length(coeffs) - 1
     state.variance[step] = (sum(abs2, view(coeffs, 2:length(coeffs))) + 2.0) /
                            rand(Chisq(n_random_coef + 2.0))
     return nothing
@@ -162,7 +149,7 @@ function sample_marker_probit_tree_step!(
     active::AbstractVector{<:Integer},
 )
     isempty(active) && return nothing
-    
+
     coeffs = view(state.coefficients, :, step)
     state.mu[:, step] .= state.design_matrix * coeffs
     state.lower_bound[:, step] .= -Inf
@@ -175,7 +162,6 @@ function sample_marker_probit_tree_step!(
     upper_active = view(state.upper_bound, active, step)
     response_active = view(response, active)
 
-    # samples the latent liability variable using truncated normal distributions.
     sample_marker_probit_tree_liabilities!(
         liability_active,
         mu_active,
@@ -219,15 +205,11 @@ function record_marker_probit_tree_coefficient_moments!(state::MarkerProbitTreeS
 end
 
 function update_marker_probit_tree_priors!(state::MarkerProbitTreeState, deltaArray::AbstractVector)
-    # converts the current marker inclusion states deltaArray into three binary response vectors for the three probit tree steps.
     responses, active_sets = marker_probit_tree_step_indicators(deltaArray)
-    #updates the probit regression for each of the three steps.
     for step in 1:3
         sample_marker_probit_tree_step!(state, step, responses[step], active_sets[step])
     end
-    # converts the updated probit linear predictors into SNP-specific prior probabilities.
     rebuild_marker_probit_tree_priors!(state)
-    # returns the average prior probabilities across SNPs
     return marker_probit_tree_summary_dict(state)
 end
 

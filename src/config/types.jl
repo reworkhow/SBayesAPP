@@ -1,6 +1,6 @@
 module ConfigTypes 
 
-export NonMPIConfig
+export MarkerProbitTreeState, NonMPIConfig
 
 const VALID_ANNOTATION_PRIOR_MODELS = (:group_dirichlet, :marker_probit_tree)
 
@@ -37,6 +37,19 @@ struct NonMPIConfig
     report_pleiotropic_qtl_effect_matrix::Bool
     output_mcmc_delta::Bool
     is_continue::Bool
+end
+
+mutable struct MarkerProbitTreeState
+    design_matrix::Matrix{Float64}
+    coefficients::Matrix{Float64}
+    mean_coefficients::Matrix{Float64}
+    mean_coefficients2::Matrix{Float64}
+    variance::Vector{Float64}
+    liability::Matrix{Float64}
+    mu::Matrix{Float64}
+    lower_bound::Matrix{Float64}
+    upper_bound::Matrix{Float64}
+    snp_pi::Matrix{Float64}
 end
 
 function NonMPIConfig(

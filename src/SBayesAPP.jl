@@ -1,41 +1,33 @@
 module SBayesAPP
 
 include("config/types.jl")
-include("io/annotations.jl")
+using .ConfigTypes: MarkerProbitTreeState, NonMPIConfig
+
 include("io/inputs.jl")
-include("io/restart.jl")
 include("model/continuation_state.jl")
 include("model/mcmc_setup.jl")
 include("model/priors.jl")
-include("model/r_blk_state.jl")
-include("model/state.jl")
+include("model/initial_state.jl")
 include("model/block_setup.jl")
 include("model/utilities.jl")
-include("model/annotation_prior.jl")
+include("model/marker_probit_tree.jl")
 include("io/outputs.jl")
 include("workflows/nonmpi.jl")
-
-using .ConfigTypes: NonMPIConfig 
 
 export NonMPIConfig,
        build_nonmpi_cmd,
        build_gprior_vec,
        build_start_pi,
        example_nonmpi_config,
-       flatten,
-       flatten_matrices,
        compute_correlation,
-       is_positive_definite,
        load_annotation_metadata,
        load_nonmpi_block_data,
        parse_nonmpi_args,
        read_to_dict,
-       read_to_dict_posterior_mean,
        repo_root,
        run_nonmpi,
        source_root,
-       unflatten,
-       unflatten_matrices
+       
 
 repo_root() = normpath(joinpath(@__DIR__, ".."))
 source_root() = joinpath(repo_root(), "src")
