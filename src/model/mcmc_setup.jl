@@ -21,6 +21,7 @@ function initialize_rank0_mcmc_state(
     estimate_vara=true,
     estimate_vare=true,
     report_pleiotropic_qtl_effect_matrix=true,
+    save_category_correlation_outputs=true,
 )
     nsample4mean = Int(floor((nIter - burnin) / thin))
     mean_pi = nothing
@@ -31,24 +32,24 @@ function initialize_rank0_mcmc_state(
 
     meanB2 = estimate_vara ? [zeros(nTraits, nTraits) for _ in 1:nCategory] : nothing
     meanA2 = estimate_vara && report_pleiotropic_qtl_effect_matrix ? [zeros(nTraits, nTraits) for _ in 1:nCategory] : nothing
-    meanBcor2 = estimate_vara ? zeros(nCategory) : nothing
-    meanAcor2 = estimate_vara && report_pleiotropic_qtl_effect_matrix ? zeros(nCategory) : nothing
+    meanBcor2 = estimate_vara && save_category_correlation_outputs ? zeros(nCategory) : nothing
+    meanAcor2 = estimate_vara && report_pleiotropic_qtl_effect_matrix && save_category_correlation_outputs ? zeros(nCategory) : nothing
 
     meanA = report_pleiotropic_qtl_effect_matrix ? [zeros(nTraits, nTraits) for _ in 1:nCategory] : nothing
-    meanAcor = report_pleiotropic_qtl_effect_matrix ? zeros(nCategory) : nothing
+    meanAcor = report_pleiotropic_qtl_effect_matrix && save_category_correlation_outputs ? zeros(nCategory) : nothing
     meanB = [zeros(nTraits, nTraits) for _ in 1:nCategory]
-    meanBcor = zeros(nCategory)
+    meanBcor = save_category_correlation_outputs ? zeros(nCategory) : nothing
     meanG = [zeros(nTraits, nTraits) for _ in 1:nCategory]
     meanG2 = [zeros(nTraits, nTraits) for _ in 1:nCategory]
-    meanGcor = zeros(nCategory)
-    meanGcor2 = zeros(nCategory)
+    meanGcor = save_category_correlation_outputs ? zeros(nCategory) : nothing
+    meanGcor2 = save_category_correlation_outputs ? zeros(nCategory) : nothing
     meanSSE = [zeros(nTraits, nTraits) for _ in 1:nCategory]
     meanGtotal = zeros(nTraits, nTraits)
     meanGtotal2 = zeros(nTraits, nTraits)
-    mcmcAtruecor_c = report_pleiotropic_qtl_effect_matrix ? zeros(nsample4mean, nCategory) : nothing
-    mcmcBcor_c = zeros(nsample4mean, nCategory)
-    mcmcGcov_c = zeros(nsample4mean, nCategory)
-    mcmcGcor_c = zeros(nsample4mean, nCategory)
+    mcmcAtruecor_c = report_pleiotropic_qtl_effect_matrix && save_category_correlation_outputs ? zeros(nsample4mean, nCategory) : nothing
+    mcmcBcor_c = save_category_correlation_outputs ? zeros(nsample4mean, nCategory) : nothing
+    mcmcGcov_c = save_category_correlation_outputs ? zeros(nsample4mean, nCategory) : nothing
+    mcmcGcor_c = save_category_correlation_outputs ? zeros(nsample4mean, nCategory) : nothing
     mcmcGcov_total = zeros(nsample4mean)
     mcmcGcor_total = zeros(nsample4mean)
     meanR = estimate_vare ? zeros(nTraits, nTraits) : nothing

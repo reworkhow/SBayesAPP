@@ -1,34 +1,8 @@
-using LinearAlgebra: cholesky, diag
-
-function flatten(vec_of_vecs)
-    return vcat(map(x -> x[:], vec_of_vecs)...)
-end
-
-function unflatten(seq_vec, subvec_length)
-    return [seq_vec[i:i+subvec_length-1] for i in 1:subvec_length:length(seq_vec)]
-end
-
-function flatten_matrices(vec_of_mats)
-    return vcat(map(x -> x[:], vec_of_mats)...)
-end
-
-function unflatten_matrices(seq_vec, nrows, ncols)
-    num_matrices = length(seq_vec) ÷ (nrows * ncols)
-    return [reshape(seq_vec[(i-1)*nrows*ncols+1:i*nrows*ncols], nrows, ncols) for i in 1:num_matrices]
-end
+using LinearAlgebra: diag
 
 function compute_correlation(cov_matrix)
     std_devs = sqrt.(diag(cov_matrix))
     return cov_matrix[1, 2] / (std_devs[1] * std_devs[2])
-end
-
-function is_positive_definite(matrix)
-    try
-        cholesky(matrix)
-        return true
-    catch
-        return false
-    end
 end
 
 pi_key_order() = ((0.0, 0.0), (1.0, 1.0), (1.0, 0.0), (0.0, 1.0))
@@ -89,5 +63,3 @@ function read_to_dict(input_file::String)::Dict{NTuple{2,Float64},Float64}
     end
     return dict
 end
-
-read_to_dict_posterior_mean(input_file::String)::Dict{NTuple{2,Float64},Float64} = read_to_dict(input_file)

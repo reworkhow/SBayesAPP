@@ -1,16 +1,3 @@
-function load_effect_state(effect_starting_path, delta_starting_path, my_rank, nTraits)
-    betaArray = [
-        vec(readdlm(effect_starting_path * "last_mcmc_betaArray$(trait).rank$my_rank.txt"))
-        for trait in 1:nTraits
-    ]
-    deltaArray = [
-        vec(readdlm(delta_starting_path * "last_sample_delta$(trait)_rank$my_rank.txt"))
-        for trait in 1:nTraits
-    ]
-    alphaArray = [deltaArray[trait] .* betaArray[trait] for trait in 1:nTraits]
-    return betaArray, alphaArray, deltaArray
-end
-
 function apply_alpha_correction!(
     transformed_y_dict,
     xArray_dict,

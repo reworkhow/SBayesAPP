@@ -25,26 +25,43 @@ end
 
 function build_nonmpi_sampler_settings(config::ConfigTypes.NonMPIConfig)
     estimate_vara = config.estimate_vara
+    estimate_pi = config.estimate_pi
+    if config.annotation_prior_model == :marker_probit_tree && !estimate_pi
+        @warn "estimate_pi=false is ignored when annotation_prior_model=:marker_probit_tree."
+        estimate_pi = true
+    end
+    is_continue = config.is_continue
+    if config.annotation_prior_model == :marker_probit_tree && is_continue
+        @warn "is_continue=true is ignored when annotation_prior_model=:marker_probit_tree. A fresh run will be started instead."
+        is_continue = false
+    end
     return (
         estimate_vare=config.estimate_vare,
         estimate_vara=estimate_vara,
-        estimate_pi=config.estimate_pi,
+        estimate_pi=estimate_pi,
         estimate_Gscale=config.estimate_Gscale && estimate_vara,
         estGscale_iter=config.estGscale_iter,
+        is_continue=is_continue,
     )
 end
 
 function build_nonmpi_run_context(config::ConfigTypes.NonMPIConfig)
     annotation_metadata = load_annotation_metadata(config.data_path, config.annot_file; nCon=config.n_con)
+    if config.annotation_prior_model == :marker_probit_tree && config.n_con != 0
+        @warn "n_con is ignored when annotation_prior_model=:marker_probit_tree; all annotation columns are treated as prior features."
+    end
     settings = build_nonmpi_sampler_settings(config)
     start_pi_result = build_start_pi(config.st_path; estimate_pi=settings.estimate_pi)
-    gprior_vec = build_gprior_vec(config.st_path, annotation_metadata.nLoci_annot, start_pi_result.Pi00)
+    gprior_vec = config.annotation_prior_model == :group_dirichlet ?
+        build_gprior_vec(config.st_path, annotation_metadata.nLoci_annot, start_pi_result.Pi00) :
+        nothing
 
     return (
         config=config,
         annotation_metadata=annotation_metadata,
         settings=settings,
         startPi=start_pi_result.startPi,
+        startPi00=start_pi_result.Pi00,
         Gprior_vec=gprior_vec,
     )
 end
@@ -60,9 +77,9 @@ function run_nonmpi_sampler!(context)
     outFreq = config.out_freq
     starting_value_dir = config.starting_value_dir
     thin = config.thin
-    is_continue = config.is_continue
+    is_continue = settings.is_continue
+    annotation_prior_model = config.annotation_prior_model
 
-    nLoci_annot = annotation_metadata.nLoci_annot
     nCon = annotation_metadata.nCon
     estimate_vare = settings.estimate_vare
     estimate_vara = settings.estimate_vara
@@ -86,7 +103,7 @@ function run_nonmpi_sampler!(context)
     my_nGWAS_dict = block_data.nGWAS_dict
     my_nblk = block_data.nblk
     my_nsnp = block_data.nsnp
-    my_anno_matrix_dict = block_data.anno_matrix_dict
+    raw_anno_matrix_dict = block_data.anno_matrix_dict
 
     if is_continue
         burnin = 0
@@ -94,7 +111,13 @@ function run_nonmpi_sampler!(context)
         burnin = floor(Int, nIter * 0.4)
     end
 
-    nCategory = annotation_metadata.nCat + nCon
+    nCategory = annotation_prior_model == :group_dirichlet ? annotation_metadata.nCat + nCon : 1
+    nLoci_annot = annotation_prior_model == :group_dirichlet ? annotation_metadata.nLoci_annot : Int[my_nsnp]
+    effect_nCon = annotation_prior_model == :group_dirichlet ? nCon : 0
+    if Gprior_vec === nothing
+        Gprior_vec = build_gprior_vec(config.st_path, nLoci_annot, context.startPi00)
+    end
+    
     nTraits = 2
     parameter_state = initialize_nonmpi_parameter_state(
         my_rank,
@@ -118,14 +141,25 @@ function run_nonmpi_sampler!(context)
     if my_rank == 0
         writedlm(analysis_path * "annotationName.txt", annotation_metadata.annotationName)
     end
-    xpx_dict, xArray_dict, my_anno_matrix_dict = prepare_block_state!(
-        my_blkID,
-        my_blkSNPsIndex_dict,
-        block_data.transformed_x_dict,
-        my_anno_matrix_dict,
-        nCon,
-        annotation_metadata.annotationType,
-    )
+    marker_probit_tree_state = nothing
+    if annotation_prior_model == :group_dirichlet
+        xpx_dict, xArray_dict, my_anno_matrix_dict = prepare_block_state!(
+            my_blkID,
+            my_blkSNPsIndex_dict,
+            block_data.transformed_x_dict,
+            raw_anno_matrix_dict,
+            effect_nCon,
+            annotation_metadata.annotationType,
+        )
+    else
+        xpx_dict, xArray_dict, my_anno_matrix_dict, annotation_design = prepare_marker_probit_tree_block_state!(
+            my_blkID,
+            my_blkSNPsIndex_dict,
+            block_data.transformed_x_dict,
+            raw_anno_matrix_dict,
+        )
+        marker_probit_tree_state = initialize_marker_probit_tree_state(annotation_design, context.startPi)
+    end
     block_data = nothing
     GC.gc()
 
@@ -167,6 +201,8 @@ function run_nonmpi_sampler!(context)
         mcmc_Delta = [zeros(my_nsnp * nCategory, nOutput) for _ in 1:nTraits]
     end
 
+    save_category_correlation_outputs = annotation_prior_model == :group_dirichlet
+
     rank0_mcmc_state = nothing
     rank0_mcmc_state = initialize_rank0_mcmc_state(
         Pi,
@@ -179,6 +215,7 @@ function run_nonmpi_sampler!(context)
         estimate_vara=estimate_vara,
         estimate_vare=estimate_vare,
         report_pleiotropic_qtl_effect_matrix=report_pleiotropic_qtl_effect_matrix,
+        save_category_correlation_outputs=save_category_correlation_outputs,
     )
     (; mean_pi, mean_pi2, meanB2, meanA2, meanBcor2, meanAcor2, meanA, meanAcor, meanB, meanBcor, meanG, meanG2, meanGcor, meanGcor2, meanSSE, meanGtotal, meanGtotal2, mcmcAtruecor_c, mcmcBcor_c, mcmcGcov_c, mcmcGcor_c, mcmcGcov_total, mcmcGcor_total, meanR, meanR2) = rank0_mcmc_state
 
@@ -199,13 +236,18 @@ function run_nonmpi_sampler!(context)
         println("estimate_pi=$estimate_pi")
         println("analysis_path=$analysis_path")
         println("data_path=$(config.data_path)")
+        println("annotation_prior_model=$annotation_prior_model")
         println("report_pleiotropic_qtl_effect_matrix=$report_pleiotropic_qtl_effect_matrix")
         println("output_mcmc_delta=$output_mcmc_delta")
         if estimate_vara
             println("estimate_Gscale=$estimate_Gscale")
             println("starting value of scale_G_vec is: ", scale_G_vec)
         end
-        println("nCat = $(annotation_metadata.nCat), nCon = $nCon")
+        if annotation_prior_model == :group_dirichlet
+            println("nCat = $(annotation_metadata.nCat), nCon = $nCon")
+        else
+            println("effect categories = $nCategory, annotation design features = $(size(marker_probit_tree_state.design_matrix, 2))")
+        end
         println("thin = $thin")
         time_start = now()
         println("Start time: ", time_start)
@@ -289,14 +331,13 @@ function run_nonmpi_sampler!(context)
                 annoindexm = annotationMatb[marker, :] # categories for current marker
 
                 for cat = 1:nCategory
-                    if nCon != 0
-                        if cat <= nCon + 1 # continuous group + categorical group (after nCon+1, xArrayc/xpxc will not change)
+                    if effect_nCon != 0
+                        if cat <= effect_nCon + 1 # continuous group + categorical group (after effect_nCon+1, xArrayc/xpxc will not change)
                             xArrayc = xArray_vec[cat]
                             xpxc = xpx_vec[cat]
                         end
                     end
                     Ginv = Ainv_vec[cat]
-                    BigPi = Pi[cat]
 
                     if annoindexm[cat] # skip sampling if the marker is not in the category
                         markerIndex = (cat - 1) * my_nsnp + true_marker_num # exact position in betaArray; betaArray[trait1]: nMarker*nCategory-by-1
@@ -329,8 +370,10 @@ function run_nonmpi_sampler!(context)
                             d1[k] = 1.0
 
                             #sample δj
-                            logDelta0 = -0.5 * (log(Ginv11) - gHat0^2 * Ginv11) + log(BigPi[pi_key(d0)]) #logPi
-                            logDelta1 = -0.5 * (log(C11) - gHat1^2 * C11) + log(BigPi[pi_key(d1)]) #logPiComp
+                            logPrior0 = log_marker_state_prior(annotation_prior_model, Pi, marker_probit_tree_state, cat, true_marker_num, d0)
+                            logPrior1 = log_marker_state_prior(annotation_prior_model, Pi, marker_probit_tree_state, cat, true_marker_num, d1)
+                            logDelta0 = -0.5 * (log(Ginv11) - gHat0^2 * Ginv11) + logPrior0 #logPi
+                            logDelta1 = -0.5 * (log(C11) - gHat1^2 * C11) + logPrior1 #logPiComp
                             probDelta1 = 1.0 / (1.0 + exp(logDelta0 - logDelta1))
 
                             #sample marker effects
@@ -377,7 +420,7 @@ function run_nonmpi_sampler!(context)
                 what_array_total = [zeros(size(XAb, 1)) for _ in 1:nTraits] # used to compute total genetic variance
 
                 for cat in 1:nCategory
-                    if nCon != 0 && cat <= nCon + 1 # continuous group + categorical group (after nCon+1, xArrayc/xpxc will not change)
+                    if effect_nCon != 0 && cat <= effect_nCon + 1 # continuous group + categorical group (after effect_nCon+1, xArrayc/xpxc will not change)
                         XAb = xArray_vec[cat]
                     end
                     alphaArray_c = [alphaArray[i][(cat-1)*my_nsnp.+SNPIndexb] for i in 1:nTraits]
@@ -452,8 +495,9 @@ function run_nonmpi_sampler!(context)
                     if estimate_vara 
                         meanA2[cat] += (Atrue_cat .^ 2 - meanA2[cat]) * iIter
                     end
-                    # correlation values
-                    mcmcAtruecor_c[iter_after_burnin_thin_index, cat] = compute_correlation(Atrue_cat)
+                    if save_category_correlation_outputs
+                        mcmcAtruecor_c[iter_after_burnin_thin_index, cat] = compute_correlation(Atrue_cat)
+                    end
                     # save the Atrue_cat to file
                     open(file_names["marker_effects_variance"], "a") do io
                         writedlm(io, Atrue_cat, ',')
@@ -466,21 +510,35 @@ function run_nonmpi_sampler!(context)
         ### Step1. sample Pi ###
         ########################        
         if estimate_pi
-            tempPi_vec = [zeros(nlabel) for cat = 1:nCategory]
-            for cat = 1:nCategory
-                tempPi_vec[cat] = rand(Dirichlet(nLoci_array_vec[cat] .+ 1))
-                if do_thin
-                    tempPi2 = tempPi_vec[cat] .^ 2
-                    for (iCategori, key) in enumerate(pi_key_order())
-                        mean_pi[cat][key] += (tempPi_vec[cat][iCategori] - mean_pi[cat][key]) * iIter
-                        mean_pi2[cat][key] += (tempPi2[iCategori] - mean_pi2[cat][key]) * iIter
-                    end
-                end   
-            end
+            if annotation_prior_model == :group_dirichlet
+                tempPi_vec = [zeros(nlabel) for cat = 1:nCategory]
+                for cat = 1:nCategory
+                    tempPi_vec[cat] = rand(Dirichlet(nLoci_array_vec[cat] .+ 1))
+                    if do_thin
+                        tempPi2 = tempPi_vec[cat] .^ 2
+                        for (iCategori, key) in enumerate(pi_key_order())
+                            mean_pi[cat][key] += (tempPi_vec[cat][iCategori] - mean_pi[cat][key]) * iIter
+                            mean_pi2[cat][key] += (tempPi2[iCategori] - mean_pi2[cat][key]) * iIter
+                        end
+                    end   
+                end
 
-            for cat = 1:nCategory
-                for (iCategori, key) in enumerate(pi_key_order())
-                    Pi[cat][key] = tempPi_vec[cat][iCategori] #annotation specific pi
+                for cat = 1:nCategory
+                    for (iCategori, key) in enumerate(pi_key_order())
+                        Pi[cat][key] = tempPi_vec[cat][iCategori] #annotation specific pi
+                    end
+                end
+            else # :marker_probit_tree
+                updated_pi = update_marker_probit_tree_priors!(marker_probit_tree_state, deltaArray)
+                for (key, value) in updated_pi
+                    Pi[1][key] = value
+                end
+                if do_thin
+                    record_marker_probit_tree_coefficient_moments!(marker_probit_tree_state, iIter)
+                    for key in pi_key_order()
+                        mean_pi[1][key] += (Pi[1][key] - mean_pi[1][key]) * iIter
+                        mean_pi2[1][key] += (Pi[1][key]^2 - mean_pi2[1][key]) * iIter
+                    end
                 end
             end
         end
@@ -531,8 +589,9 @@ function run_nonmpi_sampler!(context)
             if do_thin
                 # save mean for beta effect variance 
                 meanB[cat] += (A_vec[cat] - meanB[cat]) * iIter
-                # correlation values
-                mcmcBcor_c[iter_after_burnin_thin_index, cat] = compute_correlation(A_vec[cat])
+                if save_category_correlation_outputs
+                    mcmcBcor_c[iter_after_burnin_thin_index, cat] = compute_correlation(A_vec[cat])
+                end
                 if estimate_vara 
                     meanB2[cat] += (A_vec[cat] .^ 2 - meanB2[cat]) * iIter
                 end
@@ -578,11 +637,12 @@ function run_nonmpi_sampler!(context)
             mcmcGcov_total[iter_after_burnin_thin_index] = totalvarg[1, 2]
 
             for cat = 1:nCategory
-                # correlation values
-                mcmcGcor_c[iter_after_burnin_thin_index, cat] = compute_correlation(G_vec[cat])
-                mcmcGcov_c[iter_after_burnin_thin_index, cat] = G_vec[cat][1, 2]
                 meanG[cat] += (G_vec[cat] - meanG[cat]) * iIter
                 meanG2[cat] += (G_vec[cat] .^ 2 - meanG2[cat]) * iIter
+                if save_category_correlation_outputs
+                    mcmcGcor_c[iter_after_burnin_thin_index, cat] = compute_correlation(G_vec[cat])
+                    mcmcGcov_c[iter_after_burnin_thin_index, cat] = G_vec[cat][1, 2]
+                end
             end
             meanGtotal += (totalvarg - meanGtotal) * iIter
             meanGtotal2 += (totalvarg .^ 2 - meanGtotal2) * iIter
@@ -637,7 +697,7 @@ function run_nonmpi_sampler!(context)
                     R_blk,
                     A_vec,
                     Pi,
-                    deltaArray,   
+                    deltaArray,
                 )
             end
         end
@@ -685,6 +745,9 @@ function run_nonmpi_sampler!(context)
         estimate_vare=estimate_vare,
         estimate_pi=estimate_pi,
         report_pleiotropic_qtl_effect_matrix=report_pleiotropic_qtl_effect_matrix,
+        annotation_prior_model=annotation_prior_model,
+        marker_probit_tree_state=marker_probit_tree_state,
+        annotation_names=annotation_metadata.annotationName,
     )
 
     if output_mcmc_delta
