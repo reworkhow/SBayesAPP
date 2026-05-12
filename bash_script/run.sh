@@ -11,7 +11,6 @@ ANALYSIS_PATH="$REPO_ROOT/example/SBayesAPP_res_chr1/"
 mkdir -p "$ANALYSIS_PATH"
 NITER=1000
 SEED=42
-NRANK=1
 ANNOT_FILE="annotation_df.txt"
 ANNOT_DICT="anno_matrix_dict"
 OUTFREQ=100
@@ -45,7 +44,6 @@ julia --project="$REPO_ROOT" "$REPO_ROOT/scripts/run_nonmpi.jl" \
   --analysis_path "$ANALYSIS_PATH" \
   --n_iter "$NITER" \
   --seed "$SEED" \
-  --nrank "$NRANK" \
   --annot_file "$ANNOT_FILE" \
   --annot_dict "$ANNOT_DICT" \
   --out_freq "$OUTFREQ" \

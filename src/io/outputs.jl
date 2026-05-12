@@ -91,10 +91,9 @@ function save_nonmpi_posterior_mean!(
         end
     end
 
-    writedlm(analysis_path * "mcmcGcov_total.txt", mcmcGcov_total)
-    writedlm(analysis_path * "mcmcGcor_total.txt", mcmcGcor_total)
-
     if save_category_correlation_outputs
+        writedlm(analysis_path * "mcmcGcov_total.txt", mcmcGcov_total)
+        writedlm(analysis_path * "mcmcGcor_total.txt", mcmcGcor_total)
         writedlm(analysis_path * "mcmcGcov_c.txt", mcmcGcov_c)
         writedlm(analysis_path * "mcmcGcor_c.txt", mcmcGcor_c)
         writedlm(analysis_path * "estBcor.txt", meanBcor)

@@ -17,7 +17,6 @@ struct NonMPIConfig
     analysis_path::String
     nIter::Int
     seed::Int
-    nrank::Int
     annot_file::String
     annot_dict::String
     out_freq::Int
@@ -57,7 +56,6 @@ function NonMPIConfig(
     analysis_path::String,
     nIter::Int,
     seed::Int,
-    nrank::Int,
     annot_file::String,
     annot_dict::String,
     out_freq::Int,
@@ -84,7 +82,6 @@ function NonMPIConfig(
         analysis_path,
         nIter,
         seed,
-        nrank,
         annot_file,
         annot_dict,
         out_freq,

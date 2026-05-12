@@ -26,7 +26,7 @@ export NonMPIConfig,
        read_to_dict,
        repo_root,
        run_nonmpi,
-       source_root,
+    source_root
        
 
 repo_root() = normpath(joinpath(@__DIR__, ".."))
@@ -91,6 +91,7 @@ end
 _has_named_cli_args(args::Vector{String}) = any(startswith(arg, "--") for arg in args)
 
 _default_nonmpi_cli_settings() = (
+    seed=123,
     n_con=0,
     annotation_prior_model=:group_dirichlet,
     estimate_vare=true,
@@ -108,7 +109,6 @@ function example_nonmpi_config(; root::AbstractString=repo_root())
         _dir_arg(joinpath(root, "example", "SBayesAPP_res_first10blks")),
         1000,
         42,
-        1,
         "annotation_df.txt",
         "anno_matrix_dict",
         100,
@@ -143,8 +143,7 @@ function parse_nonmpi_args(args::Vector{String})
         _dir_arg(_lookup_named_arg(parsed, ["data_path"]; required=true)),
         _dir_arg(_lookup_named_arg(parsed, ["analysis_path"]; required=true)),
         _parse_int_arg(_lookup_named_arg(parsed, ["n_iter", "niter"]; required=true), "n_iter"),
-        _parse_int_arg(_lookup_named_arg(parsed, ["seed"]; required=true), "seed"),
-        _parse_int_arg(_lookup_named_arg(parsed, ["nrank"]; required=true), "nrank"),
+        _parse_int_arg(string(_lookup_named_arg(parsed, ["seed"]; default=string(defaults.seed))), "seed"),
         _lookup_named_arg(parsed, ["annot_file"]; required=true),
         _lookup_named_arg(parsed, ["annot_dict"]; required=true),
         _parse_int_arg(_lookup_named_arg(parsed, ["out_freq", "outfreq"]; required=true), "out_freq"),
@@ -168,7 +167,7 @@ function parse_nonmpi_args(args::Vector{String})
 end
 
 function build_nonmpi_cmd(config::NonMPIConfig)
-    return `$(Base.julia_cmd()) --project=$(repo_root()) $(joinpath(repo_root(), "scripts", "run_nonmpi.jl")) --data_path $(config.data_path) --analysis_path $(config.analysis_path) --n_iter $(string(config.nIter)) --seed $(string(config.seed)) --nrank $(string(config.nrank)) --annot_file $(config.annot_file) --annot_dict $(config.annot_dict) --out_freq $(string(config.out_freq)) --starting_value_dir $(config.starting_value_dir) --gscale_value_dir $(config.gscale_value_dir) --st_path $(config.st_path) --thin $(string(config.thin)) --n1 $(string(config.n1)) --n2 $(string(config.n2)) --n_con $(string(config.n_con)) --annotation_prior_model $(String(config.annotation_prior_model)) --is_continue $(_bool_arg(config.is_continue)) --estimate_vare $(_bool_arg(config.estimate_vare)) --estimate_vara $(_bool_arg(config.estimate_vara)) --estimate_pi $(_bool_arg(config.estimate_pi)) --estimate_gscale $(_bool_arg(config.estimate_Gscale)) --estgscale_iter $(string(config.estGscale_iter)) --report_pleiotropic_qtl_effect_matrix $(_bool_arg(config.report_pleiotropic_qtl_effect_matrix)) --output_mcmc_delta $(_bool_arg(config.output_mcmc_delta))`
+    return `$(Base.julia_cmd()) --project=$(repo_root()) $(joinpath(repo_root(), "scripts", "run_nonmpi.jl")) --data_path $(config.data_path) --analysis_path $(config.analysis_path) --n_iter $(string(config.nIter)) --seed $(string(config.seed)) --annot_file $(config.annot_file) --annot_dict $(config.annot_dict) --out_freq $(string(config.out_freq)) --starting_value_dir $(config.starting_value_dir) --gscale_value_dir $(config.gscale_value_dir) --st_path $(config.st_path) --thin $(string(config.thin)) --n1 $(string(config.n1)) --n2 $(string(config.n2)) --n_con $(string(config.n_con)) --annotation_prior_model $(String(config.annotation_prior_model)) --is_continue $(_bool_arg(config.is_continue)) --estimate_vare $(_bool_arg(config.estimate_vare)) --estimate_vara $(_bool_arg(config.estimate_vara)) --estimate_pi $(_bool_arg(config.estimate_pi)) --estimate_gscale $(_bool_arg(config.estimate_Gscale)) --estgscale_iter $(string(config.estGscale_iter)) --report_pleiotropic_qtl_effect_matrix $(_bool_arg(config.report_pleiotropic_qtl_effect_matrix)) --output_mcmc_delta $(_bool_arg(config.output_mcmc_delta))`
 end
 
 run_nonmpi(config::NonMPIConfig; dry_run::Bool=false) = dry_run ? build_nonmpi_cmd(config) : run_nonmpi_workflow(config)

@@ -92,9 +92,7 @@ function run_nonmpi_sampler!(context)
     ############################################################################
     #read data in current rank
     ############################################################################
-    if config.nrank == 1
-        my_rank = 0
-    end
+    my_rank = 0
 
     block_data = load_nonmpi_block_data(config.data_path, config.annot_dict)
     my_TransformedY_dict = block_data.transformed_y_dict
@@ -231,7 +229,6 @@ function run_nonmpi_sampler!(context)
         println("---------------- Summary Start --------------")
         println("nIter=$nIter, outFreq=$outFreq, seed=$(config.seed), burnin = $burnin")
         println("startPi is: $Pi")
-        println("Number of ranks: ", config.nrank)
         println("estimate_vare=$estimate_vare,estimate_vara=$estimate_vara")
         println("estimate_pi=$estimate_pi")
         println("analysis_path=$analysis_path")
@@ -763,6 +760,7 @@ function run_nonmpi_sampler!(context)
 end
 
 function run_nonmpi_workflow(config::ConfigTypes.NonMPIConfig)
+    Random.seed!(config.seed)
     context = build_nonmpi_run_context(config)
     return @time run_nonmpi_sampler!(context)
 end

@@ -53,7 +53,6 @@ julia --project=. scripts/run_nonmpi.jl \
   --analysis_path example/SBayesAPP_res_first10blks/ \
   --n_iter 1000 \
   --seed 42 \
-  --nrank 1 \
   --annot_file annotation_df.txt \
   --annot_dict anno_matrix_dict \
   --out_freq 100 \
@@ -75,7 +74,6 @@ julia --project=. --threads auto scripts/run_nonmpi.jl \
   --analysis_path example/SBayesAPP_res_first10blks/ \
   --n_iter 1000 \
   --seed 42 \
-  --nrank 1 \
   --annot_file annotation_df.txt \
   --annot_dict anno_matrix_dict \
   --out_freq 100 \
