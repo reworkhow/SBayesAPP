@@ -1,6 +1,7 @@
 module SBayesAPP
 
 include("config/types.jl")
+include("config/nonmpi_settings.jl")
 using .ConfigTypes: MarkerProbitTreeState, NonMPIConfig
 
 include("io/inputs.jl")

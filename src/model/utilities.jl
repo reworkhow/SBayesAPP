@@ -1,8 +1,50 @@
-using LinearAlgebra: diag
+using Distributions: InverseWishart
+using LinearAlgebra: Symmetric, diag
 
 function compute_correlation(cov_matrix)
     std_devs = sqrt.(diag(cov_matrix))
     return cov_matrix[1, 2] / (std_devs[1] * std_devs[2])
+end
+
+function sample_variance_sumstats(ycorr_array, nobs, df, scale)
+    ntraits = length(ycorr_array)
+    SSE = zeros(ntraits, ntraits)
+    for traiti = 1:ntraits
+        ycorri = ycorr_array[traiti]
+        for traitj = traiti:ntraits
+            ycorrj = ycorr_array[traitj]
+            SSE[traiti, traitj] = dot(ycorri, ycorrj)
+            SSE[traitj, traiti] = SSE[traiti, traitj]
+        end
+    end
+    return rand(InverseWishart(df + nobs, convert(Array, Symmetric(scale + SSE))))
+end
+
+function build_block_ranges(nblocks::Int, ntasks::Int)
+    nblocks == 0 && return UnitRange{Int}[]
+    chunk_size = cld(nblocks, max(ntasks, 1))
+    ranges = UnitRange{Int}[]
+    start_index = 1
+    while start_index <= nblocks
+        stop_index = min(nblocks, start_index + chunk_size - 1)
+        push!(ranges, start_index:stop_index)
+        start_index = stop_index + 1
+    end
+    return ranges
+end
+
+function merge_nloci_counts!(dest, src)
+    for cat in eachindex(dest, src)
+        dest[cat] .+= src[cat]
+    end
+    return nothing
+end
+
+function two_trait_state_index(delta1::Float64, delta2::Float64)
+    if delta1 == 0.0
+        return delta2 == 0.0 ? 1 : 4
+    end
+    return delta2 == 1.0 ? 2 : 3
 end
 
 pi_key_order() = ((0.0, 0.0), (1.0, 1.0), (1.0, 0.0), (0.0, 1.0))

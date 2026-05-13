@@ -30,6 +30,8 @@ ESTGSCALE_ITER=500
 REPORT_PLEIOTROPIC_QTL_EFFECT_MATRIX="false"
 OUTPUT_MCMC_DELTA="false"
 
+
+
 # ======= Julia Environment Setup (optional) =======
 if [[ -f /cvmfs/hpc.ucdavis.edu/sw/conda/root/etc/profile.d/conda.sh ]]; then
   set +u
@@ -38,8 +40,14 @@ if [[ -f /cvmfs/hpc.ucdavis.edu/sw/conda/root/etc/profile.d/conda.sh ]]; then
   set -u
 fi
 
+JULIA_THREADS="${SLURM_CPUS_PER_TASK:-1}"
+export OPENBLAS_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+export OMP_NUM_THREADS=1
+echo "Launching Julia with ${JULIA_THREADS} thread(s)"
+
 # ======= Run the Julia Script =======
-julia --project="$REPO_ROOT" "$REPO_ROOT/scripts/run_nonmpi.jl" \
+julia --project="$REPO_ROOT" --threads "$JULIA_THREADS" "$REPO_ROOT/scripts/run_nonmpi.jl" \
   --data_path "$DATA_PATH" \
   --analysis_path "$ANALYSIS_PATH" \
   --n_iter "$NITER" \

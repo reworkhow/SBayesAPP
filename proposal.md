@@ -1,4 +1,4 @@
-# Proposal: Refactoring SBayesAPP into a Package-Ready, Threaded Julia Repository
+# Proposal: Refactoring SBayesAPP into a Package-Ready, Threaded-First Julia Repository
 
 ## Objective
 
@@ -7,7 +7,7 @@ The end goal is not only to optimize the current code, but to turn this reposito
 - installable and reproducible,
 - organized around reusable modules instead of large scripts,
 - easier to test, benchmark, and document,
-- prepared for both serial and shared-memory parallel execution,
+- prepared for serial execution, shared-memory parallel execution, and optional coarse-grained multi-process orchestration,
 - maintainable enough that future optimization does not require carrying a second distributed implementation in parallel.
 
 The repository already has the key scientific ingredients:
@@ -20,7 +20,46 @@ The repository already has the key scientific ingredients:
 
 What it still needs is a refactor plan that treats the current non-MPI workflow as the single reference implementation and adds Julia thread-based parallelism around that shared kernel instead of maintaining an MPI-specific code path.
 
-This proposal focuses on that packaging and threading work.
+This proposal focuses on that packaging work, a thread-first sampler refactor, and optional process-level orchestration only for coarse-grained workloads.
+
+After reviewing the current non-MPI code path, the main conclusion is that Julia multi-threading is the best fit for accelerating a single MCMC chain in this repository. Julia `Distributed` can still be useful, but mainly for running independent chains, parameter sweeps, or separate datasets rather than for splitting one chain's inner sampler across processes.
+
+## Parallel strategy recommendation for the current code
+
+The current sampler shape makes a thread-first plan more suitable than a process-based `Distributed` plan for the main runtime bottleneck.
+
+### Why multi-threading is the best first target
+
+The dominant cost is the body of the LD-block loop in `run_nonmpi_sampler!`.
+
+- Each iteration freezes global hyperparameters such as `Pi`, `Ainv_vec`, and the current residual settings, then spends most of its time inside `for b in 1:my_nblk` updating one block at a time.
+- Inside that block loop, the code mutates block-owned state such as `my_TransformedY_dict[blk]`, `R_blk[b]`, `varg_blk_cat[b]`, `varg_cov_blk_cat[b]`, `totalvarg_blk[b]`, and `ssq_blk_cat[b]`.
+- The marker effect arrays `betaArray`, `deltaArray`, and `alphaArray` are written through `SNPIndexb`, so each block owns a disjoint SNP slice after `reorder_block_snp_indices!` has been applied.
+- The transformed block matrices are already loaded into memory on one machine through `load_nonmpi_block_data(...)`, so shared-memory threading can reuse them directly without per-process copies.
+
+That combination is exactly where Julia threads help: block work is heavy, repeated every iteration, and mostly independent once the current iteration's global parameters are fixed.
+
+### Why `Distributed` is a worse first step for one sampler chain
+
+Julia `Distributed` uses separate processes with separate memory. For the current code, that creates costs that the threaded version avoids.
+
+- `load_nonmpi_block_data(...)` currently materializes large dictionaries of matrices and vectors. Under `Distributed`, those objects would have to be copied or reloaded on each worker.
+- The sampler mutates per-block residual state in `my_TransformedY_dict` every iteration. A multi-process design would need explicit ownership, communication, or serialization for that evolving state.
+- Every iteration still has a global barrier: after block updates finish, the code must reduce counts and summaries, update `Pi`, sample `A_vec`, refresh `Ainv_vec`, and then continue to the next iteration.
+- That means a one-chain distributed version would pay repeated process coordination and memory duplication costs while still keeping the same serial dependence between iterations.
+
+Because of that barrier structure, `Distributed` is unlikely to be the fastest or simplest way to accelerate the current single-chain sampler on one node.
+
+### Where `Distributed` still makes sense
+
+`Distributed` is still useful in this repository, but at a coarser granularity.
+
+- run multiple independent MCMC chains with different seeds
+- run parameter sweeps or model comparisons in parallel
+- launch many benchmark jobs or cross-validation folds
+- spread independent analyses across nodes when a single machine is not enough
+
+That is a better use of processes because those workloads have minimal communication between runs. In other words, `Distributed` should be an orchestration tool above the sampler, not the first implementation strategy inside the sampler.
 
 ## What package-ready should mean for this repository
 
@@ -122,7 +161,8 @@ SBayesAPP/
 │   │   ├── run_serial.jl
 │   │   └── reductions.jl
 │   ├── parallel/
-│   │   └── threaded.jl
+│   │   ├── threaded.jl
+│   │   └── distributed.jl               # optional later: independent chains or batch runs
 │   └── workflows/
 │       ├── nonmpi.jl
 │       └── example.jl
@@ -175,6 +215,8 @@ For the threaded path, `ParallelConfig` should describe behavior such as:
 - whether certain summaries remain serial.
 
 The number of Julia threads itself should not be treated as a normal runtime argument, because Julia thread count is configured before startup via `--threads` or `JULIA_NUM_THREADS`.
+
+If a distributed launcher is added later, it should be a separate batch-level configuration for independent runs, not a second execution mode for the inner sampler of one chain.
 
 ### Input and output layer
 
@@ -241,7 +283,9 @@ The threaded version should not become a second implementation of the model. It 
 
 That means the threaded code should be a thin layer around a common sampler core, not a fork of the model implementation.
 
-## Thread-based execution plan
+If `Distributed` support is added later, it should sit above this layer and launch many independent serial or threaded runs rather than repartitioning one chain across processes.
+
+## Thread-based execution plan for the sampler core
 
 This is the key design shift relative to the older MPI-oriented plan.
 
@@ -268,6 +312,67 @@ In other words, the intended iteration shape should become:
 4. reduce those summaries,
 5. update global hyperparameters serially,
 6. write outputs and checkpoints as before.
+
+### Current code regions that are good first parallel targets
+
+The current code already exposes the main units that map cleanly to block-parallel execution.
+
+#### 1. The LD-block loop in `run_nonmpi_sampler!`
+
+The body of `for b in 1:my_nblk` is the primary target.
+
+- the per-marker update loop over `MarkerOrder`
+- the category loop over `cat = 1:nCategory`
+- the block-local residual update of `wArray`
+- the block-local update of `R_blk[b]`
+- the block-local genetic variance reconstruction guarded by `need_block_totalvarg`
+
+This is where most runtime is spent, and these updates are naturally aligned with block ownership.
+
+#### 2. Block-state preparation before the sampler starts
+
+The setup functions `prepare_block_state!` and `prepare_marker_probit_tree_block_state!` are good places to convert the current block dictionaries into a `Vector{BlockData}` layout before entering the hot loop.
+
+That refactor is not itself the speedup, but it removes one of the main obstacles to safe threading: repeated keyed access to mutable `Dict` objects inside hot code.
+
+#### 3. Block-local summary accumulation
+
+The following quantities can be accumulated per task and then reduced after the threaded region.
+
+- `nLoci_array_vec`
+- `varg_blk_cat`
+- `varg_cov_blk_cat`
+- `totalvarg_blk`
+- `ssq_blk_cat`
+- optionally `SSE_vec`, if the later global pass over `betaArray` is replaced with block-local accumulation
+
+These are good reduction candidates because they are mathematically additive or can be written into block-owned slots.
+
+### Code regions that should remain serial at first
+
+The first threaded implementation should stay conservative and leave the following parts serial.
+
+#### 1. Global prior and covariance updates after the block barrier
+
+- the Dirichlet update of `Pi` in `:group_dirichlet`
+- `update_marker_probit_tree_priors!` in `:marker_probit_tree`
+- sampling `A_vec`
+- refreshing `Ainv_vec`
+
+These stages are short relative to the block loop and rely on the full iteration state after all blocks have completed.
+
+#### 2. Output and checkpoint writing
+
+- `prepare_mcmc_output_files`
+- per-iteration sample appends
+- `write_nonmpi_restart_state`
+- posterior summary writes
+
+This is side-effect-heavy code and should remain serial until the computational kernel is already stable.
+
+#### 3. Marker-probit-tree coefficient updates
+
+`update_marker_probit_tree_priors!` operates on the full `deltaArray` and the full annotation design matrix. It may benefit later from optimized linear algebra, but it should not be the first manual threading target because it is not the dominant control path in the current code.
 
 ### Data layout changes needed before threading
 
@@ -298,6 +403,8 @@ Examples of quantities that should be accumulated locally and then reduced inclu
 - `SSE_vec`,
 - any block-level summaries that currently aggregate into global counters,
 - temporary genetic covariance summaries when they are not stored in explicitly block-owned slots.
+
+Block-owned arrays such as `R_blk[b]` or `totalvarg_blk[b]` do not need a reduction when each task has unique ownership of block `b`; they only need a layout that makes that ownership explicit.
 
 This suggests a design where each task returns a small reduction object, for example:
 
@@ -355,6 +462,7 @@ The official Julia threading model implies several design constraints that shoul
 - Task migration means code should not rely on `threadid()` being stable across yields.
 - Base collections such as `Dict` require manual locking if they are modified from multiple threads.
 - Side-effect-heavy code must be audited carefully before being moved into threaded regions.
+- If outer Julia threads are used around block work, BLAS threading should usually be pinned to `1` to avoid oversubscription during matrix-vector work.
 - Locks or atomics should be a last resort in the hot path; per-task local state plus serial reduction is preferable for most sampler summaries.
 
 These constraints argue for a reduction-oriented block scheduler rather than shared-state threading.
@@ -375,6 +483,8 @@ The Julia environment should include the packages already needed by the current 
 
 Standard libraries such as `LinearAlgebra`, `Random`, `Statistics`, `Dates`, `DelimitedFiles`, and `Base.Threads` do not need to be added as external dependencies.
 
+If a later chain launcher uses Julia `Distributed`, that also comes from the standard library rather than an external package.
+
 Unlike MPI, Julia threads do not require a separate communication package for the initial implementation.
 
 ### Environment policy
@@ -384,6 +494,7 @@ I recommend this policy.
 - `Project.toml` is committed.
 - `Manifest.toml` is committed if exact reproducibility is important for paper or pipeline runs.
 - Threaded execution is documented as the preferred acceleration path.
+- When using block-level Julia threads, BLAS threads are set explicitly to avoid nested parallelism.
 - README examples show both a normal serial launch and a threaded launch using Julia's startup flags.
 
 ### Example environment workflow
@@ -406,6 +517,12 @@ or:
 
 ```bash
 julia --project=. --threads auto scripts/run_nonmpi.jl --data_path ...
+```
+
+and, if independent chains are later orchestrated with processes:
+
+```bash
+julia --project=. -p 4 scripts/run_many_chains.jl --base_config ...
 ```
 
 ### Optional future environment improvements
@@ -551,18 +668,17 @@ Responsibility:
 Responsibility:
 
 - define merge rules for thread-local accumulators,
+- reduce quantities such as `nLoci_array_vec`, `varg_blk_cat`, `varg_cov_blk_cat`, `totalvarg_blk`, and `ssq_blk_cat`,
 - keep serial and threaded reductions consistent,
 - make correctness checks and regression tests easier.
 
-#### 12. `parallel/threaded.jl`
+#### 12. `parallel/`
 
 Responsibility:
 
-- partition blocks into chunks,
-- spawn tasks,
-- allocate per-task workspaces and local accumulators,
-- collect and reduce task results,
-- provide one thread-aware execution policy without changing the model code.
+- `threaded.jl`: partition blocks into chunks, spawn tasks, allocate per-task workspaces, and reduce task results for one chain
+- `distributed.jl`: optionally launch independent chains or batch analyses across processes
+- keep both as orchestration layers around the same serial sampler kernel
 
 #### 13. `workflows/nonmpi.jl`
 
@@ -588,6 +704,7 @@ Optionally, after the threaded path exists:
 
 - `run_nonmpi(config; execution=:serial)`
 - `run_nonmpi(config; execution=:threads)`
+- `run_independent_chains(config, nchains; launcher=:distributed, execution=:threads)`
 
 Potential internal APIs:
 
@@ -650,6 +767,15 @@ The goal is not necessarily bitwise equality once scheduling changes, but it sho
 - no thread-specific file or state corruption appears,
 - outputs remain statistically compatible.
 
+### Distributed launcher tests
+
+If a process-based launcher is added for independent chains, it should be tested separately from the sampler kernel.
+
+- each chain gets a unique seed and output directory
+- chain outputs do not overwrite each other
+- merged diagnostics only read completed chain outputs
+- launching with one process and many processes preserves the same per-chain behavior
+
 ### Benchmark tests
 
 Benchmarking should measure:
@@ -668,7 +794,8 @@ The repository should still provide easy command-line entrypoints, but these sho
 
 - keep `scripts/run_nonmpi.jl` as the main entrypoint,
 - keep `script/run.sh` only as a convenience launcher if desired,
-- document threaded runs by changing how Julia is launched, not by reviving a separate MPI script.
+- document threaded runs by changing how Julia is launched, not by reviving a separate MPI script,
+- if process-level orchestration is added later, keep it in a separate script for independent chains rather than mixing it into the single-chain sampler entrypoint.
 
 That means the recommended threaded invocation becomes:
 
@@ -690,6 +817,7 @@ Should answer:
 - how to install the environment,
 - how to run the example,
 - how to run with `--threads auto`,
+- why threading is preferred over `Distributed` for a single sampler chain,
 - where outputs go,
 - where to find detailed code and method notes.
 
@@ -701,7 +829,8 @@ It should eventually include a short note describing:
 
 - which iteration stages are block-parallel,
 - which accumulators are reduced after the threaded region,
-- which steps remain intentionally serial.
+- which steps remain intentionally serial,
+- which workloads, if any, are better launched through `Distributed` as separate jobs.
 
 ### Future docs
 
@@ -712,6 +841,7 @@ I would eventually add:
 - continuation workflow documentation,
 - package API usage examples,
 - threaded execution notes,
+- distributed chain-launcher notes if that layer is added,
 - performance tuning notes for thread count and chunk size.
 
 ## Phased implementation plan
@@ -777,7 +907,18 @@ Deliverables:
 
 This phase makes later optimization safe.
 
-### Phase 6: Optimize the threaded sampler core
+### Phase 6: Optionally add a process-based launcher for independent chains
+
+Deliverables:
+
+- `parallel/distributed.jl` or a separate orchestration script,
+- unique seed and output-directory management per chain,
+- optional chain-merging utilities for summaries and diagnostics,
+- documentation that clearly limits this layer to independent runs.
+
+This phase is optional and should not block the threaded sampler work.
+
+### Phase 7: Optimize the threaded sampler core
 
 Only after the package structure and tests exist should the main performance work begin.
 
@@ -798,7 +939,8 @@ The right way to evolve this repository is:
 2. refactor that workflow into reusable modules,
 3. redesign block data and summaries so they are thread-safe,
 4. add Julia multi-threading as a thin execution layer around the shared kernel,
-5. validate serial and threaded behavior against each other,
-6. then optimize the threaded core.
+5. use Julia `Distributed` only for independent chains, sweeps, or other coarse-grained jobs when that becomes useful,
+6. validate serial and threaded behavior against each other,
+7. then optimize the threaded core.
 
-This path matches the actual shape of the current code, avoids maintaining a second MPI implementation, and gives a practical route from a working research repository to a package-ready scientific software project with a clear shared-memory parallel strategy.
+This path matches the actual shape of the current code, avoids maintaining a second MPI-like sampler implementation, and gives a practical route from a working research repository to a package-ready scientific software project with a clear shared-memory parallel strategy for the main sampler and an optional process-based layer only where it actually fits.

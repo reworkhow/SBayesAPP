@@ -3,6 +3,24 @@ using DataFrames
 using DelimitedFiles: readdlm
 using JLD2
 
+mutable struct NonMPIBlockData{TX,TY,TS,TN,TA}
+    block_id::Int
+    transformed_x::TX
+    transformed_y::TY
+    snp_indices::TS
+    n_gwas::TN
+    anno_matrix::TA
+    xpx::Union{Nothing,Vector{Vector{Float64}}}
+    x_arrays::Union{Nothing,Vector{Matrix{Float64}}}
+    annotation_mask::Union{Nothing,AbstractMatrix{Bool}}
+end
+
+struct NonMPIBlockCollection{TB}
+    blocks::Vector{TB}
+    nblk::Int
+    nsnp::Int
+end
+
 function load_annotation_metadata(data_path::AbstractString, annot_file::AbstractString; nCon::Int=0)
     annot = CSV.read(data_path * annot_file, DataFrame)
     annotation_name = String.(names(annot)[2:end])
@@ -30,19 +48,34 @@ function load_nonmpi_block_data(data_path::AbstractString, annot_dict::AbstractS
     blkID = Int.(vec(readdlm(data_path * "blkIDs.txt", ',')))
     nGWAS_dict = JLD2.load(data_path * "nGWAS_dict.jld2")["my_nGWAS_dict"]
     anno_matrix_dict = JLD2.load(data_path * "$annot_dict.jld2")["my_anno_matrix_dict"]
-    nblk = length(blkID)
-    nsnp = sum(map(length, values(blkSNPsIndex_dict)))
+    sort!(blkID)
 
-    return (
-        transformed_x_dict=transformed_x_dict,
-        transformed_y_dict=transformed_y_dict,
-        blkSNPsIndex_dict=blkSNPsIndex_dict,
-        blkID=blkID,
-        nGWAS_dict=nGWAS_dict,
-        anno_matrix_dict=anno_matrix_dict,
-        nblk=nblk,
-        nsnp=nsnp,
-    )
+    blocks = NonMPIBlockData[]
+    nsnp = 0
+    offset = 0
+    for blk in blkID
+        raw_indices = Int.(vec(blkSNPsIndex_dict[blk]))
+        local_count = length(raw_indices)
+        snp_indices = raw_indices .+ offset
+        push!(
+            blocks,
+            NonMPIBlockData(
+                blk,
+                transformed_x_dict[blk],
+                transformed_y_dict[blk],
+                snp_indices,
+                nGWAS_dict[blk],
+                anno_matrix_dict[blk],
+                nothing,
+                nothing,
+                nothing,
+            ),
+        )
+        nsnp += local_count
+        offset += local_count
+    end
+
+    return NonMPIBlockCollection(blocks, length(blocks), nsnp)
 end
 
 function load_effect_state(effect_starting_path, delta_starting_path, my_rank, nTraits)

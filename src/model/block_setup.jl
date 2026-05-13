@@ -1,66 +1,43 @@
-function reorder_block_snp_indices!(blkID, blkSNPsIndex_dict)
-    sort!(blkID)
-    nblk = length(blkID)
-    for i in 2:nblk
-        previous_block = blkID[i - 1]
-        cumulative_snp_count = length(blkSNPsIndex_dict[previous_block])
-        for key in blkID[i:nblk]
-            blkSNPsIndex_dict[key] = blkSNPsIndex_dict[key] .+ cumulative_snp_count
-        end
-    end
-    return nothing
-end
+function build_block_designs(block::NonMPIBlockData, nCon)
+    Xb = block.transformed_x
+    nMarkerb = size(Xb, 2)
+    xpx = Vector{Vector{Float64}}(undef, nCon + 1)
+    x_arrays = Vector{Matrix{Float64}}(undef, nCon + 1)
 
-function build_block_designs(transformed_x_dict, anno_matrix_dict, nCon)
-    xpx_dict = Dict{Int,Vector{Vector{Float64}}}()
-    xArray_dict = Dict{Int,Vector{Matrix{Float64}}}()
-
-    for blk in keys(transformed_x_dict)
-        Xb = transformed_x_dict[blk]
-        nMarkerb = size(Xb, 2)
-        xpx_dict[blk] = Vector{Vector{Float64}}(undef, nCon + 1)
-        xArray_dict[blk] = Vector{Matrix{Float64}}(undef, nCon + 1)
-
-        for c in 1:nCon
-            annot_weights = anno_matrix_dict[blk][:, c]
-            xpx_dict[blk][c] = [annot_weights[i]^2 * dot(Xb[:, i], Xb[:, i]) for i in 1:nMarkerb]
-            xArray_dict[blk][c] = Xb * diagm(annot_weights)
-        end
-
-        xpx_dict[blk][end] = [dot(Xb[:, i], Xb[:, i]) for i in 1:nMarkerb]
-        xArray_dict[blk][end] = Xb
+    for c in 1:nCon
+        annot_weights = block.anno_matrix[:, c]
+        xpx[c] = [annot_weights[i]^2 * dot(Xb[:, i], Xb[:, i]) for i in 1:nMarkerb]
+        x_arrays[c] = Xb * diagm(annot_weights)
     end
 
-    return xpx_dict, xArray_dict
+    xpx[end] = [dot(Xb[:, i], Xb[:, i]) for i in 1:nMarkerb]
+    x_arrays[end] = Xb
+    return xpx, x_arrays
 end
 
-function build_annotation_sampling_mask(anno_matrix_dict, nCon, annotationType)
-    anno_mask_dict = Dict(key => (anno_matrix_dict[key] .!= 0.0) for key in keys(anno_matrix_dict))
+function build_annotation_sampling_mask(block::NonMPIBlockData, nCon, annotationType)
+    annotation_mask = block.anno_matrix .!= 0.0
     if nCon > 0
         continuous_columns = findall(annotationType .== "continue")
-        for blk in keys(anno_mask_dict)
-            anno_mask_dict[blk][:, continuous_columns] .= true
-        end
+        annotation_mask[:, continuous_columns] .= true
     end
-    return anno_mask_dict
+    return annotation_mask
 end
 
-function build_all_marker_mask(anno_matrix_dict)
-    return Dict(key => trues(size(anno_matrix_dict[key], 1), 1) for key in keys(anno_matrix_dict))
-end
+build_all_marker_mask(block::NonMPIBlockData) = trues(size(block.anno_matrix, 1), 1)
 
-function build_global_annotation_design(blkID, blkSNPsIndex_dict, anno_matrix_dict; add_intercept::Bool=true)
-    nmarker = sum(length(blkSNPsIndex_dict[blk]) for blk in blkID)
-    nfeature = size(anno_matrix_dict[first(blkID)], 2)
+function build_global_annotation_design(blocks; add_intercept::Bool=true)
+    nmarker = sum(length(block.snp_indices) for block in blocks)
+    nfeature = size(first(blocks).anno_matrix, 2)
     design_matrix = zeros(Float64, nmarker, nfeature + (add_intercept ? 1 : 0))
 
     if add_intercept
         design_matrix[:, 1] .= 1.0
     end
 
-    for blk in blkID
-        rows = blkSNPsIndex_dict[blk]
-        block_annotations = Float64.(anno_matrix_dict[blk])
+    for block in blocks
+        rows = block.snp_indices
+        block_annotations = Float64.(block.anno_matrix)
         if add_intercept
             design_matrix[rows, 2:end] .= block_annotations
         else
@@ -71,17 +48,19 @@ function build_global_annotation_design(blkID, blkSNPsIndex_dict, anno_matrix_di
     return design_matrix
 end
 
-function prepare_block_state!(blkID, blkSNPsIndex_dict, transformed_x_dict, anno_matrix_dict, nCon, annotationType)
-    reorder_block_snp_indices!(blkID, blkSNPsIndex_dict)
-    xpx_dict, xArray_dict = build_block_designs(transformed_x_dict, anno_matrix_dict, nCon)
-    anno_mask_dict = build_annotation_sampling_mask(anno_matrix_dict, nCon, annotationType)
-    return xpx_dict, xArray_dict, anno_mask_dict
+function prepare_block_state!(blocks, nCon, annotationType)
+    for block in blocks
+        block.xpx, block.x_arrays = build_block_designs(block, nCon)
+        block.annotation_mask = build_annotation_sampling_mask(block, nCon, annotationType)
+    end
+    return nothing
 end
 
-function prepare_marker_probit_tree_block_state!(blkID, blkSNPsIndex_dict, transformed_x_dict, anno_matrix_dict)
-    reorder_block_snp_indices!(blkID, blkSNPsIndex_dict)
-    xpx_dict, xArray_dict = build_block_designs(transformed_x_dict, anno_matrix_dict, 0)
-    anno_mask_dict = build_all_marker_mask(anno_matrix_dict)
-    annotation_design = build_global_annotation_design(blkID, blkSNPsIndex_dict, anno_matrix_dict; add_intercept=true)
-    return xpx_dict, xArray_dict, anno_mask_dict, annotation_design
+function prepare_marker_probit_tree_block_state!(blocks)
+    for block in blocks
+        block.xpx, block.x_arrays = build_block_designs(block, 0)
+        block.annotation_mask = build_all_marker_mask(block)
+    end
+    annotation_design = build_global_annotation_design(blocks; add_intercept=true)
+    return annotation_design
 end

@@ -1,56 +1,234 @@
 using DelimitedFiles
 using Distributions
 using LinearAlgebra
+using Base.Threads
 using ProgressMeter
 using Random
 using Statistics
 using Dates
 using JLD2
 
+function run_nonmpi_block_range!(
+    blocks,
+    block_range,
+    betaArray,
+    alphaArray,
+    deltaArray,
+    meanAlpha,
+    Ainv_vec,
+    Pi,
+    marker_probit_tree_state,
+    R_blk,
+    varg_blk_cat,
+    varg_cov_blk_cat,
+    totalvarg_blk,
+    ssq_blk_cat;
+    annotation_prior_model,
+    effect_nCon,
+    my_nsnp,
+    nCategory,
+    nTraits,
+    nlabel,
+    do_thin,
+    iIter,
+    need_block_totalvarg,
+    estimate_vare,
+    df_R,
+    scale_R,
+)
+    nTraits == 2 || error("run_nonmpi_block_range! currently expects exactly 2 traits.")
 
-function sample_variance_sumstats(ycorr_array, nobs, df, scale)
-    ntraits = length(ycorr_array)
-    SSE = zeros(ntraits, ntraits)
-    for traiti = 1:ntraits
-        ycorri = ycorr_array[traiti]
-        for traitj = traiti:ntraits
-            ycorrj = ycorr_array[traitj]
-            SSE[traiti, traitj] = dot(ycorri, ycorrj)
-            SSE[traitj, traiti] = SSE[traiti, traitj]
+    local_nLoci_array_vec = [fill(0, nlabel) for _ in 1:nCategory]
+    β = zeros(nTraits)
+    newα = zeros(nTraits)
+    oldα = zeros(nTraits)
+    w = zeros(nTraits)
+    δ = zeros(nTraits)
+    max_nMarker = maximum(size(blocks[b].x_arrays[end], 2) for b in block_range)
+    max_nEigen = maximum(size(blocks[b].x_arrays[end], 1) for b in block_range)
+    marker_order = collect(1:max_nMarker)
+    alpha_marker_1 = zeros(max_nMarker)
+    alpha_marker_2 = zeros(max_nMarker)
+    what_cat_1 = zeros(max_nEigen)
+    what_cat_2 = zeros(max_nEigen)
+    what_total_1 = zeros(max_nEigen)
+    what_total_2 = zeros(max_nEigen)
+
+    for b in block_range
+        block = blocks[b]
+        xpx_vec = block.xpx::Vector{Vector{Float64}}
+        xArray_vec = block.x_arrays::Vector{Matrix{Float64}}
+        wArray = block.transformed_y
+        annotationMatb = block.annotation_mask::AbstractMatrix{Bool}
+        SNPIndexb = block.snp_indices
+        nEigenb, nMarkerb = size(xArray_vec[end])
+        nInd = block.n_gwas
+
+        # initialize xArrayc/xpxc and block-specific R matrix 
+        xArrayc = xArray_vec[1]
+        xpxc = xpx_vec[1]
+
+        r11 = R_blk[b][1, 1]
+        r12 = R_blk[b][1, 2]
+        r21 = R_blk[b][2, 1]
+        r22 = R_blk[b][2, 2]
+        rdet = r11 * r22 - r12 * r21 # determinant of R_blk[b]
+        Rinv11 = r22 / rdet
+        Rinv12 = -r12 / rdet
+        Rinv21 = -r21 / rdet
+        Rinv22 = r11 / rdet
+
+        resize!(marker_order, nMarkerb)
+        for marker in 1:nMarkerb
+            marker_order[marker] = marker
         end
-    end
-    R = rand(InverseWishart(df + nobs, convert(Array, Symmetric(scale + SSE))))
-    return R
-end
+        shuffle!(marker_order)
 
-function build_nonmpi_sampler_settings(config::ConfigTypes.NonMPIConfig)
-    estimate_vara = config.estimate_vara
-    estimate_pi = config.estimate_pi
-    if config.annotation_prior_model == :marker_probit_tree && !estimate_pi
-        @warn "estimate_pi=false is ignored when annotation_prior_model=:marker_probit_tree."
-        estimate_pi = true
-    end
-    is_continue = config.is_continue
-    if config.annotation_prior_model == :marker_probit_tree && is_continue
-        @warn "is_continue=true is ignored when annotation_prior_model=:marker_probit_tree. A fresh run will be started instead."
-        is_continue = false
-    end
-    return (
-        estimate_vare=config.estimate_vare,
-        estimate_vara=estimate_vara,
-        estimate_pi=estimate_pi,
-        estimate_Gscale=config.estimate_Gscale && estimate_vara,
-        estGscale_iter=config.estGscale_iter,
-        is_continue=is_continue,
-    )
+        for marker in marker_order
+            true_marker_num = SNPIndexb[marker]
+
+            for cat = 1:nCategory
+                if effect_nCon != 0 && cat <= effect_nCon + 1
+                    xArrayc = xArray_vec[cat]
+                    xpxc = xpx_vec[cat]
+                end
+                Ginv = Ainv_vec[cat]
+
+                if annotationMatb[marker, cat] # only update SNPs that are in the annotation category (for group_dirichlet) or are selected by the probit tree (for marker_probit_tree)
+                    markerIndex = (cat - 1) * my_nsnp + true_marker_num # global index of the marker in the parameter arrays, ordered by annotation category
+                    x = view(xArrayc, :, marker)
+                    xpx_marker = xpxc[marker]
+                    for trait = 1:nTraits
+                        β[trait] = betaArray[trait][markerIndex]
+                        oldα[trait] = newα[trait] = alphaArray[trait][markerIndex]
+                        δ[trait] = deltaArray[trait][markerIndex]
+                        w[trait] = dot(x, wArray[trait]) + xpx_marker * oldα[trait]
+                    end
+
+                    for k = 1:nTraits
+                        other = k == 1 ? 2 : 1
+                        Ginv11 = Ginv[k, k]
+                        Ginv12 = Ginv[k, other]
+                        Rinvkk = k == 1 ? Rinv11 : Rinv22
+                        Rinvkother = k == 1 ? Rinv12 : Rinv21
+                        C11 = Ginv11 + Rinvkk * xpx_marker
+                        C12 = Ginv12 + xpx_marker * δ[other] * Rinvkother
+
+                        # compute the conditional distribution parameters for the two possible states of δ[k]
+                        # when δ[k] = 0, the effect is 0 and does not contribute to the likelihood, so the conditional distribution is determined by the prior and the contribution of the other trait (if it is nonzero)
+                        invLhs0 = 1 / Ginv11
+                        rhs0 = -Ginv12 * β[other]
+                        gHat0 = rhs0 * invLhs0
+                        # when δ[k] = 1, the effect is nonzero and contributes to the likelihood, so the conditional distribution is determined by both the prior and the likelihood contribution of this trait and the other trait (if it is nonzero)
+                        invLhs1 = 1 / C11
+                        rhs1 = (k == 1 ? (w[1] * Rinv11 + w[2] * Rinv21) : (w[1] * Rinv12 + w[2] * Rinv22)) - C12 * β[other]
+                        gHat1 = rhs1 * invLhs1
+
+                        d0 = k == 1 ? (0.0, δ[2]) : (δ[1], 0.0)
+                        d1 = k == 1 ? (1.0, δ[2]) : (δ[1], 1.0)
+
+                        logPrior0 = log_marker_state_prior(annotation_prior_model, Pi, marker_probit_tree_state, cat, true_marker_num, d0)
+                        logPrior1 = log_marker_state_prior(annotation_prior_model, Pi, marker_probit_tree_state, cat, true_marker_num, d1)
+                        logDelta0 = -0.5 * (log(Ginv11) - gHat0^2 * Ginv11) + logPrior0
+                        logDelta1 = -0.5 * (log(C11) - gHat1^2 * C11) + logPrior1
+                        probDelta1 = 1.0 / (1.0 + exp(logDelta0 - logDelta1))
+
+                        # sample δ[k] from its conditional distribution, then sample the effect size if δ[k] = 1, and update w accordingly
+
+                        if rand() < probDelta1
+                            δ[k] = 1
+                            β[k] = newα[k] = gHat1 + randn() * sqrt(invLhs1)
+                            LinearAlgebra.axpy!(oldα[k] - newα[k], x, wArray[k])
+                        else
+                            β[k] = gHat0 + randn() * sqrt(invLhs0)
+                            δ[k] = 0
+                            newα[k] = 0
+                            if oldα[k] != 0
+                                LinearAlgebra.axpy!(oldα[k], x, wArray[k])
+                            end
+                        end
+                    end
+
+                    local_nLoci_array_vec[cat][two_trait_state_index(δ[1], δ[2])] += 1
+
+                    for trait = 1:nTraits
+                        betaArray[trait][markerIndex] = β[trait]
+                        deltaArray[trait][markerIndex] = δ[trait]
+                        alphaArray[trait][markerIndex] = newα[trait]
+                        if do_thin
+                            meanAlpha[trait][markerIndex] += (newα[trait] - meanAlpha[trait][markerIndex]) * iIter
+                        end
+                    end
+                end # if annotationMatb[marker, cat]
+            end # for cat in 1:nCategory
+        end # for marker in marker_order
+        block.transformed_y = wArray
+
+        if need_block_totalvarg
+            XAb = xArray_vec[1]
+            what_total_1_block = view(what_total_1, 1:nEigenb)
+            what_total_2_block = view(what_total_2, 1:nEigenb)
+            fill!(what_total_1_block, 0.0)
+            fill!(what_total_2_block, 0.0)
+            alpha_marker_1_block = view(alpha_marker_1, 1:nMarkerb)
+            alpha_marker_2_block = view(alpha_marker_2, 1:nMarkerb)
+            what_cat_1_block = view(what_cat_1, 1:nEigenb)
+            what_cat_2_block = view(what_cat_2, 1:nEigenb)
+
+            for cat in 1:nCategory
+                if effect_nCon != 0 && cat <= effect_nCon + 1
+                    XAb = xArray_vec[cat]
+                end
+                cat_offset = (cat - 1) * my_nsnp
+                for marker in 1:nMarkerb
+                    snp_index = cat_offset + SNPIndexb[marker]
+                    alpha_marker_1_block[marker] = alphaArray[1][snp_index]
+                    alpha_marker_2_block[marker] = alphaArray[2][snp_index]
+                end
+                mul!(what_cat_1_block, XAb, alpha_marker_1_block)
+                mul!(what_cat_2_block, XAb, alpha_marker_2_block)
+
+                if do_thin
+                    varg_blk_cat[b][1, cat] = dot(what_cat_1_block, what_cat_1_block)
+                    varg_blk_cat[b][2, cat] = dot(what_cat_2_block, what_cat_2_block)
+                    varg_cov_blk_cat[b][cat] = dot(what_cat_1_block, what_cat_2_block)
+                end
+                if estimate_vare
+                    ssq_blk_cat[b][1, cat] = dot(alpha_marker_1_block, alpha_marker_1_block)
+                    ssq_blk_cat[b][2, cat] = dot(alpha_marker_2_block, alpha_marker_2_block)
+                end
+                LinearAlgebra.axpy!(1.0, what_cat_1_block, what_total_1_block)
+                LinearAlgebra.axpy!(1.0, what_cat_2_block, what_total_2_block)
+            end
+
+            totalvarg_blk[b][1, 1] = dot(what_total_1_block, what_total_1_block)
+            totalvarg_blk[b][2, 2] = dot(what_total_2_block, what_total_2_block)
+            totalvarg_blk[b][1, 2] = totalvarg_blk[b][2, 1] = dot(what_total_1_block, what_total_2_block)
+        end
+
+        if estimate_vare
+            sampled_R = sample_variance_sumstats(wArray, nEigenb, df_R, scale_R)
+            R_blk[b] = sampled_R
+            Rcor = compute_correlation(sampled_R)
+            for traiti = 1:nTraits
+                thres = sum(ssq_blk_cat[b][traiti, :]) / totalvarg_blk[b][traiti, traiti]
+                if thres > 1.1
+                    R_blk[b][traiti, traiti] = sampled_R[traiti, traiti]
+                else
+                    R_blk[b][traiti, traiti] = 1.0 / nInd[traiti]
+                end
+            end
+            Rcov = Rcor * sqrt(R_blk[b][1, 1] * R_blk[b][2, 2])
+            R_blk[b][1, 2] = R_blk[b][2, 1] = Rcov
+        end
+    end # for b in block_range
+
+    return local_nLoci_array_vec
 end
 
 function build_nonmpi_run_context(config::ConfigTypes.NonMPIConfig)
-    annotation_metadata = load_annotation_metadata(config.data_path, config.annot_file; nCon=config.n_con)
-    if config.annotation_prior_model == :marker_probit_tree && config.n_con != 0
-        @warn "n_con is ignored when annotation_prior_model=:marker_probit_tree; all annotation columns are treated as prior features."
-    end
     settings = build_nonmpi_sampler_settings(config)
+    annotation_metadata = load_annotation_metadata(config.data_path, config.annot_file; nCon=settings.effective_n_con)
     start_pi_result = build_start_pi(config.st_path; estimate_pi=settings.estimate_pi)
     gprior_vec = config.annotation_prior_model == :group_dirichlet ?
         build_gprior_vec(config.st_path, annotation_metadata.nLoci_annot, start_pi_result.Pi00) :
@@ -95,13 +273,9 @@ function run_nonmpi_sampler!(context)
     my_rank = 0
 
     block_data = load_nonmpi_block_data(config.data_path, config.annot_dict)
-    my_TransformedY_dict = block_data.transformed_y_dict
-    my_blkSNPsIndex_dict = block_data.blkSNPsIndex_dict
-    my_blkID = block_data.blkID
-    my_nGWAS_dict = block_data.nGWAS_dict
+    blocks = block_data.blocks
     my_nblk = block_data.nblk
     my_nsnp = block_data.nsnp
-    raw_anno_matrix_dict = block_data.anno_matrix_dict
 
     if is_continue
         burnin = 0
@@ -141,32 +315,13 @@ function run_nonmpi_sampler!(context)
     end
     marker_probit_tree_state = nothing
     if annotation_prior_model == :group_dirichlet
-        xpx_dict, xArray_dict, my_anno_matrix_dict = prepare_block_state!(
-            my_blkID,
-            my_blkSNPsIndex_dict,
-            block_data.transformed_x_dict,
-            raw_anno_matrix_dict,
-            effect_nCon,
-            annotation_metadata.annotationType,
-        )
+        prepare_block_state!(blocks, effect_nCon, annotation_metadata.annotationType)
     else
-        xpx_dict, xArray_dict, my_anno_matrix_dict, annotation_design = prepare_marker_probit_tree_block_state!(
-            my_blkID,
-            my_blkSNPsIndex_dict,
-            block_data.transformed_x_dict,
-            raw_anno_matrix_dict,
-        )
+        annotation_design = prepare_marker_probit_tree_block_state!(blocks)
         marker_probit_tree_state = initialize_marker_probit_tree_state(annotation_design, context.startPi)
     end
     block_data = nothing
     GC.gc()
-
-    #output
-    β = zeros(nTraits)
-    newα = zeros(nTraits)  #α=Dβ
-    oldα = zeros(nTraits)
-    w = zeros(nTraits)
-    δ = zeros(nTraits)
 
     if !is_continue
         betaArray = [zeros(my_nsnp * nCategory) for t in 1:nTraits] #-> ordered by annotation groups 
@@ -182,10 +337,7 @@ function run_nonmpi_sampler!(context)
             my_nsnp,
             nCategory,
             nTraits,
-            my_blkID,
-            my_blkSNPsIndex_dict,
-            xArray_dict,
-            my_TransformedY_dict,
+            blocks,
         )
     end
 
@@ -228,6 +380,7 @@ function run_nonmpi_sampler!(context)
     if my_rank == 0
         println("---------------- Summary Start --------------")
         println("nIter=$nIter, outFreq=$outFreq, seed=$(config.seed), burnin = $burnin")
+        println("Julia threads=$(nthreads())")
         println("startPi is: $Pi")
         println("estimate_vare=$estimate_vare,estimate_vara=$estimate_vara")
         println("estimate_pi=$estimate_pi")
@@ -256,6 +409,8 @@ function run_nonmpi_sampler!(context)
     iout = 1 
     iter_after_burnin_thin_index = 1
     last_saved_iter = nIter - (nIter - burnin) % outFreq
+    use_threaded_blocks = nthreads() > 1 && my_nblk > 1
+    block_ranges = build_block_ranges(my_nblk, min(nthreads(), my_nblk))
 
     R_blk = initialize_r_blk_state(
         my_nblk,
@@ -305,164 +460,73 @@ function run_nonmpi_sampler!(context)
             fill!(nLoci_array_vec[c], 0.0)
         end
 
-        #for loop for LD blocks
-        for b in 1:my_nblk
-            blk = my_blkID[b] #block ID
-            xpx_vec = xpx_dict[blk]
-            xArray_vec = xArray_dict[blk]
-            wArray = my_TransformedY_dict[blk]
-            annotationMatb = my_anno_matrix_dict[blk]  #annotation boolean data for current blk, nMarkerb-by-C
-            SNPIndexb = my_blkSNPsIndex_dict[blk]
-            nEigenb, nMarkerb = size(xArray_vec[end]) # q & nsnpb
-            nInd = my_nGWAS_dict[blk] # n
-
-            # # initialize xArrayc/xpxc 
-            xArrayc = xArray_vec[1] # nEigenb x nMarkerb matrix
-            xpxc = xpx_vec[1]
-
-            Rinv = inv(R_blk[b])
-
-            MarkerOrder = shuffle(1:nMarkerb)
-            for marker = MarkerOrder
-                true_marker_num = SNPIndexb[marker] #marker position across my_nsnp
-                annoindexm = annotationMatb[marker, :] # categories for current marker
-
-                for cat = 1:nCategory
-                    if effect_nCon != 0
-                        if cat <= effect_nCon + 1 # continuous group + categorical group (after effect_nCon+1, xArrayc/xpxc will not change)
-                            xArrayc = xArray_vec[cat]
-                            xpxc = xpx_vec[cat]
-                        end
-                    end
-                    Ginv = Ainv_vec[cat]
-
-                    if annoindexm[cat] # skip sampling if the marker is not in the category
-                        markerIndex = (cat - 1) * my_nsnp + true_marker_num # exact position in betaArray; betaArray[trait1]: nMarker*nCategory-by-1
-                        x = xArrayc[:, marker]
-                        for trait = 1:nTraits
-                            β[trait] = betaArray[trait][markerIndex]
-                            oldα[trait] = newα[trait] = alphaArray[trait][markerIndex]
-                            δ[trait] = deltaArray[trait][markerIndex]
-                            w[trait] = dot(x, wArray[trait]) + xpxc[marker] * oldα[trait] #w=xj'(ycorr+xj*αj) scaler
-                        end
-
-                        for k = 1:nTraits
-                            Ginv11 = Ginv[k, k]
-                            nok = deleteat!(collect(1:nTraits), k)
-                            Ginv12 = Ginv[k, nok] #this is not row vector!!, so this is Ginv21
-                            C11 = Ginv11 + Rinv[k, k] * xpxc[marker]
-                            C12 = Ginv12 + xpxc[marker] * Diagonal(δ[nok]) * Rinv[k, nok] #C21
-                            #when δj=0
-                            invLhs0 = 1 / Ginv11
-                            rhs0 = -dot(Ginv12, β[nok])
-                            gHat0 = rhs0 * invLhs0
-                            #when δj=1
-                            invLhs1 = 1 / C11
-                            rhs1 = w' * Rinv[:, k] - C12'β[nok]  #here the w' is in paper: w'm=xj'(ycorr+xj*βj)
-                            gHat1 = rhs1 * invLhs1
-
-                            d0 = deepcopy(δ)
-                            d1 = deepcopy(δ)
-                            d0[k] = 0.0
-                            d1[k] = 1.0
-
-                            #sample δj
-                            logPrior0 = log_marker_state_prior(annotation_prior_model, Pi, marker_probit_tree_state, cat, true_marker_num, d0)
-                            logPrior1 = log_marker_state_prior(annotation_prior_model, Pi, marker_probit_tree_state, cat, true_marker_num, d1)
-                            logDelta0 = -0.5 * (log(Ginv11) - gHat0^2 * Ginv11) + logPrior0 #logPi
-                            logDelta1 = -0.5 * (log(C11) - gHat1^2 * C11) + logPrior1 #logPiComp
-                            probDelta1 = 1.0 / (1.0 + exp(logDelta0 - logDelta1))
-
-                            #sample marker effects
-                            if (rand() < probDelta1) #δj=1
-                                δ[k] = 1
-                                β[k] = newα[k] = gHat1 + randn() * sqrt(invLhs1)
-                                wArray[k] = wArray[k] + x * (oldα[k] - newα[k])
-                            else
-                                β[k] = gHat0 + randn() * sqrt(invLhs0)
-                                δ[k] = 0
-                                newα[k] = 0
-                                if oldα[k] != 0
-                                    wArray[k] = wArray[k] + x * oldα[k] #newα[k]=0
-                                end
-                            end
-                        end
-
-                        # add to nLoci_array_vec based on δ
-                        state_key = pi_key(δ)
-                        for (pi_index, key) in enumerate(pi_key_order())
-                            if state_key == key
-                                nLoci_array_vec[cat][pi_index] += 1
-                                break
-                            end
-                        end
-
-                        for trait = 1:nTraits
-                            betaArray[trait][markerIndex] = β[trait]
-                            deltaArray[trait][markerIndex] = δ[trait]
-                            alphaArray[trait][markerIndex] = newα[trait]
-                            if do_thin
-                                meanAlpha[trait][markerIndex] += (newα[trait] - meanAlpha[trait][markerIndex]) * iIter
-                            end
-                        end
-                    end # end if loop  
-                end # end annotation loop
-            end  # end marker loop
-
-            my_TransformedY_dict[blk] = wArray
-            
-            if need_block_totalvarg
-                # compute genetic variance for each category and total genetic variance for current block based on alphaArray
-                XAb = xArray_vec[1]
-                what_array_total = [zeros(size(XAb, 1)) for _ in 1:nTraits] # used to compute total genetic variance
-
-                for cat in 1:nCategory
-                    if effect_nCon != 0 && cat <= effect_nCon + 1 # continuous group + categorical group (after effect_nCon+1, xArrayc/xpxc will not change)
-                        XAb = xArray_vec[cat]
-                    end
-                    alphaArray_c = [alphaArray[i][(cat-1)*my_nsnp.+SNPIndexb] for i in 1:nTraits]
-                    what_array_c = [XAb * alphaArray_c[traiti] for traiti in 1:nTraits]
-                    for traiti = 1:nTraits
-                        if do_thin
-                            varg_blk_cat[b][traiti, cat] = dot(what_array_c[traiti], what_array_c[traiti]) # genetic variance for different category & trait in bth block
-                        end
-                        if estimate_vare
-                            ssq_blk_cat[b][traiti, cat] = dot(alphaArray_c[traiti], alphaArray_c[traiti])
-                        end
-                        what_array_total[traiti] += what_array_c[traiti]  # add up whati across category to compute total genetic variance
-                    end
-                    if do_thin
-                        varg_cov_blk_cat[b][cat] = dot(what_array_c[1], what_array_c[2]) # genetic covariance for different category in bth block
-                    end
-                end
-
-                # total genetic variance
-                for traiti in 1:nTraits
-                    for traitj in traiti:nTraits
-                        totalvarg_blk[b][traiti, traitj] = dot(what_array_total[traiti], what_array_total[traitj])
-                        totalvarg_blk[b][traitj, traiti] = totalvarg_blk[b][traiti, traitj]
-                    end
-                end
+        if use_threaded_blocks
+            tasks = map(block_ranges) do block_range
+                Threads.@spawn run_nonmpi_block_range!(
+                    blocks,
+                    block_range,
+                    betaArray,
+                    alphaArray,
+                    deltaArray,
+                    meanAlpha,
+                    Ainv_vec,
+                    Pi,
+                    marker_probit_tree_state,
+                    R_blk,
+                    varg_blk_cat,
+                    varg_cov_blk_cat,
+                    totalvarg_blk,
+                    ssq_blk_cat;
+                    annotation_prior_model=annotation_prior_model,
+                    effect_nCon=effect_nCon,
+                    my_nsnp=my_nsnp,
+                    nCategory=nCategory,
+                    nTraits=nTraits,
+                    nlabel=nlabel,
+                    do_thin=do_thin,
+                    iIter=do_thin ? iIter : 0.0,
+                    need_block_totalvarg=need_block_totalvarg,
+                    estimate_vare=estimate_vare,
+                    df_R=df_R,
+                    scale_R=scale_R,
+                )
             end
-           
-            if estimate_vare
-                # sample bivariate residual variance R 
-                sampled_R = sample_variance_sumstats(wArray, nEigenb, df_R, scale_R)
-                R_blk[b] = sampled_R
-                Rcor = compute_correlation(sampled_R)
-                for traiti = 1:nTraits
-                    thres = sum(ssq_blk_cat[b][traiti, :]) / totalvarg_blk[b][traiti, traiti]
-                    if (thres > 1.1)
-                        R_blk[b][traiti, traiti] = sampled_R[traiti, traiti]
-                    else
-                        R_blk[b][traiti, traiti] = 1.0 / nInd[traiti]
-                    end
-                end
-                # tune covariance in R_blk
-                Rcov = Rcor * sqrt(R_blk[b][1, 1] * R_blk[b][2, 2])
-                R_blk[b][1, 2] = R_blk[b][2,1] = Rcov     
-            end 
-        end # end block loop 
+            for task in tasks
+                merge_nloci_counts!(nLoci_array_vec, fetch(task))
+            end
+        else
+            merge_nloci_counts!(
+                nLoci_array_vec,
+                run_nonmpi_block_range!(
+                    blocks,
+                    1:my_nblk,
+                    betaArray,
+                    alphaArray,
+                    deltaArray,
+                    meanAlpha,
+                    Ainv_vec,
+                    Pi,
+                    marker_probit_tree_state,
+                    R_blk,
+                    varg_blk_cat,
+                    varg_cov_blk_cat,
+                    totalvarg_blk,
+                    ssq_blk_cat;
+                    annotation_prior_model=annotation_prior_model,
+                    effect_nCon=effect_nCon,
+                    my_nsnp=my_nsnp,
+                    nCategory=nCategory,
+                    nTraits=nTraits,
+                    nlabel=nlabel,
+                    do_thin=do_thin,
+                    iIter=do_thin ? iIter : 0.0,
+                    need_block_totalvarg=need_block_totalvarg,
+                    estimate_vare=estimate_vare,
+                    df_R=df_R,
+                    scale_R=scale_R,
+                ),
+            )
+        end
 
         # get true A matrix by alphaArray
         # use only pleiotropic markers to compute QTL effect variance matrix
@@ -761,6 +825,9 @@ end
 
 function run_nonmpi_workflow(config::ConfigTypes.NonMPIConfig)
     Random.seed!(config.seed)
+    if nthreads() > 1
+        BLAS.set_num_threads(1)
+    end
     context = build_nonmpi_run_context(config)
     return @time run_nonmpi_sampler!(context)
 end

@@ -1,22 +1,19 @@
 function apply_alpha_correction!(
-    transformed_y_dict,
-    xArray_dict,
-    blkID,
-    blkSNPsIndex_dict,
+    blocks,
     alphaArray,
     my_nsnp,
     nCategory,
     nTraits,
 )
-    for blk in blkID
-        base_x = xArray_dict[blk][end]
+    for block in blocks
+        base_x = block.x_arrays[end]
         nMarkerb = size(base_x, 2)
         for trait in 1:nTraits
             alphaArray_total = zeros(nMarkerb)
             for category in 1:nCategory
-                alphaArray_total += alphaArray[trait][(category - 1) * my_nsnp .+ blkSNPsIndex_dict[blk]]
+                alphaArray_total += alphaArray[trait][(category - 1) * my_nsnp .+ block.snp_indices]
             end
-            transformed_y_dict[blk][trait] = transformed_y_dict[blk][trait] - base_x * alphaArray_total
+            block.transformed_y[trait] = block.transformed_y[trait] - base_x * alphaArray_total
         end
     end
     return nothing
@@ -29,10 +26,7 @@ function initialize_effect_state!(
     my_nsnp,
     nCategory,
     nTraits,
-    blkID,
-    blkSNPsIndex_dict,
-    xArray_dict,
-    transformed_y_dict,
+    blocks,
 )
     betaArray, alphaArray, deltaArray = load_effect_state(
         effect_starting_path,
@@ -41,10 +35,7 @@ function initialize_effect_state!(
         nTraits,
     )
     apply_alpha_correction!(
-        transformed_y_dict,
-        xArray_dict,
-        blkID,
-        blkSNPsIndex_dict,
+        blocks,
         alphaArray,
         my_nsnp,
         nCategory,
