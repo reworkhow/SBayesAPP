@@ -21,6 +21,14 @@ struct NonMPIBlockCollection{TB}
     nsnp::Int
 end
 
+function load_jld2_entry(path::AbstractString, candidate_keys)
+    data = JLD2.load(path)
+    for key in candidate_keys
+        haskey(data, key) && return data[key]
+    end
+    error("None of keys $(collect(candidate_keys)) found in $path. Available keys: $(collect(keys(data)))")
+end
+
 function load_annotation_metadata(data_path::AbstractString, annot_file::AbstractString; nCon::Int=0)
     annot = CSV.read(data_path * annot_file, DataFrame)
     annotation_name = String.(names(annot)[2:end])
@@ -42,12 +50,12 @@ function load_annotation_metadata(data_path::AbstractString, annot_file::Abstrac
 end
 
 function load_nonmpi_block_data(data_path::AbstractString, annot_dict::AbstractString)
-    transformed_x_dict = JLD2.load(data_path * "TransformedX_dict.jld2")["my_TransformedX_dict"]
-    transformed_y_dict = JLD2.load(data_path * "TransformedY_dict.jld2")["my_TransformedY_dict"]
-    blkSNPsIndex_dict = JLD2.load(data_path * "blkSNPsIndex_dict.jld2")["my_blkSNPsIndex_dict"]
+    transformed_x_dict = load_jld2_entry(data_path * "TransformedX_dict.jld2", ("my_TransformedX_dict", "TransformedX_dict"))
+    transformed_y_dict = load_jld2_entry(data_path * "TransformedY_dict.jld2", ("my_TransformedY_dict", "TransformedY_dict"))
+    blkSNPsIndex_dict = load_jld2_entry(data_path * "blkSNPsIndex_dict.jld2", ("my_blkSNPsIndex_dict", "blkSNPsIndex_dict"))
     blkID = Int.(vec(readdlm(data_path * "blkIDs.txt", ',')))
-    nGWAS_dict = JLD2.load(data_path * "nGWAS_dict.jld2")["my_nGWAS_dict"]
-    anno_matrix_dict = JLD2.load(data_path * "$annot_dict.jld2")["my_anno_matrix_dict"]
+    nGWAS_dict = load_jld2_entry(data_path * "nGWAS_dict.jld2", ("my_nGWAS_dict", "nGWAS_dict"))
+    anno_matrix_dict = load_jld2_entry(data_path * "$annot_dict.jld2", ("my_anno_matrix_dict", annot_dict))
     sort!(blkID)
 
     blocks = NonMPIBlockData[]
