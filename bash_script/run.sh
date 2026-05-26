@@ -6,10 +6,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # ======= Input Arguments =======
-DATA_PATH="$REPO_ROOT/example/SBayesAPP_input_chr1/"
-ANALYSIS_PATH="$REPO_ROOT/example/SBayesAPP_res_chr1/"
+DATA_PATH="$REPO_ROOT/example/SBayesAPP_input_first10blks/"
+ANALYSIS_PATH="$REPO_ROOT/example/SBayesAPP_res_first10blks/"
 mkdir -p "$ANALYSIS_PATH"
-NITER=1000
+NITER=500
 SEED=42
 ANNOT_FILE="annotation_df.txt"
 ANNOT_DICT="anno_matrix_dict"

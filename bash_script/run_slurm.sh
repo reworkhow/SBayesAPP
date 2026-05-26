@@ -1,10 +1,10 @@
 #!/bin/bash
 #SBATCH --exclude=bm[19-27]
-#SBATCH --job-name=SBayesAPP_chr1
+#SBATCH --job-name=SBayesAPP_first10blks
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=10
-#SBATCH --mem=300G
+#SBATCH --cpus-per-task=2
+#SBATCH --mem=60G
 #SBATCH --time=3-00:00:00
 #SBATCH --partition=bmh
 #SBATCH --account=qtlchenggrp
