@@ -56,10 +56,10 @@ julia --project=. --threads 3 scripts/run_nonmpi.jl \
   --data_path example/SBayesAPP_input_first10blks/ \
   --analysis_path example/SBayesAPP_res_first10blks_group_dirichlet/ \
   --n_iter 500 \
+  --burnin 200 \
   --seed 42 \
   --annot_file annotation_df.txt \
   --annot_dict anno_matrix_dict \
-  --out_freq 100 \
   --starting_value_dir XXX \
   --gscale_value_dir XXX \
   --st_path example/ST_res/ \
@@ -89,10 +89,10 @@ julia --project=. --threads 8 scripts/run_nonmpi.jl \
   --data_path example/SBayesAPP_input_first10blks/ \
   --analysis_path example/SBayesAPP_res_first10blks_marker_probit_tree/ \
   --n_iter 500 \
+  --burnin 200 \
   --seed 42 \
   --annot_file annotation_df.txt \
   --annot_dict anno_matrix_dict \
-  --out_freq 100 \
   --starting_value_dir XXX \
   --gscale_value_dir XXX \
   --st_path example/ST_res/ \

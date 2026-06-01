@@ -6,14 +6,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # ======= Input Arguments =======
-DATA_PATH="$REPO_ROOT/example/SBayesAPP_input_first10blks/"
-ANALYSIS_PATH="$REPO_ROOT/example/SBayesAPP_res_first10blks/"
+DATA_PATH="$REPO_ROOT/example/SBayesAPP_input_chr1/"
+ANALYSIS_PATH="$REPO_ROOT/example/SBayesAPP_res_chr1/"
 mkdir -p "$ANALYSIS_PATH"
 NITER=500
+BURNIN=200
 SEED=42
 ANNOT_FILE="annotation_df.txt"
 ANNOT_DICT="anno_matrix_dict"
-OUTFREQ=100
 STARTING_VALUE_DIR="XXX" # only needed if using starting values or extend chain length
 GSCALE_VALUE_DIR="XXX" # only needed if using fixed Gscale values during continuation
 ST_PATH="$REPO_ROOT/example/ST_res/"
@@ -51,10 +51,10 @@ julia --project="$REPO_ROOT" --threads "$JULIA_THREADS" "$REPO_ROOT/scripts/run_
   --data_path "$DATA_PATH" \
   --analysis_path "$ANALYSIS_PATH" \
   --n_iter "$NITER" \
+  --burnin "$BURNIN" \
   --seed "$SEED" \
   --annot_file "$ANNOT_FILE" \
   --annot_dict "$ANNOT_DICT" \
-  --out_freq "$OUTFREQ" \
   --starting_value_dir "$STARTING_VALUE_DIR" \
   --gscale_value_dir "$GSCALE_VALUE_DIR" \
   --st_path "$ST_PATH" \

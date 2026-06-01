@@ -46,12 +46,10 @@ function initialize_rank0_mcmc_state(
     meanSSE = [zeros(nTraits, nTraits) for _ in 1:nCategory]
     meanGtotal = zeros(nTraits, nTraits)
     meanGtotal2 = zeros(nTraits, nTraits)
+    meanGcor_total = 0.0
+    meanGcor_total2 = 0.0
     mcmcAtruecor_c = report_pleiotropic_qtl_effect_matrix && save_category_correlation_outputs ? zeros(nsample4mean, nCategory) : nothing
     mcmcBcor_c = save_category_correlation_outputs ? zeros(nsample4mean, nCategory) : nothing
-    mcmcGcov_c = save_category_correlation_outputs ? zeros(nsample4mean, nCategory) : nothing
-    mcmcGcor_c = save_category_correlation_outputs ? zeros(nsample4mean, nCategory) : nothing
-    mcmcGcov_total = zeros(nsample4mean)
-    mcmcGcor_total = zeros(nsample4mean)
     meanR = estimate_vare ? zeros(nTraits, nTraits) : nothing
     meanR2 = estimate_vare ? zeros(nTraits, nTraits) : nothing
 
@@ -74,12 +72,10 @@ function initialize_rank0_mcmc_state(
         meanSSE=meanSSE,
         meanGtotal=meanGtotal,
         meanGtotal2=meanGtotal2,
+        meanGcor_total=meanGcor_total,
+        meanGcor_total2=meanGcor_total2,
         mcmcAtruecor_c=mcmcAtruecor_c,
         mcmcBcor_c=mcmcBcor_c,
-        mcmcGcov_c=mcmcGcov_c,
-        mcmcGcor_c=mcmcGcor_c,
-        mcmcGcov_total=mcmcGcov_total,
-        mcmcGcor_total=mcmcGcor_total,
         meanR=meanR,
         meanR2=meanR2,
     )

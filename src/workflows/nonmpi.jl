@@ -252,7 +252,6 @@ function run_nonmpi_sampler!(context)
 
     analysis_path = config.analysis_path
     nIter = config.nIter
-    outFreq = config.out_freq
     starting_value_dir = config.starting_value_dir
     thin = config.thin
     is_continue = settings.is_continue
@@ -277,11 +276,7 @@ function run_nonmpi_sampler!(context)
     my_nblk = block_data.nblk
     my_nsnp = block_data.nsnp
 
-    if is_continue
-        burnin = 0
-    else 
-        burnin = floor(Int, nIter * 0.4)
-    end
+    burnin = config.burnin
 
     nCategory = annotation_prior_model == :group_dirichlet ? annotation_metadata.nCat + nCon : 1
     nLoci_annot = annotation_prior_model == :group_dirichlet ? annotation_metadata.nLoci_annot : Int[my_nsnp]
@@ -347,7 +342,7 @@ function run_nonmpi_sampler!(context)
     # mcmc samples for delta -> used to compute PP of SNPs 
     mcmc_Delta = nothing
     if output_mcmc_delta
-        nOutput = Int(floor((nIter - burnin) / outFreq))
+        nOutput = Int(floor((nIter - burnin) / thin))
         mcmc_Delta = [zeros(my_nsnp * nCategory, nOutput) for _ in 1:nTraits]
     end
 
@@ -367,7 +362,7 @@ function run_nonmpi_sampler!(context)
         report_pleiotropic_qtl_effect_matrix=report_pleiotropic_qtl_effect_matrix,
         save_category_correlation_outputs=save_category_correlation_outputs,
     )
-    (; mean_pi, mean_pi2, meanB2, meanA2, meanBcor2, meanAcor2, meanA, meanAcor, meanB, meanBcor, meanG, meanG2, meanGcor, meanGcor2, meanSSE, meanGtotal, meanGtotal2, mcmcAtruecor_c, mcmcBcor_c, mcmcGcov_c, mcmcGcor_c, mcmcGcov_total, mcmcGcor_total, meanR, meanR2) = rank0_mcmc_state
+    (; mean_pi, mean_pi2, meanB2, meanA2, meanBcor2, meanAcor2, meanA, meanAcor, meanB, meanBcor, meanG, meanG2, meanGcor, meanGcor2, meanSSE, meanGtotal, meanGtotal2, meanGcor_total, meanGcor_total2, mcmcAtruecor_c, mcmcBcor_c, meanR, meanR2) = rank0_mcmc_state
 
     file_names = nothing
     if my_rank == 0
@@ -379,7 +374,7 @@ function run_nonmpi_sampler!(context)
 
     if my_rank == 0
         println("---------------- Summary Start --------------")
-        println("nIter=$nIter, outFreq=$outFreq, seed=$(config.seed), burnin = $burnin")
+        println("nIter=$nIter, thin=$thin, seed=$(config.seed), burnin = $burnin")
         println("Julia threads=$(nthreads())")
         println("startPi is: $Pi")
         println("estimate_vare=$estimate_vare,estimate_vara=$estimate_vara")
@@ -398,7 +393,6 @@ function run_nonmpi_sampler!(context)
         else
             println("effect categories = $nCategory, annotation design features = $(size(marker_probit_tree_state.design_matrix, 2))")
         end
-        println("thin = $thin")
         time_start = now()
         println("Start time: ", time_start)
         println("---------------- Summary End ----------------")
@@ -408,9 +402,9 @@ function run_nonmpi_sampler!(context)
     nlabel = 4 # number of labels for Pi: (1.0, 1.0), (1.0, 0.0), (0.0, 1.0), (0.0, 0.0)
     iout = 1 
     iter_after_burnin_thin_index = 1
-    last_saved_iter = nIter - (nIter - burnin) % outFreq
+    last_saved_iter = nIter - (nIter - burnin) % thin
     use_threaded_blocks = nthreads() > 1 && my_nblk > 1
-    block_ranges = build_block_ranges(my_nblk, min(nthreads(), my_nblk))
+    block_ranges = build_block_ranges(blocks, min(nthreads(), my_nblk))
 
     R_blk = initialize_r_blk_state(
         my_nblk,
@@ -694,15 +688,17 @@ function run_nonmpi_sampler!(context)
                 G_vec[cat][1, 2] = G_vec[cat][2, 1] = varg_cov_cat[cat]
             end
 
-            mcmcGcor_total[iter_after_burnin_thin_index] = compute_correlation(totalvarg)
-            mcmcGcov_total[iter_after_burnin_thin_index] = totalvarg[1, 2]
+            total_gcor = compute_correlation(totalvarg)
+            meanGcor_total += (total_gcor - meanGcor_total) * iIter
+            meanGcor_total2 += (total_gcor^2 - meanGcor_total2) * iIter
 
             for cat = 1:nCategory
                 meanG[cat] += (G_vec[cat] - meanG[cat]) * iIter
                 meanG2[cat] += (G_vec[cat] .^ 2 - meanG2[cat]) * iIter
                 if save_category_correlation_outputs
-                    mcmcGcor_c[iter_after_burnin_thin_index, cat] = compute_correlation(G_vec[cat])
-                    mcmcGcov_c[iter_after_burnin_thin_index, cat] = G_vec[cat][1, 2]
+                    gcor = compute_correlation(G_vec[cat])
+                    meanGcor[cat] += (gcor - meanGcor[cat]) * iIter
+                    meanGcor2[cat] += (gcor^2 - meanGcor2[cat]) * iIter
                 end
             end
             meanGtotal += (totalvarg - meanGtotal) * iIter
@@ -711,7 +707,7 @@ function run_nonmpi_sampler!(context)
 
         # save MCMC samples & last samples
         if iter > burnin 
-            if iter > burnin && (iter - burnin) % outFreq == 0
+            if iter > burnin && (iter - burnin) % thin == 0
                 println("iter $iter")
                 if output_mcmc_delta
                     for trait = 1:nTraits
@@ -786,12 +782,10 @@ function run_nonmpi_sampler!(context)
         meanGcor2=meanGcor2,
         meanGtotal=meanGtotal,
         meanGtotal2=meanGtotal2,
+        meanGcor_total=meanGcor_total,
+        meanGcor_total2=meanGcor_total2,
         mcmcAtruecor_c=mcmcAtruecor_c,
         mcmcBcor_c=mcmcBcor_c,
-        mcmcGcov_c=mcmcGcov_c,
-        mcmcGcor_c=mcmcGcor_c,
-        mcmcGcov_total=mcmcGcov_total,
-        mcmcGcor_total=mcmcGcor_total,
         meanR=meanR,
         meanR2=meanR2,
     )

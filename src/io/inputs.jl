@@ -49,6 +49,94 @@ function load_annotation_metadata(data_path::AbstractString, annot_file::Abstrac
     )
 end
 
+function detect_input_delimiter(path::AbstractString)
+    return open(path, "r") do io
+        eof(io) && error("No header found in $path")
+        first_line = rstrip(readline(io), ['\r', '\n'])
+        if length(split(first_line, '\t')) > 1
+            return ('\t', false)
+        elseif length(split(first_line, ',')) > 1
+            return (',', false)
+        elseif length(split(first_line)) > 1
+            return (' ', true)
+        end
+        error("Unknown delimiter format in $path")
+    end
+end
+
+function read_input_table(path::AbstractString)
+    delim, ignore_repeated = detect_input_delimiter(path)
+    return CSV.read(path, DataFrame; delim=delim, ignorerepeated=ignore_repeated)
+end
+
+function resolve_input_path(data_path::AbstractString, path::AbstractString)
+    candidate = String(path)
+    isabspath(candidate) && return candidate
+    isfile(candidate) && return abspath(candidate)
+    return joinpath(data_path, candidate)
+end
+
+default_annotation_dict_filename(annot_path::AbstractString) = "anno_matrix_" * splitext(basename(annot_path))[1] * ".jld2"
+
+function build_annotation_dict(
+    data_path::AbstractString,
+    annot_file::AbstractString,
+    ldinfo_file::AbstractString;
+    output_file_name::Union{Nothing,AbstractString}=nothing,
+)
+    annot_path = resolve_input_path(data_path, annot_file)
+    ldinfo_path = resolve_input_path(data_path, ldinfo_file)
+    blkid_path = joinpath(data_path, "blkIDs.txt")
+
+    output_path = if output_file_name !== nothing
+        output_candidate = String(output_file_name)
+        isabspath(output_candidate) ? output_candidate : joinpath(data_path, output_candidate)
+    else
+        joinpath(data_path, default_annotation_dict_filename(annot_path))
+    end
+
+    annot = read_input_table(annot_path)
+    "SNP" in names(annot) || error("Annotation file must contain a SNP column: $annot_path")
+    annotation_columns = names(annot)[2:end]
+    isempty(annotation_columns) && error("Annotation file must contain at least one annotation column: $annot_path")
+
+    ldinfo = read_input_table(ldinfo_path)
+    "Block" in names(ldinfo) || error("LD info file must contain a Block column: $ldinfo_path")
+    "ID" in names(ldinfo) || error("LD info file must contain an ID column: $ldinfo_path")
+
+    block_ids = if isfile(blkid_path)
+        sort(Int.(vec(readdlm(blkid_path, ','))))
+    else
+        sort(unique(Int.(ldinfo[!, :Block])))
+    end
+
+    anno_matrix_dict = Dict{Int,Matrix{Float64}}()
+    for block_id in block_ids
+        blockinfo = ldinfo[Int.(ldinfo[!, :Block]) .== block_id, :]
+        "Index" in names(blockinfo) && sort!(blockinfo, :Index)
+
+        block_snps = DataFrame(_row=1:nrow(blockinfo), SNP=String.(blockinfo[!, :ID]))
+        annot_df = leftjoin(block_snps, annot, on=:SNP)
+        sort!(annot_df, :_row)
+        for column in annotation_columns
+            annot_df[!, column] = Float64.(coalesce.(annot_df[!, column], 0))
+        end
+
+        anno_matrix_dict[block_id] = Matrix(annot_df[:, annotation_columns])
+    end
+
+    output_dict_name = "my_anno_matrix_dict"
+    jldopen(output_path, "w") do file
+        write(file, output_dict_name, anno_matrix_dict)
+    end
+
+    return (
+        output_file=output_path,
+        output_dict_name=output_dict_name,
+        nblocks=length(anno_matrix_dict),
+    )
+end
+
 function load_nonmpi_block_data(data_path::AbstractString, annot_dict::AbstractString)
     transformed_x_dict = load_jld2_entry(data_path * "TransformedX_dict.jld2", ("my_TransformedX_dict", "TransformedX_dict"))
     transformed_y_dict = load_jld2_entry(data_path * "TransformedY_dict.jld2", ("my_TransformedY_dict", "TransformedY_dict"))

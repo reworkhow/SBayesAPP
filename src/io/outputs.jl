@@ -63,7 +63,7 @@ function save_nonmpi_posterior_mean!(
     marker_probit_tree_state=nothing,
     annotation_names=String[],
 )
-    (; mean_pi, mean_pi2, meanB2, meanA2, meanBcor2, meanAcor2, meanA, meanAcor, meanB, meanBcor, meanG, meanG2, meanGcor, meanGcor2, meanGtotal, meanGtotal2, mcmcAtruecor_c, mcmcBcor_c, mcmcGcov_c, mcmcGcor_c, mcmcGcov_total, mcmcGcor_total, meanR, meanR2) = posterior_mean_state
+    (; mean_pi, mean_pi2, meanB2, meanA2, meanBcor2, meanAcor2, meanA, meanAcor, meanB, meanBcor, meanG, meanG2, meanGcor, meanGcor2, meanGtotal, meanGtotal2, meanGcor_total, meanGcor_total2, mcmcAtruecor_c, mcmcBcor_c, meanR, meanR2) = posterior_mean_state
     save_category_correlation_outputs = annotation_prior_model == :group_dirichlet
 
     for cat in 1:nCategory
@@ -92,10 +92,6 @@ function save_nonmpi_posterior_mean!(
     end
 
     if save_category_correlation_outputs
-        writedlm(analysis_path * "mcmcGcov_total.txt", mcmcGcov_total)
-        writedlm(analysis_path * "mcmcGcor_total.txt", mcmcGcor_total)
-        writedlm(analysis_path * "mcmcGcov_c.txt", mcmcGcov_c)
-        writedlm(analysis_path * "mcmcGcor_c.txt", mcmcGcor_c)
         writedlm(analysis_path * "estBcor.txt", meanBcor)
         if report_pleiotropic_qtl_effect_matrix
             writedlm(analysis_path * "mcmcAtruecor_c.txt", mcmcAtruecor_c)
@@ -113,22 +109,16 @@ function save_nonmpi_posterior_mean!(
     for cat in 1:nCategory
         writedlm(analysis_path * "estG" * string(cat) * ".txt", meanG[cat])
         writedlm(analysis_path * "estG_std" * string(cat) * ".txt", sqrt.(abs.(meanG2[cat] .- (meanG[cat] .^ 2))))
-        if save_category_correlation_outputs
-            meanGcor[cat] = mean(mcmcGcor_c[:, cat][.!isnan.(mcmcGcor_c[:, cat])])
-            meanGcor2[cat] = mean(mcmcGcor_c[:, cat][.!isnan.(mcmcGcor_c[:, cat])] .^ 2)
-        end
     end
     if save_category_correlation_outputs
         writedlm(analysis_path * "estGcor.txt", meanGcor)
-        writedlm(analysis_path * "estGcor_std.txt", sqrt.(meanGcor2 .- (meanGcor .^ 2)))
+        writedlm(analysis_path * "estGcor_std.txt", sqrt.(abs.(meanGcor2 .- (meanGcor .^ 2))))
     end
 
     writedlm(analysis_path * "estGtotal.txt", meanGtotal, ',')
     writedlm(analysis_path * "estGtotal_std.txt", sqrt.((meanGtotal2 .- (meanGtotal .^ 2))), ',')
-    meanGcor_total = mean(mcmcGcor_total[.!isnan.(mcmcGcor_total)])
-    meanGcor_total2 = mean(mcmcGcor_total[.!isnan.(mcmcGcor_total)] .^ 2)
     writedlm(analysis_path * "estGcor_total.txt", meanGcor_total)
-    writedlm(analysis_path * "estGcor_total_std.txt", sqrt(meanGcor_total2 - (meanGcor_total^2)))
+    writedlm(analysis_path * "estGcor_total_std.txt", sqrt(abs(meanGcor_total2 - (meanGcor_total^2))))
 
     if estimate_vare
         writedlm(analysis_path * "estR.txt", meanR)

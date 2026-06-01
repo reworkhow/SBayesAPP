@@ -67,10 +67,10 @@ julia --project=. --threads 3 scripts/run_nonmpi.jl \
   --data_path example/SBayesAPP_input_first10blks/ \
   --analysis_path example/SBayesAPP_res_first10blks/ \
   --n_iter 500 \
+  --burnin 200 \
   --seed 42 \
   --annot_file annotation_df.txt \
   --annot_dict anno_matrix_dict \
-  --out_freq 100 \
   --starting_value_dir XXX \
   --gscale_value_dir XXX \
   --st_path example/ST_res/ \
@@ -93,6 +93,8 @@ Replace `3` with the number of threads you want to use on your machine.
 
 `annot_file` is resolved relative to `data_path`, so `annotation_df.txt` must exist inside `example/SBayesAPP_input_first10blks/` for this command.
 
+`--burnin` is optional. If you omit it, fresh runs default to trimming 40% of the chain, while continuation runs default to `0`.
+
 ## Run through Slurm
 
 The Slurm wrapper expects to be submitted from the `bash_script/` directory so it can find `run.sh`.
@@ -113,7 +115,6 @@ The SBayesAPP command requires these arguments every time:
 - `--n_iter`
 - `--annot_file`
 - `--annot_dict`
-- `--out_freq`
 - `--starting_value_dir`
 - `--gscale_value_dir`
 - `--st_path`
@@ -122,8 +123,11 @@ The SBayesAPP command requires these arguments every time:
 - `--n2`
 - `--is_continue`
 
+`--thin` now controls both posterior-mean thinning and periodic MCMC sample/checkpoint writes.
+
 The package-level CLI defaults are:
 
+- `--burnin floor(0.4 * n_iter)` for fresh runs, `0` for continuation runs
 - `--seed 123`
 - `--n_con 0`
 - `--annotation_prior_model group_dirichlet`

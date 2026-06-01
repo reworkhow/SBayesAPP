@@ -46,14 +46,13 @@ The required named options are:
 3. `--n_iter`
 4. `--annot_file`
 5. `--annot_dict`
-6. `--out_freq`
-7. `--starting_value_dir`
-8. `--gscale_value_dir`
-9. `--st_path`
-10. `--thin`
-11. `--n1`
-12. `--n2`
-13. `--is_continue`
+6. `--starting_value_dir`
+7. `--gscale_value_dir`
+8. `--st_path`
+9. `--thin`
+10. `--n1`
+11. `--n2`
+12. `--is_continue`
 
 Optional flags include `--seed`, `--n_con`, `--annotation_prior_model`, `--estimate_vare`, `--estimate_vara`, `--estimate_pi`, `--estimate_gscale`, `--estgscale_iter`, `--report_pleiotropic_qtl_effect_matrix`, and `--output_mcmc_delta`.
 
@@ -61,6 +60,7 @@ Important runtime normalization happens before sampling starts.
 
 - `annotation_prior_model` is validated against `(:group_dirichlet, :marker_probit_tree)`.
 - In `:marker_probit_tree`, `estimate_pi=false` is ignored and `estimate_pi` is forced on.
+- `burnin` defaults to `floor(Int, 0.4 * nIter)` for fresh runs and `0` for continuation runs unless `--burnin` is provided explicitly.
 - In `:marker_probit_tree`, `is_continue=true` is ignored and the run always starts fresh.
 - In `:marker_probit_tree`, `n_con` is ignored and all annotation columns are treated as prior features.
 - `estimate_Gscale` is only active when `estimate_vara=true`.
@@ -252,10 +252,9 @@ The code recomputes `SSE_vec = beta'beta` per category on every iteration.
 
 ### Checkpointing and sample writes
 
-After burn-in, the workflow writes different outputs on two schedules.
+After burn-in, the workflow writes outputs on the thinning schedule.
 
-- At every `out_freq` checkpoint, it appends the current `Pi` samples and `A_vec` samples, and optionally saves `delta` trajectories.
-- At every thinning point, it appends total and category-level genetic covariance samples, and optionally the pleiotropic realized-effect covariance samples.
+- At every thinning point, it appends the current `Pi` samples and `A_vec` samples, optionally saves `delta` trajectories, and appends total and category-level genetic covariance samples together with the optional pleiotropic realized-effect covariance samples.
 - At the last scheduled save iteration, it writes the current samples to the last-sample files for `betaArray`, `R_blk`, `A_vec`, `Pi`, and `deltaArray`.
 
 ## Final outputs

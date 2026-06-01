@@ -12,6 +12,17 @@ function normalize_annotation_prior_model(annotation_prior_model)
     return model
 end
 
+function validate_nonmpi_schedule(nIter::Int, burnin::Int, thin::Int)
+    nIter > 0 || error("nIter must be positive, got: $nIter")
+    thin > 0 || error("thin must be positive, got: $thin")
+    burnin >= 0 || error("burnin must be non-negative, got: $burnin")
+    burnin < nIter || error("burnin must be smaller than nIter, got burnin=$burnin and nIter=$nIter")
+    floor(Int, (nIter - burnin) / thin) >= 1 || error(
+        "thin and burnin leave no post-burnin samples, got nIter=$nIter, burnin=$burnin, thin=$thin",
+    )
+    return nothing
+end
+
 struct NonMPIConfig
     data_path::String
     analysis_path::String
@@ -19,11 +30,11 @@ struct NonMPIConfig
     seed::Int
     annot_file::String
     annot_dict::String
-    out_freq::Int
     starting_value_dir::String
     gscale_value_dir::String
     st_path::String
     thin::Int
+    burnin::Int
     n1::Int
     n2::Int
     n_con::Int
@@ -58,7 +69,6 @@ function NonMPIConfig(
     seed::Int,
     annot_file::String,
     annot_dict::String,
-    out_freq::Int,
     starting_value_dir::String,
     gscale_value_dir::String,
     st_path::String,
@@ -66,6 +76,7 @@ function NonMPIConfig(
     n1::Int,
     n2::Int,
     is_continue::Bool;
+    burnin::Union{Nothing, Int}=nothing,
     n_con::Int=0,
     annotation_prior_model::Symbol=:group_dirichlet,
     estimate_vare::Bool=true,
@@ -77,6 +88,8 @@ function NonMPIConfig(
     output_mcmc_delta::Bool=true,
 )
     normalized_annotation_prior_model = normalize_annotation_prior_model(annotation_prior_model)
+    resolved_burnin = isnothing(burnin) ? (is_continue ? 0 : floor(Int, nIter * 0.4)) : burnin
+    validate_nonmpi_schedule(nIter, resolved_burnin, thin)
     return NonMPIConfig(
         data_path,
         analysis_path,
@@ -84,11 +97,11 @@ function NonMPIConfig(
         seed,
         annot_file,
         annot_dict,
-        out_freq,
         starting_value_dir,
         gscale_value_dir,
         st_path,
         thin,
+        resolved_burnin,
         n1,
         n2,
         n_con,

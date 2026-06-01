@@ -1,6 +1,39 @@
 using Distributions: InverseWishart
 using LinearAlgebra: Symmetric, diag
 
+function parse_cli_args(args::Vector{String}; usage::Union{Nothing,Function}=nothing, allow_empty::Bool=true)
+    (args == ["--help"] || args == ["-h"]) && begin
+        usage === nothing || usage()
+        exit(0)
+    end
+
+    isempty(args) && !allow_empty && begin
+        usage === nothing || usage()
+        exit(1)
+    end
+
+    length(args) % 2 == 0 || error("Expected --key value pairs")
+
+    options = Dict{String,String}()
+    for index in 1:2:length(args)
+        key = args[index]
+        value = args[index + 1]
+        startswith(key, "--") || error("Expected option starting with --, got: $key")
+        options[key[3:end]] = value
+    end
+    return options
+end
+
+option_value(options::AbstractDict, key::AbstractString; default=nothing, required::Bool=false) =
+    haskey(options, key) ? options[key] : required ? error("Missing required option --$key") : default
+
+function parse_bool(text::AbstractString)
+    lowered = lowercase(strip(text))
+    lowered == "true" && return true
+    lowered == "false" && return false
+    error("Expected true or false, got: $text")
+end
+
 function compute_correlation(cov_matrix)
     std_devs = sqrt.(diag(cov_matrix))
     return cov_matrix[1, 2] / (std_devs[1] * std_devs[2])
@@ -20,16 +53,41 @@ function sample_variance_sumstats(ycorr_array, nobs, df, scale)
     return rand(InverseWishart(df + nobs, convert(Array, Symmetric(scale + SSE))))
 end
 
-function build_block_ranges(nblocks::Int, ntasks::Int)
+function block_thread_weight(block)
+    annotation_mask = getproperty(block, :annotation_mask)
+    annotation_mask === nothing && error("block_thread_weight requires prepared block.annotation_mask")
+    return max(count(annotation_mask), 1)
+end
+
+function build_block_ranges(blocks, ntasks::Int)
+    nblocks = length(blocks)
     nblocks == 0 && return UnitRange{Int}[]
-    chunk_size = cld(nblocks, max(ntasks, 1))
+
+    ntasks = max(min(ntasks, nblocks), 1)
+    block_weights = [block_thread_weight(block) for block in blocks]
+    total_weight = sum(block_weights)
+    target_weight = max(cld(total_weight, ntasks), 1)
+
     ranges = UnitRange{Int}[]
     start_index = 1
-    while start_index <= nblocks
-        stop_index = min(nblocks, start_index + chunk_size - 1)
-        push!(ranges, start_index:stop_index)
-        start_index = stop_index + 1
+    accumulated_weight = 0
+
+    for block_index in 1:nblocks
+        accumulated_weight += block_weights[block_index]
+        blocks_remaining = nblocks - block_index
+        tasks_remaining = ntasks - length(ranges) - 1
+        should_split = tasks_remaining > 0 && (
+            accumulated_weight >= target_weight ||
+            blocks_remaining == tasks_remaining
+        )
+        if should_split
+            push!(ranges, start_index:block_index)
+            start_index = block_index + 1
+            accumulated_weight = 0
+        end
     end
+
+    start_index <= nblocks && push!(ranges, start_index:nblocks)
     return ranges
 end
 

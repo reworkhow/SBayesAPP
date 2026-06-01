@@ -1,5 +1,6 @@
 using Test
 using SBayesAPP
+using JLD2
 
 include(joinpath(SBayesAPP.repo_root(), "example", "simulate_marker_probit_tree_dataset.jl"))
 
@@ -16,7 +17,6 @@ include(joinpath(SBayesAPP.repo_root(), "example", "simulate_marker_probit_tree_
             42,
             "annotation_df.txt",
             "anno_matrix_dict",
-            1,
             "XXX",
             "XXX",
             st_dir,
@@ -24,6 +24,7 @@ include(joinpath(SBayesAPP.repo_root(), "example", "simulate_marker_probit_tree_
             300000,
             300000,
             false,
+            burnin=0,
             report_pleiotropic_qtl_effect_matrix=false,
             output_mcmc_delta=false,
         )
@@ -34,9 +35,15 @@ include(joinpath(SBayesAPP.repo_root(), "example", "simulate_marker_probit_tree_
         @test isfile(joinpath(analysis_dir, "MCMC_samples_pi.txt"))
         @test isfile(joinpath(analysis_dir, "estPi1.txt"))
         @test isfile(joinpath(analysis_dir, "estR.txt"))
+        @test isfile(joinpath(analysis_dir, "estGcor.txt"))
+        @test isfile(joinpath(analysis_dir, "estGcor_total.txt"))
         @test isfile(joinpath(analysis_dir, "last_sample_delta", "last_sample_delta1_rank0.txt"))
         @test !isfile(joinpath(analysis_dir, "MCMC_samples_marker_effects_variance.txt"))
         @test !isfile(joinpath(analysis_dir, "mcmcAtruecor_c.txt"))
+        @test !isfile(joinpath(analysis_dir, "mcmcGcor_c.txt"))
+        @test !isfile(joinpath(analysis_dir, "mcmcGcov_c.txt"))
+        @test !isfile(joinpath(analysis_dir, "mcmcGcor_total.txt"))
+        @test !isfile(joinpath(analysis_dir, "mcmcGcov_total.txt"))
         @test !isfile(joinpath(analysis_dir, "mcmc_Delta1.rank0.txt"))
         @test !isfile(joinpath(analysis_dir, "estA1.txt"))
     end
@@ -55,7 +62,6 @@ end
             42,
             "annotation_df.txt",
             "anno_matrix_dict",
-            1,
             "XXX",
             "XXX",
             st_dir,
@@ -63,6 +69,7 @@ end
             300000,
             300000,
             false,
+            burnin=0,
             annotation_prior_model=:marker_probit_tree,
             report_pleiotropic_qtl_effect_matrix=false,
             output_mcmc_delta=false,
@@ -82,6 +89,8 @@ end
         @test !isfile(joinpath(analysis_dir, "estGcor_std.txt"))
         @test !isfile(joinpath(analysis_dir, "mcmcGcor_c.txt"))
         @test !isfile(joinpath(analysis_dir, "mcmcGcov_c.txt"))
+        @test !isfile(joinpath(analysis_dir, "mcmcGcor_total.txt"))
+        @test !isfile(joinpath(analysis_dir, "mcmcGcov_total.txt"))
     end
 end
 

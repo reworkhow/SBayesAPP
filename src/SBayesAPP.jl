@@ -5,6 +5,7 @@ include("config/nonmpi_settings.jl")
 using .ConfigTypes: MarkerProbitTreeState, NonMPIConfig
 
 include("io/inputs.jl")
+include("io/enrichment.jl")
 include("model/continuation_state.jl")
 include("model/mcmc_setup.jl")
 include("model/priors.jl")
@@ -17,8 +18,10 @@ include("workflows/nonmpi.jl")
 
 export NonMPIConfig,
        build_nonmpi_cmd,
+       build_annotation_dict,
        build_gprior_vec,
        build_start_pi,
+       calculate_single_chain_enrichment,
        example_nonmpi_config,
        compute_correlation,
        load_annotation_metadata,
@@ -38,10 +41,7 @@ _dir_arg(path::AbstractString) = endswith(path, "/") ? String(path) : string(pat
 _normalize_cli_key(key::AbstractString) = lowercase(replace(String(key), "-" => "_"))
 
 function _parse_bool_arg(value::AbstractString)
-    lower_value = lowercase(value)
-    lower_value == "true" && return true
-    lower_value == "false" && return false
-    error("Expected boolean argument 'true' or 'false', got: $value")
+    return parse_bool(value)
 end
 
 function _parse_int_arg(value::AbstractString, option_name::AbstractString)
@@ -112,7 +112,6 @@ function example_nonmpi_config(; root::AbstractString=repo_root())
         42,
         "annotation_df.txt",
         "anno_matrix_dict",
-        100,
         "XXX",
         "XXX",
         _dir_arg(joinpath(root, "example", "ST_res")),
@@ -139,22 +138,27 @@ function parse_nonmpi_args(args::Vector{String})
 
     parsed = _parse_named_cli_args(args)
     defaults = _default_nonmpi_cli_settings()
+    nIter = _parse_int_arg(_lookup_named_arg(parsed, ["n_iter", "niter"]; required=true), "n_iter")
+    seed = _parse_int_arg(string(_lookup_named_arg(parsed, ["seed"]; default=string(defaults.seed))), "seed")
+    is_continue = _parse_bool_arg(_lookup_named_arg(parsed, ["is_continue"]; required=true))
+    burnin_arg = _lookup_named_arg(parsed, ["burnin"])
+    burnin = isnothing(burnin_arg) ? (is_continue ? 0 : floor(Int, nIter * 0.4)) : _parse_int_arg(string(burnin_arg), "burnin")
 
     return NonMPIConfig(
         _dir_arg(_lookup_named_arg(parsed, ["data_path"]; required=true)),
         _dir_arg(_lookup_named_arg(parsed, ["analysis_path"]; required=true)),
-        _parse_int_arg(_lookup_named_arg(parsed, ["n_iter", "niter"]; required=true), "n_iter"),
-        _parse_int_arg(string(_lookup_named_arg(parsed, ["seed"]; default=string(defaults.seed))), "seed"),
+        nIter,
+        seed,
         _lookup_named_arg(parsed, ["annot_file"]; required=true),
         _lookup_named_arg(parsed, ["annot_dict"]; required=true),
-        _parse_int_arg(_lookup_named_arg(parsed, ["out_freq", "outfreq"]; required=true), "out_freq"),
         _lookup_named_arg(parsed, ["starting_value_dir"]; required=true),
         _lookup_named_arg(parsed, ["gscale_value_dir", "secondary_starting_value_dir"]; required=true),
         _dir_arg(_lookup_named_arg(parsed, ["st_path"]; required=true)),
         _parse_int_arg(_lookup_named_arg(parsed, ["thin"]; required=true), "thin"),
         _parse_int_arg(_lookup_named_arg(parsed, ["n1"]; required=true), "n1"),
         _parse_int_arg(_lookup_named_arg(parsed, ["n2"]; required=true), "n2"),
-        _parse_bool_arg(_lookup_named_arg(parsed, ["is_continue"]; required=true)),
+        is_continue,
+        burnin=burnin,
         n_con=_parse_int_arg(string(_lookup_named_arg(parsed, ["n_con", "ncon"]; default=string(defaults.n_con))), "n_con"),
         annotation_prior_model=ConfigTypes.normalize_annotation_prior_model(string(_lookup_named_arg(parsed, ["annotation_prior_model"]; default=string(defaults.annotation_prior_model)))),
         estimate_vare=_parse_bool_arg(string(_lookup_named_arg(parsed, ["estimate_vare"]; default=string(defaults.estimate_vare)))),
@@ -168,7 +172,7 @@ function parse_nonmpi_args(args::Vector{String})
 end
 
 function build_nonmpi_cmd(config::NonMPIConfig)
-    return `$(Base.julia_cmd()) --project=$(repo_root()) $(joinpath(repo_root(), "scripts", "run_nonmpi.jl")) --data_path $(config.data_path) --analysis_path $(config.analysis_path) --n_iter $(string(config.nIter)) --seed $(string(config.seed)) --annot_file $(config.annot_file) --annot_dict $(config.annot_dict) --out_freq $(string(config.out_freq)) --starting_value_dir $(config.starting_value_dir) --gscale_value_dir $(config.gscale_value_dir) --st_path $(config.st_path) --thin $(string(config.thin)) --n1 $(string(config.n1)) --n2 $(string(config.n2)) --n_con $(string(config.n_con)) --annotation_prior_model $(String(config.annotation_prior_model)) --is_continue $(_bool_arg(config.is_continue)) --estimate_vare $(_bool_arg(config.estimate_vare)) --estimate_vara $(_bool_arg(config.estimate_vara)) --estimate_pi $(_bool_arg(config.estimate_pi)) --estimate_gscale $(_bool_arg(config.estimate_Gscale)) --estgscale_iter $(string(config.estGscale_iter)) --report_pleiotropic_qtl_effect_matrix $(_bool_arg(config.report_pleiotropic_qtl_effect_matrix)) --output_mcmc_delta $(_bool_arg(config.output_mcmc_delta))`
+    return `$(Base.julia_cmd()) --project=$(repo_root()) $(joinpath(repo_root(), "scripts", "run_nonmpi.jl")) --data_path $(config.data_path) --analysis_path $(config.analysis_path) --n_iter $(string(config.nIter)) --burnin $(string(config.burnin)) --seed $(string(config.seed)) --annot_file $(config.annot_file) --annot_dict $(config.annot_dict) --starting_value_dir $(config.starting_value_dir) --gscale_value_dir $(config.gscale_value_dir) --st_path $(config.st_path) --thin $(string(config.thin)) --n1 $(string(config.n1)) --n2 $(string(config.n2)) --n_con $(string(config.n_con)) --annotation_prior_model $(String(config.annotation_prior_model)) --is_continue $(_bool_arg(config.is_continue)) --estimate_vare $(_bool_arg(config.estimate_vare)) --estimate_vara $(_bool_arg(config.estimate_vara)) --estimate_pi $(_bool_arg(config.estimate_pi)) --estimate_gscale $(_bool_arg(config.estimate_Gscale)) --estgscale_iter $(string(config.estGscale_iter)) --report_pleiotropic_qtl_effect_matrix $(_bool_arg(config.report_pleiotropic_qtl_effect_matrix)) --output_mcmc_delta $(_bool_arg(config.output_mcmc_delta))`
 end
 
 run_nonmpi(config::NonMPIConfig; dry_run::Bool=false) = dry_run ? build_nonmpi_cmd(config) : run_nonmpi_workflow(config)
