@@ -244,6 +244,43 @@ function build_nonmpi_run_context(config::ConfigTypes.NonMPIConfig)
     )
 end
 
+function write_nonmpi_run_config(analysis_path::AbstractString, context)
+    config = context.config
+    settings = context.settings
+    run_config = [
+        "created_at" => string(now()),
+        "data_path" => config.data_path,
+        "analysis_path" => config.analysis_path,
+        "annot_file" => config.annot_file,
+        "annot_dict" => config.annot_dict,
+        "starting_value_dir" => config.starting_value_dir,
+        "gscale_value_dir" => config.gscale_value_dir,
+        "st_path" => config.st_path,
+        "n_iter" => config.nIter,
+        "burnin" => config.burnin,
+        "thin" => config.thin,
+        "seed" => config.seed,
+        "n1" => config.n1,
+        "n2" => config.n2,
+        "effective_n_con" => settings.effective_n_con,
+        "annotation_prior_model" => String(config.annotation_prior_model),
+        "is_continue" => settings.is_continue,
+        "estimate_vare" => settings.estimate_vare,
+        "estimate_vara" => settings.estimate_vara,
+        "estimate_pi" => settings.estimate_pi,
+        "effective_estimate_gscale" => settings.estimate_Gscale,
+        "estgscale_iter" => settings.estGscale_iter,
+        "report_pleiotropic_qtl_effect_matrix" => config.report_pleiotropic_qtl_effect_matrix,
+        "output_mcmc_delta" => config.output_mcmc_delta,
+        "julia_threads" => nthreads(),
+    ]
+    open(joinpath(analysis_path, "run_config.toml"), "w") do io
+        for (key, value) in run_config
+            println(io, key, " = ", value)
+        end
+    end
+end
+
 function run_nonmpi_sampler!(context)
     config = context.config
     annotation_metadata = context.annotation_metadata
@@ -305,9 +342,10 @@ function run_nonmpi_sampler!(context)
 
     mkpath(analysis_path)
 
-    if my_rank == 0
-        writedlm(analysis_path * "annotationName.txt", annotation_metadata.annotationName)
-    end
+    
+    write_nonmpi_run_config(analysis_path, context)
+    writedlm(analysis_path * "annotationName.txt", annotation_metadata.annotationName)
+
     marker_probit_tree_state = nothing
     if annotation_prior_model == :group_dirichlet
         prepare_block_state!(blocks, effect_nCon, annotation_metadata.annotationType)
@@ -365,39 +403,36 @@ function run_nonmpi_sampler!(context)
     (; mean_pi, mean_pi2, meanB2, meanA2, meanBcor2, meanAcor2, meanA, meanAcor, meanB, meanBcor, meanG, meanG2, meanGcor, meanGcor2, meanSSE, meanGtotal, meanGtotal2, meanGcor_total, meanGcor_total2, mcmcAtruecor_c, mcmcBcor_c, meanR, meanR2) = rank0_mcmc_state
 
     file_names = nothing
-    if my_rank == 0
-        file_names = prepare_mcmc_output_files(
-            analysis_path;
-            report_pleiotropic_qtl_effect_matrix=report_pleiotropic_qtl_effect_matrix,
-        )
+    file_names = prepare_mcmc_output_files(
+        analysis_path;
+        report_pleiotropic_qtl_effect_matrix=report_pleiotropic_qtl_effect_matrix,
+    )
+    
+    println("---------------- Summary Start --------------")
+    println("nIter=$nIter, thin=$thin, seed=$(config.seed), burnin = $burnin")
+    println("Julia threads=$(nthreads())")
+    println("startPi is: $Pi")
+    println("estimate_vare=$estimate_vare,estimate_vara=$estimate_vara")
+    println("estimate_pi=$estimate_pi")
+    println("analysis_path=$analysis_path")
+    println("data_path=$(config.data_path)")
+    println("annotation_prior_model=$annotation_prior_model")
+    println("report_pleiotropic_qtl_effect_matrix=$report_pleiotropic_qtl_effect_matrix")
+    println("output_mcmc_delta=$output_mcmc_delta")
+    if estimate_vara
+        println("estimate_Gscale=$estimate_Gscale")
+        println("starting value of scale_G_vec is: ", scale_G_vec)
     end
+    if annotation_prior_model == :group_dirichlet
+        println("nCat = $(annotation_metadata.nCat), nCon = $nCon")
+    else
+        println("effect categories = $nCategory, annotation design features = $(size(marker_probit_tree_state.design_matrix, 2))")
+    end
+    time_start = now()
+    println("Start time: ", time_start)
+    println("---------------- Summary End ----------------")
 
-    if my_rank == 0
-        println("---------------- Summary Start --------------")
-        println("nIter=$nIter, thin=$thin, seed=$(config.seed), burnin = $burnin")
-        println("Julia threads=$(nthreads())")
-        println("startPi is: $Pi")
-        println("estimate_vare=$estimate_vare,estimate_vara=$estimate_vara")
-        println("estimate_pi=$estimate_pi")
-        println("analysis_path=$analysis_path")
-        println("data_path=$(config.data_path)")
-        println("annotation_prior_model=$annotation_prior_model")
-        println("report_pleiotropic_qtl_effect_matrix=$report_pleiotropic_qtl_effect_matrix")
-        println("output_mcmc_delta=$output_mcmc_delta")
-        if estimate_vara
-            println("estimate_Gscale=$estimate_Gscale")
-            println("starting value of scale_G_vec is: ", scale_G_vec)
-        end
-        if annotation_prior_model == :group_dirichlet
-            println("nCat = $(annotation_metadata.nCat), nCon = $nCon")
-        else
-            println("effect categories = $nCategory, annotation design features = $(size(marker_probit_tree_state.design_matrix, 2))")
-        end
-        time_start = now()
-        println("Start time: ", time_start)
-        println("---------------- Summary End ----------------")
-    end
-    println("In rank$my_rank, there are $my_nblk LD blocks, and $my_nsnp SNPs in total.")
+    println("There are $my_nblk LD blocks, and $my_nsnp SNPs in total.")
 
     nlabel = 4 # number of labels for Pi: (1.0, 1.0), (1.0, 0.0), (0.0, 1.0), (0.0, 0.0)
     iout = 1 
@@ -538,25 +573,24 @@ function run_nonmpi_sampler!(context)
                     end
                 end
             end
-            if my_rank == 0
-                for cat = 1:nCategory
-                    #annotation specific A
-                    if nQTL[cat] == 0
-                        Atrue_cat = zeros(nTraits, nTraits)
-                    else
-                        Atrue_cat = Atrue_vec[cat] / nQTL[cat]
-                    end
-                    meanA[cat] += (Atrue_cat - meanA[cat]) * iIter
-                    if estimate_vara 
-                        meanA2[cat] += (Atrue_cat .^ 2 - meanA2[cat]) * iIter
-                    end
-                    if save_category_correlation_outputs
-                        mcmcAtruecor_c[iter_after_burnin_thin_index, cat] = compute_correlation(Atrue_cat)
-                    end
-                    # save the Atrue_cat to file
-                    open(file_names["marker_effects_variance"], "a") do io
-                        writedlm(io, Atrue_cat, ',')
-                    end
+            
+            for cat = 1:nCategory
+                #annotation specific A
+                if nQTL[cat] == 0
+                    Atrue_cat = zeros(nTraits, nTraits)
+                else
+                    Atrue_cat = Atrue_vec[cat] / nQTL[cat]
+                end
+                meanA[cat] += (Atrue_cat - meanA[cat]) * iIter
+                if estimate_vara 
+                    meanA2[cat] += (Atrue_cat .^ 2 - meanA2[cat]) * iIter
+                end
+                if save_category_correlation_outputs
+                    mcmcAtruecor_c[iter_after_burnin_thin_index, cat] = compute_correlation(Atrue_cat)
+                end
+                # save the Atrue_cat to file
+                open(file_names["marker_effects_variance"], "a") do io
+                    writedlm(io, Atrue_cat, ',')
                 end
             end
         end
@@ -616,10 +650,8 @@ function run_nonmpi_sampler!(context)
         
         # get the running average of SSE to sample Gscale
         if within_estGscale
-            if my_rank == 0
-                for cat = 1:nCategory
-                    meanSSE[cat] += (SSE_vec[cat] - meanSSE[cat]) * iIter_scaleG
-                end
+            for cat = 1:nCategory
+                meanSSE[cat] += (SSE_vec[cat] - meanSSE[cat]) * iIter_scaleG
             end
 
             Gprior_vec = deepcopy(meanSSE)
@@ -730,16 +762,15 @@ function run_nonmpi_sampler!(context)
             end
 
             if do_thin
-                if my_rank == 0
-                    open(file_names["total_genetic_effects_variance"], "a") do io
-                        writedlm(io, totalvarg, ',')
-                    end
-                    for cat in 1:nCategory
-                        open(file_names["genetic_effects_variance"], "a") do io
-                            writedlm(io, G_vec[cat], ',')
-                        end
+                open(file_names["total_genetic_effects_variance"], "a") do io
+                    writedlm(io, totalvarg, ',')
+                end
+                for cat in 1:nCategory
+                    open(file_names["genetic_effects_variance"], "a") do io
+                        writedlm(io, G_vec[cat], ',')
                     end
                 end
+
                 iter_after_burnin_thin_index += 1
             end
 
@@ -806,8 +837,8 @@ function run_nonmpi_sampler!(context)
     )
 
     if output_mcmc_delta
-        writedlm(analysis_path * "mcmc_Delta1.rank$my_rank.txt", mcmc_Delta[1])
-        writedlm(analysis_path * "mcmc_Delta2.rank$my_rank.txt", mcmc_Delta[2])
+        writedlm(analysis_path * "mcmc_Delta1.txt", mcmc_Delta[1])
+        writedlm(analysis_path * "mcmc_Delta2.txt", mcmc_Delta[2])
     end
 
     time_end = now()

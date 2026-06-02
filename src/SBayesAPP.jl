@@ -18,6 +18,7 @@ include("workflows/nonmpi.jl")
 
 export NonMPIConfig,
        build_nonmpi_cmd,
+    build_nonmpi_input_dicts,
        build_annotation_dict,
        build_gprior_vec,
        build_start_pi,

@@ -1,5 +1,8 @@
 using Test
 using SBayesAPP
+using CSV
+using DataFrames
+using DelimitedFiles
 using JLD2
 
 include(joinpath(SBayesAPP.repo_root(), "example", "simulate_marker_probit_tree_dataset.jl"))
@@ -108,5 +111,74 @@ end
         @test isfile(joinpath(synthetic.truth_path, "annotation_probit_coefficients_truth.txt"))
         @test isfile(joinpath(synthetic.truth_path, "mean_state_probabilities_truth.txt"))
         @test isfile(joinpath(synthetic.truth_path, "realized_state_counts.txt"))
+    end
+end
+
+@testset "Build non-MPI input dicts" begin
+    mktempdir() do tmpdir
+        ldroot = joinpath(tmpdir, "ld")
+        mkpath(joinpath(ldroot, "readableFiles"))
+        outdir = joinpath(tmpdir, "out")
+
+        ldinfo = DataFrame(
+            Chrom=[1, 1, 1],
+            ID=["rs1", "rs2", "rs3"],
+            Index=[1, 2, 3],
+            GenPos=[0.0, 0.0, 0.0],
+            PhysPos=[10, 20, 30],
+            A1=["A", "G", "T"],
+            A2=["C", "A", "C"],
+            A1Freq=[0.1, 0.2, 0.3],
+            N=[100, 100, 100],
+            Block=[1, 1, 2],
+        )
+        CSV.write(joinpath(ldroot, "snp.info"), ldinfo)
+
+        writedlm(joinpath(ldroot, "readableFiles", "block1.lambda.csv"), [4.0, 9.0])
+        writedlm(joinpath(ldroot, "readableFiles", "block2.lambda.csv"), [16.0])
+        writedlm(joinpath(ldroot, "readableFiles", "block1.U.csv"), [1.0 0.0; 0.0 1.0], ',')
+        writedlm(joinpath(ldroot, "readableFiles", "block2.U.csv"), [1.0], ',')
+
+        trait1 = DataFrame(
+            SNP=["rs1", "rs2", "rs3"],
+            A1=["A", "A", "T"],
+            A2=["C", "G", "C"],
+            freq=[0.1, 0.8, 0.3],
+            b=[0.2, 0.3, 0.4],
+            se=[0.1, 0.2, 0.1],
+            p=[0.01, 0.02, 0.03],
+            N=[100.0, 120.0, 130.0],
+        )
+        trait2 = DataFrame(
+            SNP=["rs1", "rs2", "rs3"],
+            A1=["A", "A", "T"],
+            A2=["C", "G", "C"],
+            freq=[0.1, 0.8, 0.3],
+            b=[0.1, 0.2, 0.5],
+            se=[0.1, 0.2, 0.1],
+            p=[0.04, 0.05, 0.06],
+            N=[90.0, 110.0, 140.0],
+        )
+        annot = DataFrame(SNP=["rs1", "rs2", "rs3"], annot1=[1, 0, 1])
+
+        trait1_path = joinpath(tmpdir, "trait1.ma")
+        trait2_path = joinpath(tmpdir, "trait2.ma")
+        annot_path = joinpath(tmpdir, "annotation_df.txt")
+        CSV.write(trait1_path, trait1)
+        CSV.write(trait2_path, trait2)
+        CSV.write(annot_path, annot)
+
+        result = SBayesAPP.build_nonmpi_input_dicts(outdir, ldroot, trait1_path, trait2_path, "snp.info", annot_path)
+        block_data = SBayesAPP.load_nonmpi_block_data(result.data_path, result.annot_dict)
+
+        @test block_data.nblk == 2
+        @test block_data.nsnp == 3
+        @test isfile(joinpath(outdir, "annotation_df.txt"))
+        @test isfile(joinpath(outdir, "TransformedX_dict.jld2"))
+        @test isfile(joinpath(outdir, "TransformedY_dict.jld2"))
+        @test isfile(joinpath(outdir, "blkSNPsIndex_dict.jld2"))
+        @test isfile(joinpath(outdir, "nGWAS_dict.jld2"))
+        @test isfile(joinpath(outdir, "anno_matrix_dict.jld2"))
+        @test block_data.blocks[1].n_gwas == [110.0, 100.0]
     end
 end

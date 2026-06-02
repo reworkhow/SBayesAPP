@@ -1,7 +1,9 @@
 using CSV
 using DataFrames
-using DelimitedFiles: readdlm
+using DelimitedFiles: readdlm, writedlm
 using JLD2
+using LinearAlgebra: Diagonal
+using Statistics: mean
 
 mutable struct NonMPIBlockData{TX,TY,TS,TN,TA}
     block_id::Int
@@ -19,6 +21,25 @@ struct NonMPIBlockCollection{TB}
     blocks::Vector{TB}
     nblk::Int
     nsnp::Int
+end
+
+const REQUIRED_GCTB_MA_COLUMNS = ("SNP", "A1", "A2", "freq", "b", "se", "N")
+const REQUIRED_LDINFO_COLUMNS = ("Block", "ID", "Index", "A1", "A2")
+
+function validate_gctb_ma_columns(df::DataFrame, data_name::AbstractString)
+    missing_columns = [column for column in REQUIRED_GCTB_MA_COLUMNS if !(column in names(df))]
+    isempty(missing_columns) || error(
+        "$data_name must contain GCTB .ma columns $(join(REQUIRED_GCTB_MA_COLUMNS, ", ")). Missing: $(join(missing_columns, ", "))",
+    )
+    return nothing
+end
+
+function validate_ldinfo_columns(df::DataFrame, data_name::AbstractString)
+    missing_columns = [column for column in REQUIRED_LDINFO_COLUMNS if !(column in names(df))]
+    isempty(missing_columns) || error(
+        "$data_name must contain LD info columns $(join(REQUIRED_LDINFO_COLUMNS, ", ")). Missing: $(join(missing_columns, ", "))",
+    )
+    return nothing
 end
 
 function load_jld2_entry(path::AbstractString, candidate_keys)
@@ -78,21 +99,224 @@ end
 
 default_annotation_dict_filename(annot_path::AbstractString) = "anno_matrix_" * splitext(basename(annot_path))[1] * ".jld2"
 
+normalize_dir_path(path::AbstractString) = endswith(path, "/") ? String(path) : string(path, "/")
+
+function align_trait_to_ldinfo(ldinfo::DataFrame, trait_df::DataFrame, trait_label::AbstractString)
+    aligned_trait = leftjoin(
+        select(ldinfo, :Block, :ID, :Index, :A1 => :LD_A1, :A2 => :LD_A2),
+        trait_df,
+        on=[:ID => :SNP],
+    )
+    sort!(aligned_trait, [:Block, :Index])
+
+    missing_mask = ismissing.(aligned_trait[!, :A1])
+    if any(missing_mask)
+        missing_snps = String.(aligned_trait[missing_mask, :ID])
+        n_missing_snps = length(missing_snps)
+        error(
+            "$trait_label is missing $n_missing_snps SNPs (based on A1) from LD info. First missing SNPs: $(join(missing_snps[1:min(n_missing_snps, 5)], ", "))",
+        )
+    end
+
+    return aligned_trait
+end
+
+function standardize_summary_block(
+    block_trait::DataFrame;
+    block_id::Integer,
+    trait_label::AbstractString,
+)
+    trait_a1 = String.(block_trait[!, :A1])
+    trait_a2 = String.(block_trait[!, :A2])
+    block_a1 = String.(block_trait[!, :LD_A1])
+    block_a2 = String.(block_trait[!, :LD_A2])
+
+    allele_match = ((trait_a1 .== block_a1) .& (trait_a2 .== block_a2)) .| ((trait_a1 .== block_a2) .& (trait_a2 .== block_a1))
+    if !all(allele_match)
+        mismatch_rows = findall(.!allele_match)
+        error(
+            "$trait_label has allele mismatches against LD info in block $block_id. Mismatch row indices: $(join(mismatch_rows, ", "))",
+        )
+    end
+
+    freq = Float64.(block_trait[!, :freq])
+    effect = Float64.(block_trait[!, :b])
+    se = Float64.(block_trait[!, :se])
+    n = Float64.(block_trait[!, :N])
+    flip = trait_a1 .== block_a2
+
+    adjusted_freq = ifelse.(flip, 1.0 .- freq, freq)
+    adjusted_b = ifelse.(flip, -effect, effect)
+    sj = sqrt.(1.0 ./ (n .* se.^2 .+ adjusted_b.^2))
+    adjusted_block = copy(block_trait)
+    adjusted_block[!, :A1] = block_a1
+    adjusted_block[!, :A2] = block_a2
+    adjusted_block[!, :freq] = adjusted_freq
+    adjusted_block[!, :b] = adjusted_b
+    adjusted_block[!, :bAdj] = adjusted_b .* sj
+    adjusted_block[!, :seAdj] = se .* sj
+    adjusted_block[!, :D] = 2.0 .* adjusted_freq .* (1.0 .- adjusted_freq) .* n
+    adjusted_block[!, :varps] = n .* adjusted_block[!, :seAdj].^2 .+ adjusted_block[!, :bAdj].^2
+
+    return adjusted_block
+end
+
+function write_jld2_dict(path::AbstractString, key::AbstractString, value)
+    jldopen(path, "w") do file
+        write(file, key, value)
+    end
+    return path
+end
+
+function build_nonmpi_input_dicts(
+    output_path::AbstractString,
+    ld_info_path::AbstractString,
+    trait1_file::AbstractString,
+    trait2_file::AbstractString,
+    ldinfo_file::AbstractString,
+    annot_file::AbstractString;
+    annot_dict_name::AbstractString="anno_matrix_dict",
+    readable_files_dir::AbstractString="readableFiles",
+    nblocks::Union{Nothing,Integer}=nothing,
+)
+    output_dir = normalize_dir_path(isabspath(output_path) ? output_path : abspath(output_path))
+    ld_root = normalize_dir_path(isabspath(ld_info_path) ? ld_info_path : abspath(ld_info_path))
+    trait1_path = resolve_input_path(pwd(), trait1_file)
+    trait2_path = resolve_input_path(pwd(), trait2_file)
+    ldinfo_path = resolve_input_path(ld_root, ldinfo_file)
+    annot_path = resolve_input_path(pwd(), annot_file)
+    readable_dir = joinpath(ld_root, readable_files_dir)
+
+    mkpath(output_dir)
+    isdir(readable_dir) || error("Readable LD directory does not exist: $readable_dir")
+
+    trait1 = read_input_table(trait1_path)
+    trait2 = read_input_table(trait2_path)
+    ldinfo = read_input_table(ldinfo_path)
+
+    validate_gctb_ma_columns(trait1, "Trait 1 summary")
+    validate_gctb_ma_columns(trait2, "Trait 2 summary")
+    validate_ldinfo_columns(ldinfo, "LD info")
+    sort!(ldinfo, [:Block, :Index])
+
+    trait1_aligned = align_trait_to_ldinfo(ldinfo, trait1, "Trait 1 summary")
+    trait2_aligned = align_trait_to_ldinfo(ldinfo, trait2, "Trait 2 summary")
+
+    all_block_ids = sort(unique(Int.(ldinfo[!, :Block])))
+    block_ids = isnothing(nblocks) ? all_block_ids : first(all_block_ids, min(length(all_block_ids), Int(nblocks)))
+
+    transformed_x_dict = Dict{Int,Matrix{Float64}}()
+    transformed_y_dict = Dict{Int,Vector{Vector{Float64}}}()
+    blk_snps_index_dict = Dict{Int,Vector{Int64}}()
+    nGWAS_dict = Dict{Int,Vector{Float64}}()
+    adjusted_trait1_blocks = DataFrame[]
+    adjusted_trait2_blocks = DataFrame[]
+
+    for block_id in block_ids
+        blockinfo = ldinfo[Int.(ldinfo[!, :Block]) .== block_id, :]
+        trait1_block_df = trait1_aligned[Int.(trait1_aligned[!, :Block]) .== block_id, :]
+        trait2_block_df = trait2_aligned[Int.(trait2_aligned[!, :Block]) .== block_id, :]
+
+        block_snps = String.(blockinfo[!, :ID])
+        all(block_snps .== String.(trait1_block_df[!, :ID])) || error("Trait 1 summary SNP order mismatch for block $block_id")
+        all(block_snps .== String.(trait2_block_df[!, :ID])) || error("Trait 2 summary SNP order mismatch for block $block_id")
+
+        trait1_block = standardize_summary_block(
+            trait1_block_df;
+            block_id=block_id,
+            trait_label="Trait 1 summary",
+        )
+        trait2_block = standardize_summary_block(
+            trait2_block_df;
+            block_id=block_id,
+            trait_label="Trait 2 summary",
+        )
+        push!(adjusted_trait1_blocks, trait1_block)
+        push!(adjusted_trait2_blocks, trait2_block)
+
+        lambda_path = joinpath(readable_dir, "block$(block_id).lambda.csv")
+        u_path = joinpath(readable_dir, "block$(block_id).U.csv")
+        isfile(lambda_path) || error("Missing eigenvalue file for block $block_id: $lambda_path")
+        isfile(u_path) || error("Missing eigenvector file for block $block_id: $u_path")
+
+        lambda_raw = readdlm(lambda_path)
+        lambda = Float64.(lambda_raw[:, 1])
+        u_raw = readdlm(u_path, ',')
+        u_matrix = Matrix{Float64}(u_raw)
+
+        length(lambda) == size(u_matrix, 2) || error("Block $block_id has $(length(lambda)) eigenvalues but $(size(u_matrix, 2)) eigenvector columns.")
+        size(u_matrix, 1) == length(block_snps) || error("Block $block_id has $(size(u_matrix, 1)) eigenvector rows but $(length(block_snps)) SNPs in LD info.")
+
+        sqrt_lambda_u = Diagonal(sqrt.(lambda)) * transpose(u_matrix)
+        inv_sqrt_lambda_u = Diagonal(1.0 ./ sqrt.(lambda)) * transpose(u_matrix)
+
+        transformed_x_dict[block_id] = Matrix{Float64}(sqrt_lambda_u)
+        transformed_y_dict[block_id] = [
+            Vector{Float64}(inv_sqrt_lambda_u * trait1_block.bAdj),
+            Vector{Float64}(inv_sqrt_lambda_u * trait2_block.bAdj),
+        ]
+        blk_snps_index_dict[block_id] = collect(Int64(1):Int64(length(block_snps)))
+        nGWAS_dict[block_id] = [mean(Float64.(trait1_block[!, :N])), mean(Float64.(trait2_block[!, :N]))]
+    end
+
+    adjusted_output_dir = joinpath(output_dir, "standardPhenoVar")
+    mkpath(adjusted_output_dir)
+    trait1_adjusted = vcat(adjusted_trait1_blocks...)
+    trait2_adjusted = vcat(adjusted_trait2_blocks...)
+    trait1_adjusted_file = joinpath(adjusted_output_dir, "trait1_complete.csv")
+    trait2_adjusted_file = joinpath(adjusted_output_dir, "trait2_complete.csv")
+    CSV.write(trait1_adjusted_file, trait1_adjusted)
+    CSV.write(trait2_adjusted_file, trait2_adjusted)
+
+    jld2_output_dir = joinpath(output_dir, "combined_dict")
+    mkpath(jld2_output_dir)
+    writedlm(joinpath(jld2_output_dir, "blkIDs.txt"), block_ids, ',')
+    write_jld2_dict(joinpath(jld2_output_dir, "TransformedX_dict.jld2"), "my_TransformedX_dict", transformed_x_dict)
+    write_jld2_dict(joinpath(jld2_output_dir, "TransformedY_dict.jld2"), "my_TransformedY_dict", transformed_y_dict)
+    write_jld2_dict(joinpath(jld2_output_dir, "blkSNPsIndex_dict.jld2"), "my_blkSNPsIndex_dict", blk_snps_index_dict)
+    write_jld2_dict(joinpath(jld2_output_dir, "nGWAS_dict.jld2"), "my_nGWAS_dict", nGWAS_dict)
+
+    annot_result = build_annotation_dict(
+        jld2_output_dir,
+        annot_path,
+        ldinfo_path;
+        output_file_name="$(annot_dict_name).jld2",
+    )
+
+    return (
+        output_path=output_dir,
+        trait1_file=trait1_path,
+        trait2_file=trait2_path,
+        trait1_adjusted=trait1_adjusted,
+        trait2_adjusted=trait2_adjusted,
+        trait1_adjusted_file=trait1_adjusted_file,
+        trait2_adjusted_file=trait2_adjusted_file,
+        ldinfo_file=ldinfo_path,
+        annotation_file=annot_path,
+        annot_dict=annot_dict_name,
+        block_ids=block_ids,
+        transformed_x_file=joinpath(jld2_output_dir, "TransformedX_dict.jld2"),
+        transformed_y_file=joinpath(jld2_output_dir, "TransformedY_dict.jld2"),
+        blk_snps_index_file=joinpath(jld2_output_dir, "blkSNPsIndex_dict.jld2"),
+        nGWAS_file=joinpath(jld2_output_dir, "nGWAS_dict.jld2"),
+        annotation_dict_file=annot_result.output_file,
+    )
+end
+
 function build_annotation_dict(
-    data_path::AbstractString,
-    annot_file::AbstractString,
-    ldinfo_file::AbstractString;
+    output_path::AbstractString,
+    annot_path::AbstractString,
+    ldinfo_path::AbstractString;
     output_file_name::Union{Nothing,AbstractString}=nothing,
 )
-    annot_path = resolve_input_path(data_path, annot_file)
-    ldinfo_path = resolve_input_path(data_path, ldinfo_file)
-    blkid_path = joinpath(data_path, "blkIDs.txt")
+    output_dir = isabspath(output_path) ? String(output_path) : abspath(output_path)
+    blkid_path = joinpath(output_dir, "blkIDs.txt")
 
-    output_path = if output_file_name !== nothing
+    output_file_path = if output_file_name !== nothing
         output_candidate = String(output_file_name)
-        isabspath(output_candidate) ? output_candidate : joinpath(data_path, output_candidate)
+        isabspath(output_candidate) ? output_candidate : joinpath(output_dir, output_candidate)
     else
-        joinpath(data_path, default_annotation_dict_filename(annot_path))
+        joinpath(output_dir, default_annotation_dict_filename(annot_path))
     end
 
     annot = read_input_table(annot_path)
@@ -101,8 +325,8 @@ function build_annotation_dict(
     isempty(annotation_columns) && error("Annotation file must contain at least one annotation column: $annot_path")
 
     ldinfo = read_input_table(ldinfo_path)
-    "Block" in names(ldinfo) || error("LD info file must contain a Block column: $ldinfo_path")
-    "ID" in names(ldinfo) || error("LD info file must contain an ID column: $ldinfo_path")
+    validate_ldinfo_columns(ldinfo, "LD info")
+    sort!(ldinfo, [:Block, :Index])
 
     block_ids = if isfile(blkid_path)
         sort(Int.(vec(readdlm(blkid_path, ','))))
@@ -113,7 +337,6 @@ function build_annotation_dict(
     anno_matrix_dict = Dict{Int,Matrix{Float64}}()
     for block_id in block_ids
         blockinfo = ldinfo[Int.(ldinfo[!, :Block]) .== block_id, :]
-        "Index" in names(blockinfo) && sort!(blockinfo, :Index)
 
         block_snps = DataFrame(_row=1:nrow(blockinfo), SNP=String.(blockinfo[!, :ID]))
         annot_df = leftjoin(block_snps, annot, on=:SNP)
@@ -126,24 +349,28 @@ function build_annotation_dict(
     end
 
     output_dict_name = "my_anno_matrix_dict"
-    jldopen(output_path, "w") do file
+    jldopen(output_file_path, "w") do file
         write(file, output_dict_name, anno_matrix_dict)
     end
 
     return (
-        output_file=output_path,
+        output_file=output_file_path,
         output_dict_name=output_dict_name,
         nblocks=length(anno_matrix_dict),
     )
 end
 
 function load_nonmpi_block_data(data_path::AbstractString, annot_dict::AbstractString)
-    transformed_x_dict = load_jld2_entry(data_path * "TransformedX_dict.jld2", ("my_TransformedX_dict", "TransformedX_dict"))
-    transformed_y_dict = load_jld2_entry(data_path * "TransformedY_dict.jld2", ("my_TransformedY_dict", "TransformedY_dict"))
-    blkSNPsIndex_dict = load_jld2_entry(data_path * "blkSNPsIndex_dict.jld2", ("my_blkSNPsIndex_dict", "blkSNPsIndex_dict"))
-    blkID = Int.(vec(readdlm(data_path * "blkIDs.txt", ',')))
-    nGWAS_dict = load_jld2_entry(data_path * "nGWAS_dict.jld2", ("my_nGWAS_dict", "nGWAS_dict"))
-    anno_matrix_dict = load_jld2_entry(data_path * "$annot_dict.jld2", ("my_anno_matrix_dict", annot_dict))
+    base_dir = normalize_dir_path(isabspath(data_path) ? data_path : abspath(data_path))
+    combined_dict_dir = normalize_dir_path(joinpath(base_dir, "combined_dict"))
+    dict_dir = isdir(combined_dict_dir) ? combined_dict_dir : base_dir
+
+    transformed_x_dict = load_jld2_entry(dict_dir * "TransformedX_dict.jld2", ("my_TransformedX_dict", "TransformedX_dict"))
+    transformed_y_dict = load_jld2_entry(dict_dir * "TransformedY_dict.jld2", ("my_TransformedY_dict", "TransformedY_dict"))
+    blkSNPsIndex_dict = load_jld2_entry(dict_dir * "blkSNPsIndex_dict.jld2", ("my_blkSNPsIndex_dict", "blkSNPsIndex_dict"))
+    blkID = Int.(vec(readdlm(dict_dir * "blkIDs.txt", ',')))
+    nGWAS_dict = load_jld2_entry(dict_dir * "nGWAS_dict.jld2", ("my_nGWAS_dict", "nGWAS_dict"))
+    anno_matrix_dict = load_jld2_entry(base_dir * "$annot_dict.jld2", ("my_anno_matrix_dict", annot_dict))
     sort!(blkID)
 
     blocks = NonMPIBlockData[]
