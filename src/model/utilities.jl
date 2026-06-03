@@ -53,6 +53,78 @@ function sample_variance_sumstats(ycorr_array, nobs, df, scale)
     return rand(InverseWishart(df + nobs, convert(Array, Symmetric(scale + SSE))))
 end
 
+# count how many annotation effects exist in each category across all blocks.
+function effect_lengths_from_blocks(blocks, nCategory::Int)
+    lengths = zeros(Int, nCategory)
+    for block in blocks
+        category_effect_indices = block.category_effect_indices::Vector{Vector{Int}}
+        for category in 1:nCategory
+            lengths[category] += length(category_effect_indices[category])
+        end
+    end
+    return lengths
+end
+
+# create empty compact effect arrays
+function initialize_compact_effect_arrays(nTraits::Int, nCategory::Int, effect_lengths::AbstractVector{<:Integer})
+    return [[zeros(Float64, Int(effect_lengths[category])) for category in 1:nCategory] for _ in 1:nTraits]
+end
+
+# convert from dense format to compact format.
+function compact_effect_arrays_from_dense(dense_arrays, blocks, my_nsnp::Int, nCategory::Int, nTraits::Int)
+    effect_lengths = effect_lengths_from_blocks(blocks, nCategory)
+    compact_arrays = initialize_compact_effect_arrays(nTraits, nCategory, effect_lengths)
+
+    for block in blocks
+        marker_categories = block.annotation_category_indices::Vector{Vector{Int}}
+        marker_effect_indices = block.annotation_effect_indices::Vector{Vector{Int}}
+        snp_indices = block.snp_indices
+        for marker in eachindex(marker_categories)
+            true_marker_num = snp_indices[marker]
+            categories = marker_categories[marker]
+            effect_indices = marker_effect_indices[marker]
+            for position in eachindex(categories)
+                category = categories[position]
+                dense_index = (category - 1) * my_nsnp + true_marker_num
+                effect_index = effect_indices[position]
+                for trait in 1:nTraits
+                    compact_arrays[trait][category][effect_index] = dense_arrays[trait][dense_index]
+                end
+            end
+        end
+    end
+
+    return compact_arrays
+end
+# converts one trait from compact format back to dense format.
+function expand_effect_trait(compact_trait, blocks, my_nsnp::Int, nCategory::Int)
+    dense_trait = zeros(Float64, my_nsnp * nCategory)
+
+    for block in blocks
+        marker_categories = block.annotation_category_indices::Vector{Vector{Int}}
+        marker_effect_indices = block.annotation_effect_indices::Vector{Vector{Int}}
+        snp_indices = block.snp_indices
+        for marker in eachindex(marker_categories)
+            true_marker_num = snp_indices[marker]
+            categories = marker_categories[marker]
+            effect_indices = marker_effect_indices[marker]
+            for position in eachindex(categories)
+                category = categories[position]
+                dense_index = (category - 1) * my_nsnp + true_marker_num
+                effect_index = effect_indices[position]
+                dense_trait[dense_index] = compact_trait[category][effect_index]
+            end
+        end
+    end
+
+    return dense_trait
+end
+
+# applies expand_effect_trait() to every trait.
+function expand_effect_arrays(compact_arrays, blocks, my_nsnp::Int, nCategory::Int, nTraits::Int)
+    return [expand_effect_trait(compact_arrays[trait], blocks, my_nsnp, nCategory) for trait in 1:nTraits]
+end
+
 function block_thread_weight(block)
     annotation_mask = getproperty(block, :annotation_mask)
     annotation_mask === nothing && error("block_thread_weight requires prepared block.annotation_mask")

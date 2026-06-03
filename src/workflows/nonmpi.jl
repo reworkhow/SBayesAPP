@@ -47,8 +47,6 @@ function run_nonmpi_block_range!(
     max_nMarker = maximum(size(blocks[b].x_arrays[end], 2) for b in block_range)
     max_nEigen = maximum(size(blocks[b].x_arrays[end], 1) for b in block_range)
     marker_order = collect(1:max_nMarker)
-    alpha_marker_1 = zeros(max_nMarker)
-    alpha_marker_2 = zeros(max_nMarker)
     what_cat_1 = zeros(max_nEigen)
     what_cat_2 = zeros(max_nEigen)
     what_total_1 = zeros(max_nEigen)
@@ -59,7 +57,11 @@ function run_nonmpi_block_range!(
         xpx_vec = block.xpx::Vector{Vector{Float64}}
         xArray_vec = block.x_arrays::Vector{Matrix{Float64}}
         wArray = block.transformed_y
-        annotationMatb = block.annotation_mask::AbstractMatrix{Bool}
+        category_indices_by_marker = block.annotation_category_indices::Vector{Vector{Int}}
+        category_values_by_marker = block.annotation_category_values::Vector{Vector{Float64}}
+        category_effect_indices_by_marker = block.annotation_effect_indices::Vector{Vector{Int}}
+        category_marker_indices_by_cat = block.category_marker_indices::Vector{Vector{Int}}
+        category_effect_indices_by_cat = block.category_effect_indices::Vector{Vector{Int}}
         SNPIndexb = block.snp_indices
         nEigenb, nMarkerb = size(xArray_vec[end])
         nInd = block.n_gwas
@@ -86,107 +88,111 @@ function run_nonmpi_block_range!(
 
         for marker in marker_order
             true_marker_num = SNPIndexb[marker]
-
-            for cat = 1:nCategory
-                if effect_nCon != 0 && cat <= effect_nCon + 1
-                    xArrayc = xArray_vec[cat]
-                    xpxc = xpx_vec[cat]
-                end
+            marker_category_indices = category_indices_by_marker[marker]
+            marker_category_values = category_values_by_marker[marker]
+            marker_effect_indices = category_effect_indices_by_marker[marker]
+            for category_position in eachindex(marker_category_indices)
+                cat = marker_category_indices[category_position]
+                annotation_value = marker_category_values[category_position]
+                annotation_value == 0.0 && continue
+                design_index = (effect_nCon != 0 && cat <= effect_nCon + 1) ? cat : length(xArray_vec)
+                xArrayc = xArray_vec[design_index]
+                xpxc = xpx_vec[design_index]
                 Ginv = Ainv_vec[cat]
+                effect_index = marker_effect_indices[category_position]
+                x = view(xArrayc, :, marker)
+                xpx_marker = xpxc[marker]
+                for trait = 1:nTraits
+                    β[trait] = betaArray[trait][cat][effect_index]
+                    oldα[trait] = newα[trait] = alphaArray[trait][cat][effect_index]
+                    δ[trait] = deltaArray[trait][cat][effect_index]
+                    w[trait] = dot(x, wArray[trait]) + xpx_marker * oldα[trait]
+                end
 
-                if annotationMatb[marker, cat] # only update SNPs that are in the annotation category (for group_dirichlet) or are selected by the probit tree (for marker_probit_tree)
-                    markerIndex = (cat - 1) * my_nsnp + true_marker_num # global index of the marker in the parameter arrays, ordered by annotation category
-                    x = view(xArrayc, :, marker)
-                    xpx_marker = xpxc[marker]
-                    for trait = 1:nTraits
-                        β[trait] = betaArray[trait][markerIndex]
-                        oldα[trait] = newα[trait] = alphaArray[trait][markerIndex]
-                        δ[trait] = deltaArray[trait][markerIndex]
-                        w[trait] = dot(x, wArray[trait]) + xpx_marker * oldα[trait]
-                    end
+                for k = 1:nTraits
+                    other = k == 1 ? 2 : 1
+                    Ginv11 = Ginv[k, k]
+                    Ginv12 = Ginv[k, other]
+                    Rinvkk = k == 1 ? Rinv11 : Rinv22
+                    Rinvkother = k == 1 ? Rinv12 : Rinv21
+                    C11 = Ginv11 + Rinvkk * xpx_marker
+                    C12 = Ginv12 + xpx_marker * δ[other] * Rinvkother
 
-                    for k = 1:nTraits
-                        other = k == 1 ? 2 : 1
-                        Ginv11 = Ginv[k, k]
-                        Ginv12 = Ginv[k, other]
-                        Rinvkk = k == 1 ? Rinv11 : Rinv22
-                        Rinvkother = k == 1 ? Rinv12 : Rinv21
-                        C11 = Ginv11 + Rinvkk * xpx_marker
-                        C12 = Ginv12 + xpx_marker * δ[other] * Rinvkother
+                    # compute the conditional distribution parameters for the two possible states of δ[k]
+                    # when δ[k] = 0, the effect is 0 and does not contribute to the likelihood, so the conditional distribution is determined by the prior and the contribution of the other trait (if it is nonzero)
+                    invLhs0 = 1 / Ginv11
+                    rhs0 = -Ginv12 * β[other]
+                    gHat0 = rhs0 * invLhs0
+                    # when δ[k] = 1, the effect is nonzero and contributes to the likelihood, so the conditional distribution is determined by both the prior and the likelihood contribution of this trait and the other trait (if it is nonzero)
+                    invLhs1 = 1 / C11
+                    rhs1 = (k == 1 ? (w[1] * Rinv11 + w[2] * Rinv21) : (w[1] * Rinv12 + w[2] * Rinv22)) - C12 * β[other]
+                    gHat1 = rhs1 * invLhs1
 
-                        # compute the conditional distribution parameters for the two possible states of δ[k]
-                        # when δ[k] = 0, the effect is 0 and does not contribute to the likelihood, so the conditional distribution is determined by the prior and the contribution of the other trait (if it is nonzero)
-                        invLhs0 = 1 / Ginv11
-                        rhs0 = -Ginv12 * β[other]
-                        gHat0 = rhs0 * invLhs0
-                        # when δ[k] = 1, the effect is nonzero and contributes to the likelihood, so the conditional distribution is determined by both the prior and the likelihood contribution of this trait and the other trait (if it is nonzero)
-                        invLhs1 = 1 / C11
-                        rhs1 = (k == 1 ? (w[1] * Rinv11 + w[2] * Rinv21) : (w[1] * Rinv12 + w[2] * Rinv22)) - C12 * β[other]
-                        gHat1 = rhs1 * invLhs1
+                    d0 = k == 1 ? (0.0, δ[2]) : (δ[1], 0.0)
+                    d1 = k == 1 ? (1.0, δ[2]) : (δ[1], 1.0)
 
-                        d0 = k == 1 ? (0.0, δ[2]) : (δ[1], 0.0)
-                        d1 = k == 1 ? (1.0, δ[2]) : (δ[1], 1.0)
+                    logPrior0 = log_marker_state_prior(annotation_prior_model, Pi, marker_probit_tree_state, cat, true_marker_num, d0)
+                    logPrior1 = log_marker_state_prior(annotation_prior_model, Pi, marker_probit_tree_state, cat, true_marker_num, d1)
+                    logDelta0 = -0.5 * (log(Ginv11) - gHat0^2 * Ginv11) + logPrior0
+                    logDelta1 = -0.5 * (log(C11) - gHat1^2 * C11) + logPrior1
+                    probDelta1 = 1.0 / (1.0 + exp(logDelta0 - logDelta1))
 
-                        logPrior0 = log_marker_state_prior(annotation_prior_model, Pi, marker_probit_tree_state, cat, true_marker_num, d0)
-                        logPrior1 = log_marker_state_prior(annotation_prior_model, Pi, marker_probit_tree_state, cat, true_marker_num, d1)
-                        logDelta0 = -0.5 * (log(Ginv11) - gHat0^2 * Ginv11) + logPrior0
-                        logDelta1 = -0.5 * (log(C11) - gHat1^2 * C11) + logPrior1
-                        probDelta1 = 1.0 / (1.0 + exp(logDelta0 - logDelta1))
+                    # sample δ[k] from its conditional distribution, then sample the effect size if δ[k] = 1, and update w accordingly
 
-                        # sample δ[k] from its conditional distribution, then sample the effect size if δ[k] = 1, and update w accordingly
-
-                        if rand() < probDelta1
-                            δ[k] = 1
-                            β[k] = newα[k] = gHat1 + randn() * sqrt(invLhs1)
-                            LinearAlgebra.axpy!(oldα[k] - newα[k], x, wArray[k])
-                        else
-                            β[k] = gHat0 + randn() * sqrt(invLhs0)
-                            δ[k] = 0
-                            newα[k] = 0
-                            if oldα[k] != 0
-                                LinearAlgebra.axpy!(oldα[k], x, wArray[k])
-                            end
+                    if rand() < probDelta1
+                        δ[k] = 1
+                        β[k] = newα[k] = gHat1 + randn() * sqrt(invLhs1)
+                        LinearAlgebra.axpy!(oldα[k] - newα[k], x, wArray[k])
+                    else
+                        β[k] = gHat0 + randn() * sqrt(invLhs0)
+                        δ[k] = 0
+                        newα[k] = 0
+                        if oldα[k] != 0
+                            LinearAlgebra.axpy!(oldα[k], x, wArray[k])
                         end
                     end
+                end
 
-                    local_nLoci_array_vec[cat][two_trait_state_index(δ[1], δ[2])] += 1
+                local_nLoci_array_vec[cat][two_trait_state_index(δ[1], δ[2])] += 1
 
-                    for trait = 1:nTraits
-                        betaArray[trait][markerIndex] = β[trait]
-                        deltaArray[trait][markerIndex] = δ[trait]
-                        alphaArray[trait][markerIndex] = newα[trait]
-                        if do_thin
-                            meanAlpha[trait][markerIndex] += (newα[trait] - meanAlpha[trait][markerIndex]) * iIter
-                        end
+                for trait = 1:nTraits
+                    betaArray[trait][cat][effect_index] = β[trait]
+                    deltaArray[trait][cat][effect_index] = δ[trait]
+                    alphaArray[trait][cat][effect_index] = newα[trait]
+                    if do_thin
+                        meanAlpha[trait][cat][effect_index] += (newα[trait] - meanAlpha[trait][cat][effect_index]) * iIter
                     end
-                end # if annotationMatb[marker, cat]
-            end # for cat in 1:nCategory
+                end
+            end # for category_position in eachindex(marker_category_indices)
         end # for marker in marker_order
         block.transformed_y = wArray
 
         if need_block_totalvarg
-            XAb = xArray_vec[1]
             what_total_1_block = view(what_total_1, 1:nEigenb)
             what_total_2_block = view(what_total_2, 1:nEigenb)
             fill!(what_total_1_block, 0.0)
             fill!(what_total_2_block, 0.0)
-            alpha_marker_1_block = view(alpha_marker_1, 1:nMarkerb)
-            alpha_marker_2_block = view(alpha_marker_2, 1:nMarkerb)
             what_cat_1_block = view(what_cat_1, 1:nEigenb)
             what_cat_2_block = view(what_cat_2, 1:nEigenb)
 
             for cat in 1:nCategory
-                if effect_nCon != 0 && cat <= effect_nCon + 1
-                    XAb = xArray_vec[cat]
+                XAb = (effect_nCon != 0 && cat <= effect_nCon + 1) ? xArray_vec[cat] : xArray_vec[end]
+                fill!(what_cat_1_block, 0.0)
+                fill!(what_cat_2_block, 0.0)
+                cat_marker_indices = category_marker_indices_by_cat[cat]
+                cat_effect_indices = category_effect_indices_by_cat[cat]
+                ssq_trait_1 = 0.0
+                ssq_trait_2 = 0.0
+                for position in eachindex(cat_marker_indices)
+                    marker = cat_marker_indices[position]
+                    effect_index = cat_effect_indices[position]
+                    alpha_trait_1 = alphaArray[1][cat][effect_index]
+                    alpha_trait_2 = alphaArray[2][cat][effect_index]
+                    ssq_trait_1 += alpha_trait_1^2
+                    ssq_trait_2 += alpha_trait_2^2
+                    alpha_trait_1 != 0.0 && LinearAlgebra.axpy!(alpha_trait_1, view(XAb, :, marker), what_cat_1_block)
+                    alpha_trait_2 != 0.0 && LinearAlgebra.axpy!(alpha_trait_2, view(XAb, :, marker), what_cat_2_block)
                 end
-                cat_offset = (cat - 1) * my_nsnp
-                for marker in 1:nMarkerb
-                    snp_index = cat_offset + SNPIndexb[marker]
-                    alpha_marker_1_block[marker] = alphaArray[1][snp_index]
-                    alpha_marker_2_block[marker] = alphaArray[2][snp_index]
-                end
-                mul!(what_cat_1_block, XAb, alpha_marker_1_block)
-                mul!(what_cat_2_block, XAb, alpha_marker_2_block)
 
                 if do_thin
                     varg_blk_cat[b][1, cat] = dot(what_cat_1_block, what_cat_1_block)
@@ -194,8 +200,8 @@ function run_nonmpi_block_range!(
                     varg_cov_blk_cat[b][cat] = dot(what_cat_1_block, what_cat_2_block)
                 end
                 if estimate_vare
-                    ssq_blk_cat[b][1, cat] = dot(alpha_marker_1_block, alpha_marker_1_block)
-                    ssq_blk_cat[b][2, cat] = dot(alpha_marker_2_block, alpha_marker_2_block)
+                    ssq_blk_cat[b][1, cat] = ssq_trait_1
+                    ssq_blk_cat[b][2, cat] = ssq_trait_2
                 end
                 LinearAlgebra.axpy!(1.0, what_cat_1_block, what_total_1_block)
                 LinearAlgebra.axpy!(1.0, what_cat_2_block, what_total_2_block)
@@ -356,10 +362,12 @@ function run_nonmpi_sampler!(context)
     block_data = nothing
     GC.gc()
 
+    effect_lengths = effect_lengths_from_blocks(blocks, nCategory)
+
     if !is_continue
-        betaArray = [zeros(my_nsnp * nCategory) for t in 1:nTraits] #-> ordered by annotation groups 
-        alphaArray = [zeros(my_nsnp * nCategory) for t in 1:nTraits]
-        deltaArray = [zeros(my_nsnp * nCategory) for t in 1:nTraits]
+        betaArray = initialize_compact_effect_arrays(nTraits, nCategory, effect_lengths)
+        alphaArray = initialize_compact_effect_arrays(nTraits, nCategory, effect_lengths)
+        deltaArray = initialize_compact_effect_arrays(nTraits, nCategory, effect_lengths)
     else
         effect_starting_path = starting_value_dir
         delta_starting_path = starting_value_dir * "last_sample_delta/"
@@ -375,7 +383,7 @@ function run_nonmpi_sampler!(context)
     end
 
     #posterior mean 
-    meanAlpha = [zeros(my_nsnp * nCategory) for t in 1:nTraits]
+    meanAlpha = initialize_compact_effect_arrays(nTraits, nCategory, effect_lengths)
     
     # mcmc samples for delta -> used to compute PP of SNPs 
     mcmc_Delta = nothing
@@ -400,7 +408,7 @@ function run_nonmpi_sampler!(context)
         report_pleiotropic_qtl_effect_matrix=report_pleiotropic_qtl_effect_matrix,
         save_category_correlation_outputs=save_category_correlation_outputs,
     )
-    (; mean_pi, mean_pi2, meanB2, meanA2, meanBcor2, meanAcor2, meanA, meanAcor, meanB, meanBcor, meanG, meanG2, meanGcor, meanGcor2, meanSSE, meanGtotal, meanGtotal2, meanGcor_total, meanGcor_total2, mcmcAtruecor_c, mcmcBcor_c, meanR, meanR2) = rank0_mcmc_state
+    (; mean_pi, mean_pi2, meanB2, meanA2, meanBcor2, meanAcor2, meanA, meanAcor, meanB, meanBcor, meanG, meanG2, meanGcor, meanGcor2, meanGcor_count, meanSSE, meanGtotal, meanGtotal2, meanGcor_total, meanGcor_total2, meanGcor_total_count, mcmcAtruecor_c, mcmcBcor_c, meanR, meanR2) = rank0_mcmc_state
 
     file_names = nothing
     file_names = prepare_mcmc_output_files(
@@ -563,7 +571,7 @@ function run_nonmpi_sampler!(context)
             Atrue_vec = [zeros(nTraits, nTraits) for c in 1:nCategory]
             nQTL = zeros(nCategory)
             for cat = 1:nCategory
-                alpha_array = [alphaArray[i][((cat-1)*my_nsnp+1):((cat-1)*my_nsnp+my_nsnp)] for i in 1:nTraits]
+                alpha_array = [alphaArray[i][cat] for i in 1:nTraits]
                 pleio_marker = (alpha_array[1] .!= 0) .& (alpha_array[2] .!= 0)
                 nQTL[cat] = sum(pleio_marker)
                 for traiti in 1:nTraits
@@ -618,7 +626,8 @@ function run_nonmpi_sampler!(context)
                     end
                 end
             else # :marker_probit_tree
-                updated_pi = update_marker_probit_tree_priors!(marker_probit_tree_state, deltaArray)
+                dense_deltaArray = expand_effect_arrays(deltaArray, blocks, my_nsnp, nCategory, nTraits)
+                updated_pi = update_marker_probit_tree_priors!(marker_probit_tree_state, dense_deltaArray)
                 for (key, value) in updated_pi
                     Pi[1][key] = value
                 end
@@ -639,9 +648,9 @@ function run_nonmpi_sampler!(context)
         # get SSE_vec (beta'beta) to sample A and to estimate Gscale
         for cat in 1:nCategory
             for traiti in 1:nTraits
-                beta_i = betaArray[traiti][((cat-1)*my_nsnp+1):((cat-1)*my_nsnp+my_nsnp)]
+                beta_i = betaArray[traiti][cat]
                 for traitj in traiti:nTraits
-                    beta_j = betaArray[traitj][((cat-1)*my_nsnp+1):((cat-1)*my_nsnp+my_nsnp)]
+                    beta_j = betaArray[traitj][cat]
                     SSE_vec[cat][traiti, traitj] = dot(beta_i, beta_j)
                     SSE_vec[cat][traitj, traiti] = SSE_vec[cat][traiti, traitj]
                 end
@@ -721,16 +730,22 @@ function run_nonmpi_sampler!(context)
             end
 
             total_gcor = compute_correlation(totalvarg)
-            meanGcor_total += (total_gcor - meanGcor_total) * iIter
-            meanGcor_total2 += (total_gcor^2 - meanGcor_total2) * iIter
+            if isfinite(total_gcor)
+                meanGcor_total += total_gcor
+                meanGcor_total2 += total_gcor^2
+                meanGcor_total_count += 1
+            end
 
             for cat = 1:nCategory
                 meanG[cat] += (G_vec[cat] - meanG[cat]) * iIter
                 meanG2[cat] += (G_vec[cat] .^ 2 - meanG2[cat]) * iIter
                 if save_category_correlation_outputs
                     gcor = compute_correlation(G_vec[cat])
-                    meanGcor[cat] += (gcor - meanGcor[cat]) * iIter
-                    meanGcor2[cat] += (gcor^2 - meanGcor2[cat]) * iIter
+                    if isfinite(gcor)
+                        meanGcor[cat] += gcor
+                        meanGcor2[cat] += gcor^2
+                        meanGcor_count[cat] += 1
+                    end
                 end
             end
             meanGtotal += (totalvarg - meanGtotal) * iIter
@@ -743,7 +758,7 @@ function run_nonmpi_sampler!(context)
                 println("iter $iter")
                 if output_mcmc_delta
                     for trait = 1:nTraits
-                        mcmc_Delta[trait][:, iout] = deltaArray[trait]
+                        mcmc_Delta[trait][:, iout] = expand_effect_trait(deltaArray[trait], blocks, my_nsnp, nCategory)
                     end
                 end
 
@@ -781,11 +796,11 @@ function run_nonmpi_sampler!(context)
                     my_nblk,
                     nCategory,
                     nTraits,
-                    betaArray,
+                    expand_effect_arrays(betaArray, blocks, my_nsnp, nCategory, nTraits),
                     R_blk,
                     A_vec,
                     Pi,
-                    deltaArray,
+                    expand_effect_arrays(deltaArray, blocks, my_nsnp, nCategory, nTraits),
                 )
             end
         end
@@ -811,10 +826,12 @@ function run_nonmpi_sampler!(context)
         meanG2=meanG2,
         meanGcor=meanGcor,
         meanGcor2=meanGcor2,
+        meanGcor_count=meanGcor_count,
         meanGtotal=meanGtotal,
         meanGtotal2=meanGtotal2,
         meanGcor_total=meanGcor_total,
         meanGcor_total2=meanGcor_total2,
+        meanGcor_total_count=meanGcor_total_count,
         mcmcAtruecor_c=mcmcAtruecor_c,
         mcmcBcor_c=mcmcBcor_c,
         meanR=meanR,
@@ -825,7 +842,7 @@ function run_nonmpi_sampler!(context)
         analysis_path,
         my_rank,
         nCategory,
-        meanAlpha,
+        expand_effect_arrays(meanAlpha, blocks, my_nsnp, nCategory, nTraits),
         posterior_mean_state;
         estimate_vara=estimate_vara,
         estimate_vare=estimate_vare,

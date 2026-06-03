@@ -63,7 +63,7 @@ function save_nonmpi_posterior_mean!(
     marker_probit_tree_state=nothing,
     annotation_names=String[],
 )
-    (; mean_pi, mean_pi2, meanB2, meanA2, meanBcor2, meanAcor2, meanA, meanAcor, meanB, meanBcor, meanG, meanG2, meanGcor, meanGcor2, meanGtotal, meanGtotal2, meanGcor_total, meanGcor_total2, mcmcAtruecor_c, mcmcBcor_c, meanR, meanR2) = posterior_mean_state
+    (; mean_pi, mean_pi2, meanB2, meanA2, meanBcor2, meanAcor2, meanA, meanAcor, meanB, meanBcor, meanG, meanG2, meanGcor, meanGcor2, meanGcor_count, meanGtotal, meanGtotal2, meanGcor_total, meanGcor_total2, meanGcor_total_count, mcmcAtruecor_c, mcmcBcor_c, meanR, meanR2) = posterior_mean_state
     save_category_correlation_outputs = annotation_prior_model == :group_dirichlet
 
     for cat in 1:nCategory
@@ -111,12 +111,28 @@ function save_nonmpi_posterior_mean!(
         writedlm(analysis_path * "estG_std" * string(cat) * ".txt", sqrt.(abs.(meanG2[cat] .- (meanG[cat] .^ 2))))
     end
     if save_category_correlation_outputs
+        for cat in 1:nCategory
+            if meanGcor_count[cat] > 0
+                meanGcor[cat] /= meanGcor_count[cat]
+                meanGcor2[cat] /= meanGcor_count[cat]
+            else
+                meanGcor[cat] = NaN
+                meanGcor2[cat] = NaN
+            end
+        end
         writedlm(analysis_path * "estGcor.txt", meanGcor)
         writedlm(analysis_path * "estGcor_std.txt", sqrt.(abs.(meanGcor2 .- (meanGcor .^ 2))))
     end
 
     writedlm(analysis_path * "estGtotal.txt", meanGtotal, ',')
     writedlm(analysis_path * "estGtotal_std.txt", sqrt.((meanGtotal2 .- (meanGtotal .^ 2))), ',')
+    if meanGcor_total_count > 0
+        meanGcor_total /= meanGcor_total_count
+        meanGcor_total2 /= meanGcor_total_count
+    else
+        meanGcor_total = NaN
+        meanGcor_total2 = NaN
+    end
     writedlm(analysis_path * "estGcor_total.txt", meanGcor_total)
     writedlm(analysis_path * "estGcor_total_std.txt", sqrt(abs(meanGcor_total2 - (meanGcor_total^2))))
 

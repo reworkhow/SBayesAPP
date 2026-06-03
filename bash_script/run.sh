@@ -69,4 +69,4 @@ julia --project="$REPO_ROOT" --threads "$JULIA_THREADS" "$REPO_ROOT/scripts/run_
   --estimate_gscale "$ESTIMATE_GSCALE" \
   --estgscale_iter "$ESTGSCALE_ITER" \
   --report_pleiotropic_qtl_effect_matrix "$REPORT_PLEIOTROPIC_QTL_EFFECT_MATRIX" \
-  --output_mcmc_delta "$OUTPUT_MCMC_DELTA"
+  --output_mcmc_delta "$OUTPUT_MCMC_DELTA" \

@@ -159,7 +159,7 @@ end
             p=[0.04, 0.05, 0.06],
             N=[90.0, 110.0, 140.0],
         )
-        annot = DataFrame(SNP=["rs1", "rs2", "rs3"], annot1=[1, 0, 1])
+        annot = DataFrame(SNP=["rs1", "rs2", "rs3"], annot1=[1, 0, 0], annot2=[0, 1, 0], Rest=[0, 0, 1])
 
         trait1_path = joinpath(tmpdir, "trait1.ma")
         trait2_path = joinpath(tmpdir, "trait2.ma")
@@ -169,16 +169,66 @@ end
         CSV.write(annot_path, annot)
 
         result = SBayesAPP.build_nonmpi_input_dicts(outdir, ldroot, trait1_path, trait2_path, "snp.info", annot_path)
-        block_data = SBayesAPP.load_nonmpi_block_data(result.data_path, result.annot_dict)
+        block_data = SBayesAPP.load_nonmpi_block_data(string(dirname(result.transformed_x_file), "/"), result.annot_dict)
 
         @test block_data.nblk == 2
         @test block_data.nsnp == 3
-        @test isfile(joinpath(outdir, "annotation_df.txt"))
-        @test isfile(joinpath(outdir, "TransformedX_dict.jld2"))
-        @test isfile(joinpath(outdir, "TransformedY_dict.jld2"))
-        @test isfile(joinpath(outdir, "blkSNPsIndex_dict.jld2"))
-        @test isfile(joinpath(outdir, "nGWAS_dict.jld2"))
-        @test isfile(joinpath(outdir, "anno_matrix_dict.jld2"))
+        @test isfile(result.annotation_file)
+        @test isfile(result.transformed_x_file)
+        @test isfile(result.transformed_y_file)
+        @test isfile(result.blk_snps_index_file)
+        @test isfile(result.nGWAS_file)
+        @test isfile(result.annotation_dict_file)
         @test block_data.blocks[1].n_gwas == [110.0, 100.0]
+
+        run_annot_file = joinpath(dirname(result.transformed_x_file), "annotation_df.txt")
+        cp(result.annotation_file, run_annot_file; force=true)
+        st_dir = string(joinpath(SBayesAPP.repo_root(), "example", "ST_res"), "/")
+        dense_dir = joinpath(tmpdir, "dense_output")
+        sparse_dir = joinpath(tmpdir, "sparse_output")
+
+        function validation_config(analysis_dir)
+            return SBayesAPP.NonMPIConfig(
+                string(dirname(result.transformed_x_file), "/"),
+                string(analysis_dir, "/"),
+                4,
+                31415,
+                "annotation_df.txt",
+                result.annot_dict,
+                "XXX",
+                "XXX",
+                st_dir,
+                1,
+                100,
+                100,
+                false;
+                burnin=0,
+                estimate_vare=false,
+                estimate_vara=false,
+                estGscale_iter=2,
+                report_pleiotropic_qtl_effect_matrix=false,
+                output_mcmc_delta=false,
+            )
+        end
+
+        SBayesAPP.run_nonmpi(validation_config(dense_dir))
+        SBayesAPP.run_nonmpi(validation_config(sparse_dir))
+
+        comparable_outputs = [
+            "MCMC_samples_pi.txt",
+            "MCMC_samples_beta_effects_variance.txt",
+            "MCMC_samples_genetic_effects_variance.txt",
+            "MCMC_samples_total_genetic_effects_variance.txt",
+            "estGtotal.txt",
+            joinpath("last_sample_delta", "last_sample_delta1_rank0.txt"),
+            "last_mcmc_betaArray1.rank0.txt",
+            "last_mcmc_betaArray2.rank0.txt",
+            "meanAlpha1.rank0.txt",
+            "meanAlpha2.rank0.txt",
+            joinpath("last_sample_delta", "last_sample_delta2_rank0.txt"),
+        ]
+        for relative_path in comparable_outputs
+            @test read(joinpath(sparse_dir, relative_path), String) == read(joinpath(dense_dir, relative_path), String)
+        end
     end
 end

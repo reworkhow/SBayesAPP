@@ -15,6 +15,11 @@ mutable struct NonMPIBlockData{TX,TY,TS,TN,TA}
     xpx::Union{Nothing,Vector{Vector{Float64}}}
     x_arrays::Union{Nothing,Vector{Matrix{Float64}}}
     annotation_mask::Union{Nothing,AbstractMatrix{Bool}}
+    annotation_category_indices::Union{Nothing,Vector{Vector{Int}}}
+    annotation_category_values::Union{Nothing,Vector{Vector{Float64}}}
+    annotation_effect_indices::Union{Nothing,Vector{Vector{Int}}}
+    category_marker_indices::Union{Nothing,Vector{Vector{Int}}}
+    category_effect_indices::Union{Nothing,Vector{Vector{Int}}}
 end
 
 struct NonMPIBlockCollection{TB}
@@ -389,6 +394,11 @@ function load_nonmpi_block_data(data_path::AbstractString, annot_dict::AbstractS
                 snp_indices,
                 nGWAS_dict[blk],
                 anno_matrix_dict[blk],
+                nothing,
+                nothing,
+                nothing,
+                nothing,
+                nothing,
                 nothing,
                 nothing,
                 nothing,
