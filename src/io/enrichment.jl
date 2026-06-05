@@ -2,6 +2,8 @@ using Statistics: mean, std
 
 const VALID_ENRICHMENT_PARAMETERS = (:coh2, :h21, :h22)
 const PI_STATE_KEYS = ("pi00", "pi11", "pi10", "pi01")
+const GENOME_PARAMETER_COLUMNS = ("h21", "h22", "gcov", "gcor")
+
 
 function normalize_enrichment_parameter(parameter)
     normalized = parameter isa Symbol ? parameter : Symbol(lowercase(String(parameter)))
@@ -394,6 +396,99 @@ function build_pi_summary(pi_values::Array{Float64,3}, annotation_names)
     end
 
     return summary
+end
+
+function read_total_genome_parameter_samples(path::AbstractString)
+    matrix_values = read_matrix_series(path)
+    n_samples = div(size(matrix_values, 1), 2)
+    values = Matrix{Float64}(undef, n_samples, length(GENOME_PARAMETER_COLUMNS))
+
+    for sample_index in 1:n_samples
+        row_start = (sample_index - 1) * 2 + 1
+        matrix_view = @view(matrix_values[row_start:(row_start + 1), :])
+        h21 = Float64(matrix_view[1, 1])
+        h22 = Float64(matrix_view[2, 2])
+        gcov = Float64(matrix_view[1, 2])
+        gcor = (h21 > 0.0 && h22 > 0.0) ? gcov / sqrt(h21 * h22) : NaN
+        values[sample_index, 1] = h21
+        values[sample_index, 2] = h22
+        values[sample_index, 3] = gcov
+        values[sample_index, 4] = gcor
+    end
+
+    return values
+end
+
+function build_genome_parameter_summary(values::AbstractMatrix{<:Real})
+    size(values, 2) == length(GENOME_PARAMETER_COLUMNS) || error(
+        "Expected $(length(GENOME_PARAMETER_COLUMNS)) genome-wide parameter columns, got $(size(values, 2))",
+    )
+
+    summary = DataFrame(
+        Parameter=collect(GENOME_PARAMETER_COLUMNS),
+        Mean=[mean(values[:, parameter_index]) for parameter_index in 1:length(GENOME_PARAMETER_COLUMNS)],
+        SD=[std(values[:, parameter_index]) for parameter_index in 1:length(GENOME_PARAMETER_COLUMNS)],
+    )
+    return summary
+end
+
+function calculate_multi_chain_genome_summary(;
+    group_path::Union{Nothing,AbstractString}=nothing,
+    chain_paths::Union{Nothing,AbstractString,AbstractVector{<:AbstractString}}=nothing,
+    output_path::Union{Nothing,AbstractString}=nothing,
+    chain_prefix::AbstractString="seed_",
+    group_label::AbstractString="Group1",
+    write_iteration_averages::Bool=true,
+)
+    resolved_chain_paths = if chain_paths !== nothing
+        parse_chain_paths(chain_paths)
+    elseif group_path !== nothing
+        discover_chain_paths(String(group_path); chain_prefix=chain_prefix)
+    else
+        error("Either group_path or chain_paths must be provided")
+    end
+    resolved_group_path = group_path === nothing ? dirname(first(resolved_chain_paths)) : String(group_path)
+    resolved_output_path = output_path === nothing ? default_multi_chain_output_dir(resolved_group_path) : String(output_path)
+    isabspath(resolved_output_path) || (resolved_output_path = joinpath(resolved_group_path, resolved_output_path))
+    mkpath(resolved_output_path)
+
+    genome_matrices = [
+        read_total_genome_parameter_samples(
+            joinpath(chain_path, "MCMC_samples_total_genetic_effects_variance.txt"),
+        ) for chain_path in resolved_chain_paths
+    ]
+    n_samples = assert_same_sample_count([size(matrix, 1) for matrix in genome_matrices], "total genetic-variance samples")
+    sample_indices = posterior_sample_indices(n_samples)
+
+    # Average chains at each posterior sample, then summarize those sample-level averages.
+    genome_group_average = group_average_matrices(genome_matrices, sample_indices)
+    genome_summary = build_genome_parameter_summary(genome_group_average)
+
+    prefix = "$(group_label)_$(length(resolved_chain_paths))chains"
+    genome_summary_file = joinpath(resolved_output_path, "$(prefix)_genome_summary.csv")
+    CSV.write(genome_summary_file, genome_summary)
+
+    average_file = ""
+    if write_iteration_averages
+        average_file = write_iteration_table(
+            joinpath(resolved_output_path, "$(prefix)_avg_genome_MCMC.csv"),
+            sample_indices,
+            genome_group_average,
+            GENOME_PARAMETER_COLUMNS,
+        )
+    end
+
+    return (
+        group_path=resolved_group_path,
+        chain_paths=resolved_chain_paths,
+        output_path=resolved_output_path,
+        group_label=String(group_label),
+        n_chains=length(resolved_chain_paths),
+        nsamples=n_samples,
+        genome_summary=genome_summary,
+        genome_summary_file=genome_summary_file,
+        average_file=average_file,
+    )
 end
 
 default_multi_chain_output_dir(group_path::AbstractString) = joinpath(group_path, "multi_chain_summary")
