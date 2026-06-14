@@ -39,9 +39,9 @@ function compute_correlation(cov_matrix)
     return cov_matrix[1, 2] / (std_devs[1] * std_devs[2])
 end
 
-function sample_variance_sumstats(ycorr_array, nobs, df, scale)
+function sample_variance_sumstats!(SSE, ycorr_array, nobs, df, scale)
     ntraits = length(ycorr_array)
-    SSE = zeros(ntraits, ntraits)
+    fill!(SSE, 0.0)
     for traiti = 1:ntraits
         ycorri = ycorr_array[traiti]
         for traitj = traiti:ntraits
@@ -51,6 +51,27 @@ function sample_variance_sumstats(ycorr_array, nobs, df, scale)
         end
     end
     return rand(InverseWishart(df + nobs, convert(Array, Symmetric(scale + SSE))))
+end
+
+function sample_variance_sumstats(ycorr_array, nobs, df, scale)
+    ntraits = length(ycorr_array)
+    SSE = zeros(ntraits, ntraits)
+    return sample_variance_sumstats!(SSE, ycorr_array, nobs, df, scale)
+end
+
+function update_matrix_mean!(mean_matrix, sample_matrix, weight)
+    @inbounds for index in eachindex(mean_matrix, sample_matrix)
+        mean_matrix[index] += (sample_matrix[index] - mean_matrix[index]) * weight
+    end
+    return mean_matrix
+end
+
+function update_matrix_second_moment!(mean_matrix, sample_matrix, weight)
+    @inbounds for index in eachindex(mean_matrix, sample_matrix)
+        value = sample_matrix[index]
+        mean_matrix[index] += (value * value - mean_matrix[index]) * weight
+    end
+    return mean_matrix
 end
 
 # count how many annotation effects exist in each category across all blocks.

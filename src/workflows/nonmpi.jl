@@ -8,6 +8,52 @@ using Statistics
 using Dates
 using JLD2
 
+function make_nonmpi_block_workspace(blocks, block_range, nCategory::Int, nlabel::Int, nTraits::Int)
+    max_nMarker = maximum(size(blocks[b].x_arrays[end], 2) for b in block_range)
+    max_nEigen = maximum(size(blocks[b].x_arrays[end], 1) for b in block_range)
+    return (
+        local_nLoci_array_vec=[fill(0, nlabel) for _ in 1:nCategory],
+        beta=zeros(nTraits),
+        new_alpha=zeros(nTraits),
+        old_alpha=zeros(nTraits),
+        residual=zeros(nTraits),
+        delta=zeros(nTraits),
+        marker_order=collect(1:max_nMarker),
+        what_cat_1=zeros(max_nEigen),
+        what_cat_2=zeros(max_nEigen),
+        what_total_1=zeros(max_nEigen),
+        what_total_2=zeros(max_nEigen),
+        residual_sse=zeros(nTraits, nTraits),
+    )
+end
+
+function reset_nonmpi_block_workspace!(workspace)
+    for counts in workspace.local_nLoci_array_vec
+        fill!(counts, 0)
+    end
+    return workspace
+end
+
+function accumulate_matrices!(dest, matrices)
+    fill!(dest, 0.0)
+    for matrix in matrices
+        @inbounds for index in eachindex(dest, matrix)
+            dest[index] += matrix[index]
+        end
+    end
+    return dest
+end
+
+function accumulate_vectors!(dest, vectors)
+    fill!(dest, 0.0)
+    for vector in vectors
+        @inbounds for index in eachindex(dest, vector)
+            dest[index] += vector[index]
+        end
+    end
+    return dest
+end
+
 function run_nonmpi_block_range!(
     blocks,
     block_range,
@@ -22,7 +68,8 @@ function run_nonmpi_block_range!(
     varg_blk_cat,
     varg_cov_blk_cat,
     totalvarg_blk,
-    ssq_blk_cat;
+    ssq_blk_cat,
+    workspace;
     annotation_prior_model,
     effect_nCon,
     my_nsnp,
@@ -38,19 +85,19 @@ function run_nonmpi_block_range!(
 )
     nTraits == 2 || error("run_nonmpi_block_range! currently expects exactly 2 traits.")
 
-    local_nLoci_array_vec = [fill(0, nlabel) for _ in 1:nCategory]
-    β = zeros(nTraits)
-    newα = zeros(nTraits)
-    oldα = zeros(nTraits)
-    w = zeros(nTraits)
-    δ = zeros(nTraits)
-    max_nMarker = maximum(size(blocks[b].x_arrays[end], 2) for b in block_range)
-    max_nEigen = maximum(size(blocks[b].x_arrays[end], 1) for b in block_range)
-    marker_order = collect(1:max_nMarker)
-    what_cat_1 = zeros(max_nEigen)
-    what_cat_2 = zeros(max_nEigen)
-    what_total_1 = zeros(max_nEigen)
-    what_total_2 = zeros(max_nEigen)
+    reset_nonmpi_block_workspace!(workspace)
+    local_nLoci_array_vec = workspace.local_nLoci_array_vec
+    β = workspace.beta
+    newα = workspace.new_alpha
+    oldα = workspace.old_alpha
+    w = workspace.residual
+    δ = workspace.delta
+    marker_order = workspace.marker_order
+    what_cat_1 = workspace.what_cat_1
+    what_cat_2 = workspace.what_cat_2
+    what_total_1 = workspace.what_total_1
+    what_total_2 = workspace.what_total_2
+    residual_sse = workspace.residual_sse
 
     for b in block_range
         block = blocks[b]
@@ -213,7 +260,7 @@ function run_nonmpi_block_range!(
         end
 
         if estimate_vare
-            sampled_R = sample_variance_sumstats(wArray, nEigenb, df_R, scale_R)
+            sampled_R = sample_variance_sumstats!(residual_sse, wArray, nEigenb, df_R, scale_R)
             R_blk[b] = sampled_R
             Rcor = compute_correlation(sampled_R)
             for traiti = 1:nTraits
@@ -448,6 +495,10 @@ function run_nonmpi_sampler!(context)
     last_saved_iter = nIter - (nIter - burnin) % thin
     use_threaded_blocks = nthreads() > 1 && my_nblk > 1
     block_ranges = build_block_ranges(blocks, min(nthreads(), my_nblk))
+    block_workspaces = [
+        make_nonmpi_block_workspace(blocks, block_range, nCategory, nlabel, nTraits)
+        for block_range in block_ranges
+    ]
 
     R_blk = initialize_r_blk_state(
         my_nblk,
@@ -476,6 +527,11 @@ function run_nonmpi_sampler!(context)
     G_vec = [zeros(nTraits, nTraits) for c in 1:nCategory] # genetic variance for different category for SNPs in this rank
 
     R_blkmean = zeros(nTraits, nTraits)
+    varg_cat_sum = zeros(nTraits, nCategory)
+    varg_cov_cat_sum = zeros(nCategory)
+    totalvarg = zeros(nTraits, nTraits)
+    Atrue_vec = [zeros(nTraits, nTraits) for _ in 1:nCategory]
+    nQTL = zeros(Int, nCategory)
 
     @showprogress "running MCMC ..." for iter = 1:nIter
         
@@ -498,7 +554,8 @@ function run_nonmpi_sampler!(context)
         end
 
         if use_threaded_blocks
-            tasks = map(block_ranges) do block_range
+            tasks = map(eachindex(block_ranges)) do range_index
+                block_range = block_ranges[range_index]
                 Threads.@spawn run_nonmpi_block_range!(
                     blocks,
                     block_range,
@@ -513,7 +570,8 @@ function run_nonmpi_sampler!(context)
                     varg_blk_cat,
                     varg_cov_blk_cat,
                     totalvarg_blk,
-                    ssq_blk_cat;
+                    ssq_blk_cat,
+                    block_workspaces[range_index];
                     annotation_prior_model=annotation_prior_model,
                     effect_nCon=effect_nCon,
                     my_nsnp=my_nsnp,
@@ -548,7 +606,8 @@ function run_nonmpi_sampler!(context)
                     varg_blk_cat,
                     varg_cov_blk_cat,
                     totalvarg_blk,
-                    ssq_blk_cat;
+                    ssq_blk_cat,
+                    block_workspaces[1];
                     annotation_prior_model=annotation_prior_model,
                     effect_nCon=effect_nCon,
                     my_nsnp=my_nsnp,
@@ -568,30 +627,31 @@ function run_nonmpi_sampler!(context)
         # get true A matrix by alphaArray
         # use only pleiotropic markers to compute QTL effect variance matrix
         if do_thin && report_pleiotropic_qtl_effect_matrix
-            Atrue_vec = [zeros(nTraits, nTraits) for c in 1:nCategory]
-            nQTL = zeros(nCategory)
             for cat = 1:nCategory
-                alpha_array = [alphaArray[i][cat] for i in 1:nTraits]
-                pleio_marker = (alpha_array[1] .!= 0) .& (alpha_array[2] .!= 0)
-                nQTL[cat] = sum(pleio_marker)
-                for traiti in 1:nTraits
-                    for traitj in traiti:nTraits
-                        Atrue_vec[cat][traiti, traitj] = dot(alpha_array[traiti][pleio_marker], alpha_array[traitj][pleio_marker])
-                        Atrue_vec[cat][traitj, traiti] = Atrue_vec[cat][traiti, traitj]
+                Atrue_cat = Atrue_vec[cat]
+                fill!(Atrue_cat, 0.0)
+                nQTL[cat] = 0
+
+                alpha1 = alphaArray[1][cat]
+                alpha2 = alphaArray[2][cat]
+                for marker in eachindex(alpha1, alpha2)
+                    a1 = alpha1[marker]
+                    a2 = alpha2[marker]
+                    if a1 != 0 && a2 != 0
+                        nQTL[cat] += 1
+                        Atrue_cat[1, 1] += a1 * a1
+                        Atrue_cat[1, 2] += a1 * a2
+                        Atrue_cat[2, 2] += a2 * a2
                     end
                 end
-            end
-            
-            for cat = 1:nCategory
-                #annotation specific A
-                if nQTL[cat] == 0
-                    Atrue_cat = zeros(nTraits, nTraits)
-                else
-                    Atrue_cat = Atrue_vec[cat] / nQTL[cat]
+
+                Atrue_cat[2, 1] = Atrue_cat[1, 2]
+                if nQTL[cat] > 0
+                    Atrue_cat ./= nQTL[cat]
                 end
-                meanA[cat] += (Atrue_cat - meanA[cat]) * iIter
+                update_matrix_mean!(meanA[cat], Atrue_cat, iIter)
                 if estimate_vara 
-                    meanA2[cat] += (Atrue_cat .^ 2 - meanA2[cat]) * iIter
+                    update_matrix_second_moment!(meanA2[cat], Atrue_cat, iIter)
                 end
                 if save_category_correlation_outputs
                     mcmcAtruecor_c[iter_after_burnin_thin_index, cat] = compute_correlation(Atrue_cat)
@@ -617,12 +677,12 @@ function run_nonmpi_sampler!(context)
                             mean_pi[cat][key] += (tempPi_vec[cat][iCategori] - mean_pi[cat][key]) * iIter
                             mean_pi2[cat][key] += (tempPi2[iCategori] - mean_pi2[cat][key]) * iIter
                         end
-                    end   
+                    end
                 end
 
                 for cat = 1:nCategory
                     for (iCategori, key) in enumerate(pi_key_order())
-                        Pi[cat][key] = tempPi_vec[cat][iCategori] #annotation specific pi
+                        Pi[cat][key] = tempPi_vec[cat][iCategori] # annotation specific pi
                     end
                 end
             else # :marker_probit_tree
@@ -660,13 +720,9 @@ function run_nonmpi_sampler!(context)
         # get the running average of SSE to sample Gscale
         if within_estGscale
             for cat = 1:nCategory
-                meanSSE[cat] += (SSE_vec[cat] - meanSSE[cat]) * iIter_scaleG
-            end
-
-            Gprior_vec = deepcopy(meanSSE)
-            for cat = 1:nCategory
-                Gprior_vec[cat] = meanSSE[cat] / nLoci_annot[cat]
-                scale_G_vec[cat] = Gprior_vec[cat] * (df_G - nTraits - 1)
+                update_matrix_mean!(meanSSE[cat], SSE_vec[cat], iIter_scaleG)
+                copyto!(scale_G_vec[cat], meanSSE[cat])
+                scale_G_vec[cat] .*= (df_G - nTraits - 1) / nLoci_annot[cat]
             end
             if iter == estGscale_iter
                 # save the scale_G_vec
@@ -679,27 +735,27 @@ function run_nonmpi_sampler!(context)
         ### sample beta covariance matrix ###
         for cat = 1:nCategory
             if estimate_vara 
-                A_vec_sampler = convert(Array, Symmetric(scale_G_vec[cat] + SSE_vec[cat]))
-                A_vec[cat] = rand(InverseWishart(df_G + nLoci_annot[cat], A_vec_sampler))  
+                A_vec_sampler_cat = convert(Array, Symmetric(scale_G_vec[cat] + SSE_vec[cat]))
+                A_vec[cat] = rand(InverseWishart(df_G + nLoci_annot[cat], A_vec_sampler_cat))
             end
             if do_thin
                 # save mean for beta effect variance 
-                meanB[cat] += (A_vec[cat] - meanB[cat]) * iIter
+                update_matrix_mean!(meanB[cat], A_vec[cat], iIter)
                 if save_category_correlation_outputs
                     mcmcBcor_c[iter_after_burnin_thin_index, cat] = compute_correlation(A_vec[cat])
                 end
                 if estimate_vara 
-                    meanB2[cat] += (A_vec[cat] .^ 2 - meanB2[cat]) * iIter
+                    update_matrix_second_moment!(meanB2[cat], A_vec[cat], iIter)
                 end
             end
         end
         
         # update Ainv_vec if needed for sampling beta in next iteration
         if estimate_vara 
-            Ainv_vec[:] = [inv(A_vec[cat]) for cat in 1:nCategory]
+            for cat in 1:nCategory
+                copyto!(Ainv_vec[cat], inv(A_vec[cat]))
+            end
         end
-        # gc after sampling A
-        GC.gc()
 
         ########################################################################
         ### Step3. get average residual variance across blocks ##################
@@ -707,11 +763,10 @@ function run_nonmpi_sampler!(context)
         # summing residual variance
         if estimate_vare
             if do_thin
-                R_blk_sum = sum(R_blk)
-                R_blkmean = R_blk_sum / my_nblk
-                R2 = (R_blkmean) .^ 2
-                meanR += (R_blkmean - meanR) * iIter
-                meanR2 += (R2 - meanR2) * iIter
+                accumulate_matrices!(R_blkmean, R_blk)
+                R_blkmean ./= my_nblk
+                update_matrix_mean!(meanR, R_blkmean, iIter)
+                update_matrix_second_moment!(meanR2, R_blkmean, iIter)
             end
         end
 
@@ -719,14 +774,14 @@ function run_nonmpi_sampler!(context)
         ### Step4. get annotation-specific & total genetic variance across blocks ##############
         ########################################################################################
         if do_thin
-            varg_cat = sum(varg_blk_cat) # sum varg_blk_cat to get varg for different category across blocks
-            varg_cov_cat = sum(varg_cov_blk_cat) # sum varg_cov_blk_cat to get genetic covariance for different category across blocks
-            totalvarg = sum(totalvarg_blk) # sum totalvarg_blk to get total genetic variance across all blocks
+            accumulate_matrices!(varg_cat_sum, varg_blk_cat) # sum varg_blk_cat to get varg for different category across blocks
+            accumulate_vectors!(varg_cov_cat_sum, varg_cov_blk_cat) # sum varg_cov_blk_cat to get genetic covariance for different category across blocks
+            accumulate_matrices!(totalvarg, totalvarg_blk) # sum totalvarg_blk to get total genetic variance across all blocks
 
             for cat = 1:nCategory
-                G_vec[cat][1, 1] = varg_cat[1, cat]
-                G_vec[cat][2, 2] = varg_cat[2, cat]
-                G_vec[cat][1, 2] = G_vec[cat][2, 1] = varg_cov_cat[cat]
+                G_vec[cat][1, 1] = varg_cat_sum[1, cat]
+                G_vec[cat][2, 2] = varg_cat_sum[2, cat]
+                G_vec[cat][1, 2] = G_vec[cat][2, 1] = varg_cov_cat_sum[cat]
             end
 
             total_gcor = compute_correlation(totalvarg)
@@ -737,8 +792,8 @@ function run_nonmpi_sampler!(context)
             end
 
             for cat = 1:nCategory
-                meanG[cat] += (G_vec[cat] - meanG[cat]) * iIter
-                meanG2[cat] += (G_vec[cat] .^ 2 - meanG2[cat]) * iIter
+                update_matrix_mean!(meanG[cat], G_vec[cat], iIter)
+                update_matrix_second_moment!(meanG2[cat], G_vec[cat], iIter)
                 if save_category_correlation_outputs
                     gcor = compute_correlation(G_vec[cat])
                     if isfinite(gcor)
@@ -748,8 +803,8 @@ function run_nonmpi_sampler!(context)
                     end
                 end
             end
-            meanGtotal += (totalvarg - meanGtotal) * iIter
-            meanGtotal2 += (totalvarg .^ 2 - meanGtotal2) * iIter
+            update_matrix_mean!(meanGtotal, totalvarg, iIter)
+            update_matrix_second_moment!(meanGtotal2, totalvarg, iIter)
         end
 
         # save MCMC samples & last samples

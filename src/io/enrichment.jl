@@ -168,9 +168,10 @@ function load_annotation_enrichment_inputs(data_path::AbstractString, annot_file
     )
 end
 
-function classify_enrichment(enrichment_pp::Real, depletion_pp::Real, significance_threshold::Real)
-    enrichment_pp > significance_threshold && return "Enrichment"
-    depletion_pp > significance_threshold && return "Depletion"
+function classify_enrichment(enrichment_pp::Real, depletion_pp::Real, zscore::Real, significance_threshold::Real)
+    passes_uncertainty_filter = abs(zscore) > 1.0
+    enrichment_pp > significance_threshold && passes_uncertainty_filter && return "Enrichment"
+    depletion_pp > significance_threshold && passes_uncertainty_filter && return "Depletion"
     return "Non-significant"
 end
 
@@ -192,6 +193,7 @@ function build_single_chain_enrichment_tables(
         Annotation=annotation_names,
         Mean=zeros(length(annotation_names)),
         SD=zeros(length(annotation_names)),
+        Zscore=zeros(length(annotation_names)),
         EnrPP=zeros(length(annotation_names)),
         DeplPP=zeros(length(annotation_names)),
         Significance=fill("", length(annotation_names)),
@@ -202,11 +204,14 @@ function build_single_chain_enrichment_tables(
             relative_values[:, annotation_index] .* (n_total_effects / weighted_annotation_counts[annotation_index])
         posterior_enrichment_summary.Mean[annotation_index] = mean(annotation_enrichment_samples)
         posterior_enrichment_summary.SD[annotation_index] = std(annotation_enrichment_samples)
+        posterior_enrichment_summary.Zscore[annotation_index] =
+            posterior_enrichment_summary.Mean[annotation_index] / posterior_enrichment_summary.SD[annotation_index]
         posterior_enrichment_summary.EnrPP[annotation_index] = count(abs.(annotation_enrichment_samples) .> 1.0) / length(annotation_enrichment_samples)
         posterior_enrichment_summary.DeplPP[annotation_index] = count(abs.(annotation_enrichment_samples) .< 1.0) / length(annotation_enrichment_samples)
         posterior_enrichment_summary.Significance[annotation_index] = classify_enrichment(
             posterior_enrichment_summary.EnrPP[annotation_index],
             posterior_enrichment_summary.DeplPP[annotation_index],
+            posterior_enrichment_summary.Zscore[annotation_index],
             significance_threshold,
         )
     end
