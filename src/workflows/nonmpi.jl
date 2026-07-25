@@ -327,6 +327,16 @@ function write_nonmpi_run_config(analysis_path::AbstractString, context)
         "output_mcmc_delta" => config.output_mcmc_delta,
         "julia_threads" => nthreads(),
     ]
+    if !isnothing(config.snp_gene_map)
+        append!(
+            run_config,
+            [
+                "snp_gene_map" => config.snp_gene_map,
+                "gene_category" => config.gene_category,
+                "gene_mapping_weight" => String(config.gene_mapping_weight),
+            ],
+        )
+    end
     open(joinpath(analysis_path, "run_config.toml"), "w") do io
         for (key, value) in run_config
             println(io, key, " = ", value)
@@ -365,6 +375,14 @@ function run_nonmpi_sampler!(context)
     blocks = block_data.blocks
     my_nblk = block_data.nblk
     my_nsnp = block_data.nsnp
+    gene_snp_ids = if isnothing(config.snp_gene_map)
+        nothing
+    else
+        annotation_jld_path = normalize_dir_path(config.data_path) * "$(config.annot_dict).jld2"
+        loaded_gene_snp_ids = load_gene_snp_ids(annotation_jld_path)
+        validate_gene_snp_id_alignment(blocks, loaded_gene_snp_ids)
+        loaded_gene_snp_ids
+    end
 
     burnin = config.burnin
 
@@ -405,6 +423,18 @@ function run_nonmpi_sampler!(context)
     else
         annotation_design = prepare_marker_probit_tree_block_state!(blocks)
         marker_probit_tree_state = initialize_marker_probit_tree_state(annotation_design, context.startPi)
+    end
+    gene_covariance_state = if isnothing(gene_snp_ids)
+        nothing
+    else
+        initialize_gene_covariance_state(
+            blocks,
+            gene_snp_ids,
+            annotation_metadata,
+            resolve_input_path(config.data_path, config.snp_gene_map::String),
+            config.gene_category::String,
+            config.gene_mapping_weight,
+        )
     end
     block_data = nothing
     GC.gc()
@@ -805,6 +835,9 @@ function run_nonmpi_sampler!(context)
             end
             update_matrix_mean!(meanGtotal, totalvarg, iIter)
             update_matrix_second_moment!(meanGtotal2, totalvarg, iIter)
+            if gene_covariance_state !== nothing
+                accumulate_gene_covariance_sample!(gene_covariance_state, blocks, alphaArray)
+            end
         end
 
         # save MCMC samples & last samples
@@ -907,6 +940,9 @@ function run_nonmpi_sampler!(context)
         marker_probit_tree_state=marker_probit_tree_state,
         annotation_names=annotation_metadata.annotationName,
     )
+    if gene_covariance_state !== nothing
+        write_gene_covariance_outputs(analysis_path, gene_covariance_state)
+    end
 
     if output_mcmc_delta
         writedlm(analysis_path * "mcmc_Delta1.txt", mcmc_Delta[1])

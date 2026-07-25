@@ -48,11 +48,12 @@ function validate_ldinfo_columns(df::DataFrame, data_name::AbstractString)
 end
 
 function load_jld2_entry(path::AbstractString, candidate_keys)
-    data = JLD2.load(path)
-    for key in candidate_keys
-        haskey(data, key) && return data[key]
+    return jldopen(path, "r") do file
+        for key in candidate_keys
+            haskey(file, key) && return read(file, key)
+        end
+        error("None of keys $(collect(candidate_keys)) found in $path. Available keys: $(collect(keys(file)))")
     end
-    error("None of keys $(collect(candidate_keys)) found in $path. Available keys: $(collect(keys(data)))")
 end
 
 function load_annotation_metadata(data_path::AbstractString, annot_file::AbstractString; nCon::Int=0)
@@ -340,6 +341,7 @@ function build_annotation_dict(
     end
 
     anno_matrix_dict = Dict{Int,Matrix{Float64}}()
+    snp_ids_dict = Dict{Int,Vector{String}}()
     for block_id in block_ids
         blockinfo = ldinfo[Int.(ldinfo[!, :Block]) .== block_id, :]
 
@@ -351,11 +353,13 @@ function build_annotation_dict(
         end
 
         anno_matrix_dict[block_id] = Matrix(annot_df[:, annotation_columns])
+        snp_ids_dict[block_id] = copy(block_snps[!, :SNP])
     end
 
     output_dict_name = "my_anno_matrix_dict"
     jldopen(output_file_path, "w") do file
         write(file, output_dict_name, anno_matrix_dict)
+        write(file, "my_snp_ids_dict", snp_ids_dict)
     end
 
     return (
@@ -363,6 +367,37 @@ function build_annotation_dict(
         output_dict_name=output_dict_name,
         nblocks=length(anno_matrix_dict),
     )
+end
+
+function load_gene_snp_ids(annotation_jld_path::AbstractString)
+    return jldopen(annotation_jld_path, "r") do file
+        haskey(file, "my_snp_ids_dict") || error(
+            "Gene-level covariance requires block-aligned SNP IDs in the annotation JLD2 file. " *
+            "Rebuild the annotation dictionary with the updated build_annotation_dict preprocessing step.",
+        )
+        read(file, "my_snp_ids_dict")
+    end
+end
+
+function validate_gene_snp_id_alignment(blocks, snp_ids_dict::AbstractDict)
+    analysis_block_ids = Set(Int(block.block_id) for block in blocks)
+    snp_id_block_ids = Set(Int(block_id) for block_id in keys(snp_ids_dict))
+    analysis_block_ids == snp_id_block_ids || error(
+        "Block mismatch between my_snp_ids_dict and loaded analysis blocks. ",
+    )
+
+    for block in blocks
+        block_id = Int(block.block_id)
+        n_snp_ids = length(snp_ids_dict[block_id])
+        n_annotation_rows = size(block.anno_matrix, 1)
+        n_transformed_x_columns = size(block.transformed_x, 2)
+        n_snp_ids == n_annotation_rows == n_transformed_x_columns || error(
+            "SNP-ID alignment mismatch for block $block_id: " *
+            "length(my_snp_ids_dict[$block_id])=$n_snp_ids, " *
+            "annotation rows=$n_annotation_rows, transformed_x columns=$n_transformed_x_columns.",
+        )
+    end
+    return nothing
 end
 
 function load_nonmpi_block_data(data_path::AbstractString, annot_dict::AbstractString)

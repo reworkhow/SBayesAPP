@@ -11,6 +11,7 @@ include("model/mcmc_setup.jl")
 include("model/priors.jl")
 include("model/initial_state.jl")
 include("model/block_setup.jl")
+include("model/gene_covariance.jl")
 include("model/utilities.jl")
 include("model/marker_probit_tree.jl")
 include("io/outputs.jl")
@@ -18,7 +19,7 @@ include("workflows/nonmpi.jl")
 
 export NonMPIConfig,
        build_nonmpi_cmd,
-    build_nonmpi_input_dicts,
+       build_nonmpi_input_dicts,
        build_annotation_dict,
        build_gprior_vec,
        build_start_pi,
@@ -27,13 +28,15 @@ export NonMPIConfig,
        calculate_multi_chain_genome_summary,
        example_nonmpi_config,
        compute_correlation,
+       GeneCovarianceState,
+       load_gene_snp_ids,
        load_annotation_metadata,
        load_nonmpi_block_data,
        parse_nonmpi_args,
        read_to_dict,
        repo_root,
        run_nonmpi,
-    source_root
+       source_root
        
 
 repo_root() = normpath(joinpath(@__DIR__, ".."))
@@ -140,6 +143,12 @@ function parse_nonmpi_args(args::Vector{String})
     )
 
     parsed = _parse_named_cli_args(args)
+    snp_gene_map = _lookup_named_arg(parsed, ["snp_gene_map"])
+    gene_category = _lookup_named_arg(parsed, ["gene_category"])
+    gene_mapping_weight_was_provided = haskey(parsed, "gene_mapping_weight")
+    if gene_mapping_weight_was_provided && isnothing(snp_gene_map) && isnothing(gene_category)
+        error("--gene-mapping-weight requires --snp-gene-map and --gene-category.")
+    end
     defaults = _default_nonmpi_cli_settings()
     nIter = _parse_int_arg(_lookup_named_arg(parsed, ["n_iter", "niter"]; required=true), "n_iter")
     seed = _parse_int_arg(string(_lookup_named_arg(parsed, ["seed"]; default=string(defaults.seed))), "seed")
@@ -171,11 +180,18 @@ function parse_nonmpi_args(args::Vector{String})
         estGscale_iter=_parse_int_arg(string(_lookup_named_arg(parsed, ["estgscale_iter"]; default=string(defaults.estGscale_iter))), "estGscale_iter"),
         report_pleiotropic_qtl_effect_matrix=_parse_bool_arg(string(_lookup_named_arg(parsed, ["report_pleiotropic_qtl_effect_matrix"]; default=string(defaults.report_pleiotropic_qtl_effect_matrix)))),
         output_mcmc_delta=_parse_bool_arg(string(_lookup_named_arg(parsed, ["output_mcmc_delta"]; default=string(defaults.output_mcmc_delta)))),
+        snp_gene_map=snp_gene_map,
+        gene_category=gene_category,
+        gene_mapping_weight=_lookup_named_arg(parsed, ["gene_mapping_weight"]; default="full"),
     )
 end
 
 function build_nonmpi_cmd(config::NonMPIConfig)
-    return `$(Base.julia_cmd()) --project=$(repo_root()) $(joinpath(repo_root(), "scripts", "run_nonmpi.jl")) --data_path $(config.data_path) --analysis_path $(config.analysis_path) --n_iter $(string(config.nIter)) --burnin $(string(config.burnin)) --seed $(string(config.seed)) --annot_file $(config.annot_file) --annot_dict $(config.annot_dict) --starting_value_dir $(config.starting_value_dir) --gscale_value_dir $(config.gscale_value_dir) --st_path $(config.st_path) --thin $(string(config.thin)) --n1 $(string(config.n1)) --n2 $(string(config.n2)) --n_con $(string(config.n_con)) --annotation_prior_model $(String(config.annotation_prior_model)) --is_continue $(_bool_arg(config.is_continue)) --estimate_vare $(_bool_arg(config.estimate_vare)) --estimate_vara $(_bool_arg(config.estimate_vara)) --estimate_pi $(_bool_arg(config.estimate_pi)) --estimate_gscale $(_bool_arg(config.estimate_Gscale)) --estgscale_iter $(string(config.estGscale_iter)) --report_pleiotropic_qtl_effect_matrix $(_bool_arg(config.report_pleiotropic_qtl_effect_matrix)) --output_mcmc_delta $(_bool_arg(config.output_mcmc_delta))`
+    cmd = `$(Base.julia_cmd()) --project=$(repo_root()) $(joinpath(repo_root(), "scripts", "run_nonmpi.jl")) --data_path $(config.data_path) --analysis_path $(config.analysis_path) --n_iter $(string(config.nIter)) --burnin $(string(config.burnin)) --seed $(string(config.seed)) --annot_file $(config.annot_file) --annot_dict $(config.annot_dict) --starting_value_dir $(config.starting_value_dir) --gscale_value_dir $(config.gscale_value_dir) --st_path $(config.st_path) --thin $(string(config.thin)) --n1 $(string(config.n1)) --n2 $(string(config.n2)) --n_con $(string(config.n_con)) --annotation_prior_model $(String(config.annotation_prior_model)) --is_continue $(_bool_arg(config.is_continue)) --estimate_vare $(_bool_arg(config.estimate_vare)) --estimate_vara $(_bool_arg(config.estimate_vara)) --estimate_pi $(_bool_arg(config.estimate_pi)) --estimate_gscale $(_bool_arg(config.estimate_Gscale)) --estgscale_iter $(string(config.estGscale_iter)) --report_pleiotropic_qtl_effect_matrix $(_bool_arg(config.report_pleiotropic_qtl_effect_matrix)) --output_mcmc_delta $(_bool_arg(config.output_mcmc_delta))`
+    if !isnothing(config.snp_gene_map)
+        cmd = `$cmd --snp-gene-map $(config.snp_gene_map) --gene-category $(config.gene_category) --gene-mapping-weight $(String(config.gene_mapping_weight))`
+    end
+    return cmd
 end
 
 run_nonmpi(config::NonMPIConfig; dry_run::Bool=false) = dry_run ? build_nonmpi_cmd(config) : run_nonmpi_workflow(config)

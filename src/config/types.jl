@@ -3,6 +3,7 @@ module ConfigTypes
 export MarkerProbitTreeState, NonMPIConfig
 
 const VALID_ANNOTATION_PRIOR_MODELS = (:group_dirichlet, :marker_probit_tree)
+const VALID_GENE_MAPPING_WEIGHTS = (:full, :fractional)
 
 function normalize_annotation_prior_model(annotation_prior_model)
     model = annotation_prior_model isa Symbol ? annotation_prior_model : Symbol(annotation_prior_model)
@@ -10,6 +11,14 @@ function normalize_annotation_prior_model(annotation_prior_model)
         "annotation_prior_model must be one of $(collect(VALID_ANNOTATION_PRIOR_MODELS)), got: $annotation_prior_model",
     )
     return model
+end
+
+function normalize_gene_mapping_weight(gene_mapping_weight)
+    weight = gene_mapping_weight isa Symbol ? gene_mapping_weight : Symbol(lowercase(String(gene_mapping_weight)))
+    weight in VALID_GENE_MAPPING_WEIGHTS || error(
+        "gene_mapping_weight must be one of $(collect(VALID_GENE_MAPPING_WEIGHTS)), got: $gene_mapping_weight",
+    )
+    return weight
 end
 
 function validate_nonmpi_schedule(nIter::Int, burnin::Int, thin::Int)
@@ -47,6 +56,9 @@ struct NonMPIConfig
     report_pleiotropic_qtl_effect_matrix::Bool
     output_mcmc_delta::Bool
     is_continue::Bool
+    snp_gene_map::Union{Nothing,String}
+    gene_category::Union{Nothing,String}
+    gene_mapping_weight::Symbol
 end
 
 mutable struct MarkerProbitTreeState
@@ -86,8 +98,31 @@ function NonMPIConfig(
     estGscale_iter::Int=500,
     report_pleiotropic_qtl_effect_matrix::Bool=true,
     output_mcmc_delta::Bool=true,
+    snp_gene_map::Union{Nothing,AbstractString}=nothing,
+    gene_category::Union{Nothing,AbstractString}=nothing,
+    gene_mapping_weight=:full,
 )
     normalized_annotation_prior_model = normalize_annotation_prior_model(annotation_prior_model)
+    normalized_gene_mapping_weight = normalize_gene_mapping_weight(gene_mapping_weight)
+    normalized_snp_gene_map = isnothing(snp_gene_map) ? nothing : String(snp_gene_map)
+    normalized_gene_category = isnothing(gene_category) ? nothing : String(gene_category)
+    has_snp_gene_map = !isnothing(normalized_snp_gene_map)
+    has_gene_category = !isnothing(normalized_gene_category)
+    has_snp_gene_map == has_gene_category || error(
+        "--snp-gene-map and --gene-category must be provided together.",
+    )
+    if has_snp_gene_map
+        isempty(strip(normalized_snp_gene_map)) && error("--snp-gene-map must not be empty.")
+        isempty(strip(normalized_gene_category)) && error("--gene-category must not be empty.")
+        normalized_annotation_prior_model == :group_dirichlet || error(
+            "Gene-level covariance requires annotation_prior_model=:group_dirichlet.",
+        )
+        is_continue && error(
+            "Gene-level covariance does not support is_continue=true in this MVP; restart integration is not implemented.",
+        )
+    elseif normalized_gene_mapping_weight != :full
+        error("--gene-mapping-weight requires --snp-gene-map and --gene-category.")
+    end
     resolved_burnin = isnothing(burnin) ? (is_continue ? 0 : floor(Int, nIter * 0.4)) : burnin
     validate_nonmpi_schedule(nIter, resolved_burnin, thin)
     return NonMPIConfig(
@@ -114,6 +149,9 @@ function NonMPIConfig(
         report_pleiotropic_qtl_effect_matrix,
         output_mcmc_delta,
         is_continue,
+        normalized_snp_gene_map,
+        normalized_gene_category,
+        normalized_gene_mapping_weight,
     )
 end
 

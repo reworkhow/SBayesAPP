@@ -5,8 +5,6 @@ using DataFrames
 using DelimitedFiles
 using JLD2
 
-include(joinpath(SBayesAPP.repo_root(), "example", "simulate_marker_probit_tree_dataset.jl"))
-
 @testset "Non-MPI smoke run" begin
     root = SBayesAPP.repo_root()
     mktempdir() do tmpdir
@@ -97,22 +95,8 @@ end
     end
 end
 
-@testset "marker_probit_tree synthetic generator" begin
-    mktempdir() do tmpdir
-        synthetic = simulate_marker_probit_tree_dataset(joinpath(tmpdir, "synthetic_case"))
-        metadata = SBayesAPP.load_annotation_metadata(synthetic.data_path, "annotation_df.txt")
-        block_data = SBayesAPP.load_nonmpi_block_data(synthetic.data_path, "anno_matrix_dict")
-
-        @test metadata.annotationName == ["annotation1"]
-        @test metadata.nCat == 1
-        @test metadata.nCon == 0
-        @test block_data.nblk == 2
-        @test block_data.nsnp == 400
-        @test isfile(joinpath(synthetic.truth_path, "annotation_probit_coefficients_truth.txt"))
-        @test isfile(joinpath(synthetic.truth_path, "mean_state_probabilities_truth.txt"))
-        @test isfile(joinpath(synthetic.truth_path, "realized_state_counts.txt"))
-    end
-end
+include("gene_covariance.jl")
+include("gene_covariance_simulation.jl")
 
 @testset "Build non-MPI input dicts" begin
     mktempdir() do tmpdir
@@ -187,7 +171,11 @@ end
         dense_dir = joinpath(tmpdir, "dense_output")
         sparse_dir = joinpath(tmpdir, "sparse_output")
 
-        function validation_config(analysis_dir)
+        function validation_config(
+            analysis_dir;
+            snp_gene_map=nothing,
+            gene_mapping_weight=:full,
+        )
             return SBayesAPP.NonMPIConfig(
                 string(dirname(result.transformed_x_file), "/"),
                 string(analysis_dir, "/"),
@@ -208,11 +196,69 @@ end
                 estGscale_iter=2,
                 report_pleiotropic_qtl_effect_matrix=false,
                 output_mcmc_delta=false,
+                snp_gene_map=snp_gene_map,
+                gene_category=isnothing(snp_gene_map) ? nothing : "annot1",
+                gene_mapping_weight=gene_mapping_weight,
             )
         end
 
         SBayesAPP.run_nonmpi(validation_config(dense_dir))
         SBayesAPP.run_nonmpi(validation_config(sparse_dir))
+        @test isempty(filter(
+            name -> startswith(name, "gene_genetic_covariance_"),
+            readdir(dense_dir),
+        ))
+
+        mapping_path = joinpath(tmpdir, "snp_gene_map.tsv")
+        open(mapping_path, "w") do io
+            println(io, "SNP\tGENE")
+            println(io, "rs1\tgeneB")
+            println(io, "rs1\tgeneA")
+            println(io, "rs2\toutsideCategory")
+            println(io, "rs_missing\tabsent")
+        end
+        gene_full_dir = joinpath(tmpdir, "gene_full_output")
+        gene_fractional_dir = joinpath(tmpdir, "gene_fractional_output")
+        SBayesAPP.run_nonmpi(validation_config(
+            gene_full_dir;
+            snp_gene_map=mapping_path,
+            gene_mapping_weight=:full,
+        ))
+        SBayesAPP.run_nonmpi(validation_config(
+            gene_fractional_dir;
+            snp_gene_map=mapping_path,
+            gene_mapping_weight=:fractional,
+        ))
+
+        full_gene_file = joinpath(
+            gene_full_dir,
+            "gene_genetic_covariance_annot1_full.txt",
+        )
+        fractional_gene_file = joinpath(
+            gene_fractional_dir,
+            "gene_genetic_covariance_annot1_fractional.txt",
+        )
+        @test isfile(full_gene_file)
+        @test isfile(fractional_gene_file)
+        full_gene_output = CSV.read(full_gene_file, DataFrame; delim='\t')
+        fractional_gene_output = CSV.read(fractional_gene_file, DataFrame; delim='\t')
+        @test full_gene_output.GENE == ["geneA", "geneB"]
+        @test fractional_gene_output.GENE == ["geneA", "geneB"]
+        @test full_gene_output.EFFECTIVE_SNP_COUNT == [1.0, 1.0]
+        @test fractional_gene_output.EFFECTIVE_SNP_COUNT == [0.5, 0.5]
+        @test all(isfinite, full_gene_output.POSTERIOR_MEAN_COV)
+        @test all(isfinite, full_gene_output.POSTERIOR_SD_COV)
+        @test all(isfinite, fractional_gene_output.POSTERIOR_MEAN_COV)
+        @test all(isfinite, fractional_gene_output.POSTERIOR_SD_COV)
+        fractional_qc = read(
+            joinpath(
+                gene_fractional_dir,
+                "gene_genetic_covariance_annot1_fractional_qc.txt",
+            ),
+            String,
+        )
+        @test occursin("RETAINED_MCMC_SAMPLES\t4", fractional_qc)
+        @test occursin("SNPS_MAPPED_TO_MULTIPLE_RETAINED_GENES\t1", fractional_qc)
 
         comparable_outputs = [
             "MCMC_samples_pi.txt",
@@ -229,6 +275,10 @@ end
         ]
         for relative_path in comparable_outputs
             @test read(joinpath(sparse_dir, relative_path), String) == read(joinpath(dense_dir, relative_path), String)
+            @test read(joinpath(gene_full_dir, relative_path), String) ==
+                  read(joinpath(dense_dir, relative_path), String)
+            @test read(joinpath(gene_fractional_dir, relative_path), String) ==
+                  read(joinpath(dense_dir, relative_path), String)
         end
     end
 end

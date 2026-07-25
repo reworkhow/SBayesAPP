@@ -160,6 +160,62 @@ Argument notes:
 - `starting_value_dir` and `gscale_value_dir` are required by the CLI even for a fresh run; use placeholders such as `XXX` when they are not needed.
 - `n_con` is only meaningful for `group_dirichlet`, where the first `n_con` annotation columns after `SNP` are treated as continuous.
 
+## Optional Gene-Level Genetic Covariance
+
+For a non-MPI `group_dirichlet` run, an exact binary annotation category can
+optionally be subdivided using a tab-, comma-, or whitespace-delimited
+SNP-to-gene file:
+
+```text
+SNP	GENE
+rs123	GENE1
+```
+
+The `SNP` and `GENE` columns may appear in either order; additional columns are
+ignored. Rows with missing or blank SNP or gene identifiers are skipped, and
+duplicate SNP–gene pairs are retained once.
+
+Enable the calculation with the required mapping/category pair and the optional
+weighting mode:
+
+```bash
+--snp-gene-map path/to/snp_gene_map.tsv \
+--gene-category exact_annotation_name \
+--gene-mapping-weight full
+```
+
+`--gene-mapping-weight` accepts `full` (the default) or `fractional`; it can be
+omitted when the default is wanted.
+Fractional mode multiplies each trait effect by `1/sqrt(k)` when a retained SNP
+maps to `k` genes. Gene covariance is calculated from retained `alpha` effects
+within each LD block; cross-products are not taken across blocks.
+
+This feature requires an annotation JLD2 created by the updated
+`build_annotation_dict`, which stores `my_snp_ids_dict` alongside the unchanged
+`my_anno_matrix_dict`. Older annotation JLD2 files continue to work for runs
+that do not enable gene covariance.
+
+Enabled runs write
+`gene_genetic_covariance_<category>_<weight_mode>.txt` and a matching
+`_qc.txt` file in the analysis directory.
+
+The focused implementation checks are in `test/gene_covariance.jl`. A separate
+deterministic recovery benchmark in `test/gene_covariance_simulation.jl`
+simulates two LD blocks, a gene spanning both blocks, signed effects for two
+traits, residual noise, and one SNP mapped to two genes. It runs the actual
+non-MPI MCMC workflow in both full and fractional modes and compares posterior
+mean gene covariance with the covariance calculated from the simulated effects.
+Run only this benchmark with:
+
+```bash
+julia --project=. -e 'include("test/gene_covariance_simulation.jl")'
+```
+
+The benchmark fixes the marker-effect prior, residual variance, and inclusion
+probabilities to isolate gene-covariance recovery. It is an implementation
+validation, not a general assessment of model calibration with estimated
+hyperparameters.
+
 ## Required Example Files
 
 The example data directory must contain:

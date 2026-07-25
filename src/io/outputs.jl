@@ -49,6 +49,68 @@ function write_annotation_probit_coefficients(output_file::AbstractString, annot
     return nothing
 end
 
+function sanitize_gene_output_component(value::AbstractString)
+    component = replace(strip(String(value)), r"[^A-Za-z0-9._-]+" => "_")
+    component = strip(component, ['_', '.', '-'])
+    return isempty(component) ? "category" : component
+end
+
+function write_gene_covariance_outputs(analysis_path::AbstractString, state::GeneCovarianceState)
+    output_dir = normalize_dir_path(analysis_path)
+    category_component = sanitize_gene_output_component(state.category_name)
+    weight_component = String(state.mapping_weight)
+    output_stem = "gene_genetic_covariance_$(category_component)_$(weight_component)"
+    main_path = output_dir * output_stem * ".txt"
+    qc_path = output_dir * output_stem * "_qc.txt"
+
+    open(main_path, "w") do io
+        println(
+            io,
+            "GENE\tN_CATEGORY_X_SNPS\tEFFECTIVE_SNP_COUNT\tPOSTERIOR_MEAN_COV\tPOSTERIOR_SD_COV",
+        )
+        for gene_index in eachindex(state.gene_names)
+            posterior_mean = state.posterior_mean_cov[gene_index]
+            posterior_sd = sqrt(abs(
+                state.posterior_second_moment_cov[gene_index] - posterior_mean^2,
+            ))
+            println(
+                io,
+                state.gene_names[gene_index],
+                '\t',
+                state.snp_counts[gene_index],
+                '\t',
+                state.effective_snp_counts[gene_index],
+                '\t',
+                posterior_mean,
+                '\t',
+                posterior_sd,
+            )
+        end
+    end
+
+    qc = state.qc
+    qc_entries = [
+        "RESOLVED_CATEGORY_NAME" => state.category_name,
+        "RESOLVED_CATEGORY_INDEX" => state.category_index,
+        "GENE_MAPPING_WEIGHT" => String(state.mapping_weight),
+        "VALID_UNIQUE_SNP_GENE_PAIRS" => qc.valid_unique_snp_gene_pairs,
+        "VALID_CATEGORY_X_MAPPED_SNPS" => qc.valid_category_mapped_snps,
+        "CATEGORY_X_SNPS_WITHOUT_VALID_GENE_MAPPING" => qc.category_snps_without_valid_gene_mapping,
+        "SNPS_MAPPED_TO_ONE_RETAINED_GENE" => qc.snps_mapped_to_one_retained_gene,
+        "SNPS_MAPPED_TO_MULTIPLE_RETAINED_GENES" => qc.snps_mapped_to_multiple_retained_genes,
+        "MAXIMUM_RETAINED_GENES_PER_SNP" => qc.maximum_retained_genes_per_snp,
+        "RETAINED_GENES" => qc.retained_genes,
+        "RETAINED_MCMC_SAMPLES" => state.retained_sample_count,
+    ]
+    open(qc_path, "w") do io
+        println(io, "METRIC\tVALUE")
+        for (metric, value) in qc_entries
+            println(io, metric, '\t', value)
+        end
+    end
+    return (main=main_path, qc=qc_path)
+end
+
 function save_nonmpi_posterior_mean!(
     analysis_path,
     my_rank,
