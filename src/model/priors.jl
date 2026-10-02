@@ -1,10 +1,18 @@
 using DelimitedFiles: readdlm
 
+const MAX_SINGLE_TRAIT_ONLY_START_PI = 0.49
+
 function build_start_pi(st_path::AbstractString; estimate_pi::Bool=true)
     if estimate_pi
         pi11 = 0.00001
-        pi10 = 1.0 - round(readdlm(st_path * "Trait1/mean_pi.txt")[1, 1], digits=4)
-        pi01 = 1.0 - round(readdlm(st_path * "Trait2/mean_pi.txt")[1, 1], digits=4)
+        raw_pi10 = 1.0 - round(readdlm(st_path * "Trait1/mean_pi.txt")[1, 1], digits=4)
+        raw_pi01 = 1.0 - round(readdlm(st_path * "Trait2/mean_pi.txt")[1, 1], digits=4)
+        0.0 <= raw_pi10 <= 1.0 || error("Trait1 STSBayesC mean_pi implies invalid pi10=$raw_pi10")
+        0.0 <= raw_pi01 <= 1.0 || error("Trait2 STSBayesC mean_pi implies invalid pi01=$raw_pi01")
+        pi10 = min(raw_pi10, MAX_SINGLE_TRAIT_ONLY_START_PI)
+        pi01 = min(raw_pi01, MAX_SINGLE_TRAIT_ONLY_START_PI)
+        raw_pi10 == pi10 || println("Capping initial pi10 from $raw_pi10 to $pi10")
+        raw_pi01 == pi01 || println("Capping initial pi01 from $raw_pi01 to $pi01")
         pi00 = 1.0 - pi11 - pi10 - pi01
         start_pi = Dict((1.0, 1.0) => pi11, (1.0, 0.0) => pi10, (0.0, 1.0) => pi01, (0.0, 0.0) => pi00)
     else
