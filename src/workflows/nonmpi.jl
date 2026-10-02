@@ -19,6 +19,7 @@ function make_nonmpi_block_workspace(blocks, block_range, nCategory::Int, nlabel
         residual=zeros(nTraits),
         delta=zeros(nTraits),
         marker_order=collect(1:max_nMarker),
+        category_order=collect(1:nCategory),
         what_cat_1=zeros(max_nEigen),
         what_cat_2=zeros(max_nEigen),
         what_total_1=zeros(max_nEigen),
@@ -93,6 +94,7 @@ function run_nonmpi_block_range!(
     w = workspace.residual
     δ = workspace.delta
     marker_order = workspace.marker_order
+    category_order = workspace.category_order
     what_cat_1 = workspace.what_cat_1
     what_cat_2 = workspace.what_cat_2
     what_total_1 = workspace.what_total_1
@@ -138,7 +140,13 @@ function run_nonmpi_block_range!(
             marker_category_indices = category_indices_by_marker[marker]
             marker_category_values = category_values_by_marker[marker]
             marker_effect_indices = category_effect_indices_by_marker[marker]
-            for category_position in eachindex(marker_category_indices)
+            n_marker_categories = length(marker_category_indices)
+            resize!(category_order, n_marker_categories)
+            for category_position in 1:n_marker_categories
+                category_order[category_position] = category_position
+            end
+            shuffle!(category_order)
+            for category_position in category_order
                 cat = marker_category_indices[category_position]
                 annotation_value = marker_category_values[category_position]
                 annotation_value == 0.0 && continue
@@ -210,7 +218,7 @@ function run_nonmpi_block_range!(
                         meanAlpha[trait][cat][effect_index] += (newα[trait] - meanAlpha[trait][cat][effect_index]) * iIter
                     end
                 end
-            end # for category_position in eachindex(marker_category_indices)
+            end # for category_position in category_order
         end # for marker in marker_order
         block.transformed_y = wArray
 
