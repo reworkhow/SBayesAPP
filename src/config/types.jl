@@ -2,8 +2,13 @@ module ConfigTypes
 
 export MarkerProbitTreeState, NonMPIConfig
 
-const VALID_ANNOTATION_PRIOR_MODELS = (:group_dirichlet, :marker_probit_tree)
+const VALID_ANNOTATION_PRIOR_MODELS = (
+    :group_dirichlet,
+    :marker_probit_tree,
+    :marker_probit_tree_bayesr,
+)
 const VALID_GENE_MAPPING_WEIGHTS = (:full, :fractional)
+const VALID_GSCALE_STRUCTURES = (:correlated, :independent)
 
 function normalize_annotation_prior_model(annotation_prior_model)
     model = annotation_prior_model isa Symbol ? annotation_prior_model : Symbol(annotation_prior_model)
@@ -19,6 +24,14 @@ function normalize_gene_mapping_weight(gene_mapping_weight)
         "gene_mapping_weight must be one of $(collect(VALID_GENE_MAPPING_WEIGHTS)), got: $gene_mapping_weight",
     )
     return weight
+end
+
+function normalize_gscale_structure(gscale_structure)
+    structure = gscale_structure isa Symbol ? gscale_structure : Symbol(lowercase(String(gscale_structure)))
+    structure in VALID_GSCALE_STRUCTURES || error(
+        "gscale_structure must be correlated or independent, got: $gscale_structure",
+    )
+    return structure
 end
 
 function validate_nonmpi_schedule(nIter::Int, burnin::Int, thin::Int)
@@ -53,6 +66,7 @@ struct NonMPIConfig
     estimate_pi::Bool
     estimate_Gscale::Bool
     estGscale_iter::Int
+    gscale_structure::Symbol
     report_pleiotropic_qtl_effect_matrix::Bool
     output_mcmc_delta::Bool
     is_continue::Bool
@@ -62,6 +76,7 @@ struct NonMPIConfig
 end
 
 mutable struct MarkerProbitTreeState
+    prior_model::Symbol
     design_matrix::Matrix{Float64}
     coefficients::Matrix{Float64}
     mean_coefficients::Matrix{Float64}
@@ -72,6 +87,8 @@ mutable struct MarkerProbitTreeState
     lower_bound::Matrix{Float64}
     upper_bound::Matrix{Float64}
     snp_pi::Matrix{Float64}
+    mean_snp_pi::Vector{Float64}
+    mean_snp_pi2::Vector{Float64}
 end
 
 function NonMPIConfig(
@@ -96,6 +113,7 @@ function NonMPIConfig(
     estimate_pi::Bool=true,
     estimate_Gscale::Bool=true,
     estGscale_iter::Int=500,
+    gscale_structure=:correlated,
     report_pleiotropic_qtl_effect_matrix::Bool=true,
     output_mcmc_delta::Bool=true,
     snp_gene_map::Union{Nothing,AbstractString}=nothing,
@@ -104,6 +122,7 @@ function NonMPIConfig(
 )
     normalized_annotation_prior_model = normalize_annotation_prior_model(annotation_prior_model)
     normalized_gene_mapping_weight = normalize_gene_mapping_weight(gene_mapping_weight)
+    normalized_gscale_structure = normalize_gscale_structure(gscale_structure)
     normalized_snp_gene_map = isnothing(snp_gene_map) ? nothing : String(snp_gene_map)
     normalized_gene_category = isnothing(gene_category) ? nothing : String(gene_category)
     has_snp_gene_map = !isnothing(normalized_snp_gene_map)
@@ -146,6 +165,7 @@ function NonMPIConfig(
         estimate_pi,
         estimate_Gscale,
         estGscale_iter,
+        normalized_gscale_structure,
         report_pleiotropic_qtl_effect_matrix,
         output_mcmc_delta,
         is_continue,

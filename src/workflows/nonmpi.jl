@@ -18,6 +18,10 @@ function make_nonmpi_block_workspace(blocks, block_range, nCategory::Int, nlabel
         old_alpha=zeros(nTraits),
         residual=zeros(nTraits),
         delta=zeros(nTraits),
+        bayesr_log_weights=zeros(4),
+        bayesr_means=zeros(4),
+        bayesr_variances=zeros(4),
+        bayesr_probabilities=zeros(4),
         marker_order=collect(1:max_nMarker),
         category_order=collect(1:nCategory),
         what_cat_1=zeros(max_nEigen),
@@ -93,6 +97,10 @@ function run_nonmpi_block_range!(
     oldα = workspace.old_alpha
     w = workspace.residual
     δ = workspace.delta
+    bayesr_log_weights = workspace.bayesr_log_weights
+    bayesr_means = workspace.bayesr_means
+    bayesr_variances = workspace.bayesr_variances
+    bayesr_probabilities = workspace.bayesr_probabilities
     marker_order = workspace.marker_order
     category_order = workspace.category_order
     what_cat_1 = workspace.what_cat_1
@@ -128,6 +136,7 @@ function run_nonmpi_block_range!(
         Rinv12 = -r12 / rdet
         Rinv21 = -r21 / rdet
         Rinv22 = r11 / rdet
+        Rinv = [Rinv11 Rinv12; Rinv21 Rinv22]
 
         resize!(marker_order, nMarkerb)
         for marker in 1:nMarkerb
@@ -164,51 +173,76 @@ function run_nonmpi_block_range!(
                     w[trait] = dot(x, wArray[trait]) + xpx_marker * oldα[trait]
                 end
 
-                for k = 1:nTraits
-                    other = k == 1 ? 2 : 1
-                    Ginv11 = Ginv[k, k]
-                    Ginv12 = Ginv[k, other]
-                    Rinvkk = k == 1 ? Rinv11 : Rinv22
-                    Rinvkother = k == 1 ? Rinv12 : Rinv21
-                    C11 = Ginv11 + Rinvkk * xpx_marker
-                    C12 = Ginv12 + xpx_marker * δ[other] * Rinvkother
-
-                    # compute the conditional distribution parameters for the two possible states of δ[k]
-                    # when δ[k] = 0, the effect is 0 and does not contribute to the likelihood, so the conditional distribution is determined by the prior and the contribution of the other trait (if it is nonzero)
-                    invLhs0 = 1 / Ginv11
-                    rhs0 = -Ginv12 * β[other]
-                    gHat0 = rhs0 * invLhs0
-                    # when δ[k] = 1, the effect is nonzero and contributes to the likelihood, so the conditional distribution is determined by both the prior and the likelihood contribution of this trait and the other trait (if it is nonzero)
-                    invLhs1 = 1 / C11
-                    rhs1 = (k == 1 ? (w[1] * Rinv11 + w[2] * Rinv21) : (w[1] * Rinv12 + w[2] * Rinv22)) - C12 * β[other]
-                    gHat1 = rhs1 * invLhs1
-
-                    d0 = k == 1 ? (0.0, δ[2]) : (δ[1], 0.0)
-                    d1 = k == 1 ? (1.0, δ[2]) : (δ[1], 1.0)
-
-                    logPrior0 = log_marker_state_prior(annotation_prior_model, Pi, marker_probit_tree_state, cat, true_marker_num, d0)
-                    logPrior1 = log_marker_state_prior(annotation_prior_model, Pi, marker_probit_tree_state, cat, true_marker_num, d1)
-                    logDelta0 = -0.5 * (log(Ginv11) - gHat0^2 * Ginv11) + logPrior0
-                    logDelta1 = -0.5 * (log(C11) - gHat1^2 * C11) + logPrior1
-                    probDelta1 = 1.0 / (1.0 + exp(logDelta0 - logDelta1))
-
-                    # sample δ[k] from its conditional distribution, then sample the effect size if δ[k] = 1, and update w accordingly
-
-                    if rand() < probDelta1
-                        δ[k] = 1
-                        β[k] = newα[k] = gHat1 + randn() * sqrt(invLhs1)
+                if is_marker_probit_tree_bayesr(annotation_prior_model)
+                    for k = 1:nTraits
+                        other = k == 1 ? 2 : 1
+                        projected_residual = k == 1 ?
+                            w[1] * Rinv11 + w[2] * Rinv21 :
+                            w[1] * Rinv12 + w[2] * Rinv22
+                        bayesr_conditional_class_parameters!(
+                            bayesr_log_weights,
+                            bayesr_means,
+                            bayesr_variances,
+                            marker_probit_tree_state,
+                            true_marker_num,
+                            k,
+                            Int(δ[other]),
+                            β[other],
+                            projected_residual,
+                            xpx_marker,
+                            Ginv,
+                            Rinv,
+                        )
+                        sampled_class = sample_log_categorical!(bayesr_probabilities, bayesr_log_weights)
+                        δ[k] = sampled_class
+                        β[k] = bayesr_means[sampled_class] + randn() * sqrt(bayesr_variances[sampled_class])
+                        newα[k] = marker_probit_tree_bayesr_scale(sampled_class) * β[k]
                         LinearAlgebra.axpy!(oldα[k] - newα[k], x, wArray[k])
-                    else
-                        β[k] = gHat0 + randn() * sqrt(invLhs0)
-                        δ[k] = 0
-                        newα[k] = 0
-                        if oldα[k] != 0
-                            LinearAlgebra.axpy!(oldα[k], x, wArray[k])
+                    end
+                else
+                    for k = 1:nTraits
+                        other = k == 1 ? 2 : 1
+                        Ginv11 = Ginv[k, k]
+                        Ginv12 = Ginv[k, other]
+                        Rinvkk = k == 1 ? Rinv11 : Rinv22
+                        Rinvkother = k == 1 ? Rinv12 : Rinv21
+                        C11 = Ginv11 + Rinvkk * xpx_marker
+                        C12 = Ginv12 + xpx_marker * δ[other] * Rinvkother
+
+                        invLhs0 = 1 / Ginv11
+                        rhs0 = -Ginv12 * β[other]
+                        gHat0 = rhs0 * invLhs0
+                        invLhs1 = 1 / C11
+                        rhs1 = (k == 1 ? (w[1] * Rinv11 + w[2] * Rinv21) : (w[1] * Rinv12 + w[2] * Rinv22)) - C12 * β[other]
+                        gHat1 = rhs1 * invLhs1
+
+                        d0 = k == 1 ? (0.0, δ[2]) : (δ[1], 0.0)
+                        d1 = k == 1 ? (1.0, δ[2]) : (δ[1], 1.0)
+
+                        logPrior0 = log_marker_state_prior(annotation_prior_model, Pi, marker_probit_tree_state, cat, true_marker_num, d0)
+                        logPrior1 = log_marker_state_prior(annotation_prior_model, Pi, marker_probit_tree_state, cat, true_marker_num, d1)
+                        logDelta0 = -0.5 * (log(Ginv11) - gHat0^2 * Ginv11) + logPrior0
+                        logDelta1 = -0.5 * (log(C11) - gHat1^2 * C11) + logPrior1
+                        probDelta1 = 1.0 / (1.0 + exp(logDelta0 - logDelta1))
+
+                        if rand() < probDelta1
+                            δ[k] = 1
+                            β[k] = newα[k] = gHat1 + randn() * sqrt(invLhs1)
+                            LinearAlgebra.axpy!(oldα[k] - newα[k], x, wArray[k])
+                        else
+                            β[k] = gHat0 + randn() * sqrt(invLhs0)
+                            δ[k] = 0
+                            newα[k] = 0
+                            if oldα[k] != 0
+                                LinearAlgebra.axpy!(oldα[k], x, wArray[k])
+                            end
                         end
                     end
                 end
 
-                local_nLoci_array_vec[cat][two_trait_state_index(δ[1], δ[2])] += 1
+                active_delta1 = is_marker_probit_tree_bayesr(annotation_prior_model) ? Float64(δ[1] > 1) : δ[1]
+                active_delta2 = is_marker_probit_tree_bayesr(annotation_prior_model) ? Float64(δ[2] > 1) : δ[2]
+                local_nLoci_array_vec[cat][two_trait_state_index(active_delta1, active_delta2)] += 1
 
                 for trait = 1:nTraits
                     betaArray[trait][cat][effect_index] = β[trait]
@@ -331,6 +365,7 @@ function write_nonmpi_run_config(analysis_path::AbstractString, context)
         "estimate_pi" => settings.estimate_pi,
         "effective_estimate_gscale" => settings.estimate_Gscale,
         "estgscale_iter" => settings.estGscale_iter,
+        "gscale_structure" => String(settings.gscale_structure),
         "report_pleiotropic_qtl_effect_matrix" => config.report_pleiotropic_qtl_effect_matrix,
         "output_mcmc_delta" => config.output_mcmc_delta,
         "julia_threads" => nthreads(),
@@ -371,6 +406,7 @@ function run_nonmpi_sampler!(context)
     estimate_pi = settings.estimate_pi
     estimate_Gscale = settings.estimate_Gscale
     estGscale_iter = settings.estGscale_iter
+    gscale_structure = settings.gscale_structure
     report_pleiotropic_qtl_effect_matrix = config.report_pleiotropic_qtl_effect_matrix
     output_mcmc_delta = config.output_mcmc_delta
 
@@ -398,7 +434,9 @@ function run_nonmpi_sampler!(context)
     nLoci_annot = annotation_prior_model == :group_dirichlet ? annotation_metadata.nLoci_annot : Int[my_nsnp]
     effect_nCon = annotation_prior_model == :group_dirichlet ? nCon : 0
     if Gprior_vec === nothing
-        Gprior_vec = build_gprior_vec(config.st_path, nLoci_annot, context.startPi00)
+        Gprior_vec = is_marker_probit_tree_bayesr(annotation_prior_model) ?
+            build_bayesr_gprior_vec(config.st_path, nLoci_annot) :
+            build_gprior_vec(config.st_path, nLoci_annot, context.startPi00)
     end
     
     nTraits = 2
@@ -430,7 +468,11 @@ function run_nonmpi_sampler!(context)
         prepare_block_state!(blocks, effect_nCon, annotation_metadata.annotationType)
     else
         annotation_design = prepare_marker_probit_tree_block_state!(blocks)
-        marker_probit_tree_state = initialize_marker_probit_tree_state(annotation_design, context.startPi)
+        marker_probit_tree_state = initialize_marker_probit_tree_state(
+            annotation_design,
+            context.startPi;
+            prior_model=annotation_prior_model,
+        )
     end
     gene_covariance_state = if isnothing(gene_snp_ids)
         nothing
@@ -453,6 +495,11 @@ function run_nonmpi_sampler!(context)
         betaArray = initialize_compact_effect_arrays(nTraits, nCategory, effect_lengths)
         alphaArray = initialize_compact_effect_arrays(nTraits, nCategory, effect_lengths)
         deltaArray = initialize_compact_effect_arrays(nTraits, nCategory, effect_lengths)
+        if is_marker_probit_tree_bayesr(annotation_prior_model)
+            for trait in 1:nTraits, category in 1:nCategory
+                fill!(deltaArray[trait][category], 1.0)
+            end
+        end
     else
         effect_starting_path = starting_value_dir
         delta_starting_path = starting_value_dir * "last_sample_delta/"
@@ -514,6 +561,7 @@ function run_nonmpi_sampler!(context)
     println("output_mcmc_delta=$output_mcmc_delta")
     if estimate_vara
         println("estimate_Gscale=$estimate_Gscale")
+        println("gscale_structure=$gscale_structure")
         println("starting value of scale_G_vec is: ", scale_G_vec)
     end
     if annotation_prior_model == :group_dirichlet
@@ -723,7 +771,7 @@ function run_nonmpi_sampler!(context)
                         Pi[cat][key] = tempPi_vec[cat][iCategori] # annotation specific pi
                     end
                 end
-            else # :marker_probit_tree
+            else # marker-probit-tree modes
                 dense_deltaArray = expand_effect_arrays(deltaArray, blocks, my_nsnp, nCategory, nTraits)
                 updated_pi = update_marker_probit_tree_priors!(marker_probit_tree_state, dense_deltaArray)
                 for (key, value) in updated_pi
@@ -758,9 +806,14 @@ function run_nonmpi_sampler!(context)
         # get the running average of SSE to sample Gscale
         if within_estGscale
             for cat = 1:nCategory
-                update_matrix_mean!(meanSSE[cat], SSE_vec[cat], iIter_scaleG)
-                copyto!(scale_G_vec[cat], meanSSE[cat])
-                scale_G_vec[cat] .*= (df_G - nTraits - 1) / nLoci_annot[cat]
+                update_empirical_gscale!(
+                    scale_G_vec[cat],
+                    meanSSE[cat],
+                    SSE_vec[cat],
+                    iIter_scaleG,
+                    (df_G - nTraits - 1) / nLoci_annot[cat],
+                    gscale_structure,
+                )
             end
             if iter == estGscale_iter
                 # save the scale_G_vec

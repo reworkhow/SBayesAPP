@@ -36,3 +36,17 @@ function build_gprior_vec(st_path::AbstractString, n_loci_annot, pi00)
 
     return gprior_vec
 end
+
+function build_bayesr_gprior_vec(st_path::AbstractString, n_loci_annot)
+    st_h21 = round(readdlm(st_path * "Trait1/mean_varg_total.txt")[1, 1], digits=3)
+    st_h22 = round(readdlm(st_path * "Trait2/mean_varg_total.txt")[1, 1], digits=3)
+    expected_gamma = sum(MARKER_PROBIT_TREE_BAYESR_GAMMA) / length(MARKER_PROBIT_TREE_BAYESR_GAMMA)
+
+    gprior_vec = [zeros(2, 2) for _ in eachindex(n_loci_annot)]
+    loci_total = sum(n_loci_annot)
+    for category in eachindex(n_loci_annot)
+        genetic_covariance = [st_h21 0.0; 0.0 st_h22] * (n_loci_annot[category] / loci_total)
+        gprior_vec[category] = genetic_covariance / (n_loci_annot[category] * expected_gamma)
+    end
+    return gprior_vec
+end

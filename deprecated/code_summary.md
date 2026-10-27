@@ -4,16 +4,17 @@
 
 SBayesAPP currently exposes a package-backed non-MPI bivariate BayesC-style sampler for transformed summary-statistics inputs. The public entrypoint is `SBayesAPP.run_nonmpi(config)`, and the thin CLI wrapper is `scripts/run_nonmpi.jl`.
 
-The current code supports two annotation prior models:
+The current code supports three annotation prior models:
 
 - `:group_dirichlet`: the original multi-class annotation model. Each annotation category has its own four-state mixture prior and its own marker-effect covariance matrix.
 - `:marker_probit_tree`: a marker-specific prior model. The sampler uses a single marker-effect covariance matrix for SNP effects, while annotations feed a three-step probit tree that generates SNP-specific probabilities for the four two-trait inclusion states.
+- `:marker_probit_tree_bayesr`: the BayesR extension of the marker-specific tree. Seven probit steps generate 16 joint class probabilities, and active effects use variance multipliers `0.01`, `0.1`, or `1.0`.
 
 Across both modes, the workflow estimates:
 
 - latent Gaussian marker effects `betaArray`
 - inclusion indicators `deltaArray`
-- realized marker effects `alphaArray = delta .* beta`
+- realized marker effects `alphaArray` (`delta .* beta` for BayesC, or `sqrt(gamma[class]) .* beta` for BayesR)
 - marker-effect covariance matrices `A_vec`
 - genetic covariance summaries `G_vec` and `Gtotal`
 - mixture probabilities `Pi`
@@ -58,11 +59,11 @@ Optional flags include `--seed`, `--n_con`, `--annotation_prior_model`, `--estim
 
 Important runtime normalization happens before sampling starts.
 
-- `annotation_prior_model` is validated against `(:group_dirichlet, :marker_probit_tree)`.
-- In `:marker_probit_tree`, `estimate_pi=false` is ignored and `estimate_pi` is forced on.
+- `annotation_prior_model` is validated against `(:group_dirichlet, :marker_probit_tree, :marker_probit_tree_bayesr)`.
+- In either marker-probit-tree mode, `estimate_pi=false` is ignored and `estimate_pi` is forced on.
 - `burnin` defaults to `floor(Int, 0.4 * nIter)` for fresh runs and `0` for continuation runs unless `--burnin` is provided explicitly.
-- In `:marker_probit_tree`, `is_continue=true` is ignored and the run always starts fresh.
-- In `:marker_probit_tree`, `n_con` is ignored and all annotation columns are treated as prior features.
+- In either marker-probit-tree mode, `is_continue=true` is ignored and the run always starts fresh.
+- In either marker-probit-tree mode, `n_con` is ignored and all annotation columns are treated as prior features.
 - `estimate_Gscale` is only active when `estimate_vara=true`.
 
 `run_nonmpi(config; dry_run=true)` returns the constructed CLI command instead of launching the workflow.
@@ -142,6 +143,18 @@ Let `Phi` denote the standard normal CDF. For each SNP, the three step-specific 
 - `P(0,1) = p1 * (1 - p2) * (1 - p3)`: pass step 1, go to the singleton branch at step 2, then choose trait 2 at step 3
 
 Step coefficients are sampled from Gaussian conditionals after drawing truncated-normal liabilities. The intercept is unpenalized. If the tree design matrix includes annotation columns beyond the intercept, those annotation coefficients are shrunk with step-specific variances, and the variances are resampled each iteration.
+
+### `:marker_probit_tree_bayesr`
+
+This mode retains the three activity-pattern steps above and adds two magnitude
+steps per trait: medium-or-large versus small, followed by large versus medium.
+Each trait has class labels `1:4` with variance multipliers
+`(0, 0.01, 0.1, 1.0)`, yielding 16 joint states. The marker sweep updates one
+trait at a time across its four candidate classes and sets the realized effect
+to `sqrt(gamma[class]) * beta`. Class 1 therefore has zero realized effect but
+still has a sampled latent `beta`, and the common latent covariance update uses
+all markers. The implementation and proofreading map are documented in
+`jwas_multitrait_annotated_bayesr_review.md`.
 
 ## Input contract
 

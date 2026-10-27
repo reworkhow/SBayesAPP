@@ -106,6 +106,7 @@ _default_nonmpi_cli_settings() = (
     estimate_pi=true,
     estimate_Gscale=true,
     estGscale_iter=500,
+    gscale_structure=:correlated,
     report_pleiotropic_qtl_effect_matrix=false,
     output_mcmc_delta=false,
 )
@@ -132,6 +133,7 @@ function example_nonmpi_config(; root::AbstractString=repo_root())
         estimate_pi=true,
         estimate_Gscale=true,
         estGscale_iter=500,
+        gscale_structure=:correlated,
         report_pleiotropic_qtl_effect_matrix=true,
         output_mcmc_delta=false,
     )
@@ -178,6 +180,7 @@ function parse_nonmpi_args(args::Vector{String})
         estimate_pi=_parse_bool_arg(string(_lookup_named_arg(parsed, ["estimate_pi"]; default=string(defaults.estimate_pi)))),
         estimate_Gscale=_parse_bool_arg(string(_lookup_named_arg(parsed, ["estimate_gscale"]; default=string(defaults.estimate_Gscale)))),
         estGscale_iter=_parse_int_arg(string(_lookup_named_arg(parsed, ["estgscale_iter"]; default=string(defaults.estGscale_iter))), "estGscale_iter"),
+        gscale_structure=ConfigTypes.normalize_gscale_structure(string(_lookup_named_arg(parsed, ["gscale_structure"]; default=string(defaults.gscale_structure)))),
         report_pleiotropic_qtl_effect_matrix=_parse_bool_arg(string(_lookup_named_arg(parsed, ["report_pleiotropic_qtl_effect_matrix"]; default=string(defaults.report_pleiotropic_qtl_effect_matrix)))),
         output_mcmc_delta=_parse_bool_arg(string(_lookup_named_arg(parsed, ["output_mcmc_delta"]; default=string(defaults.output_mcmc_delta)))),
         snp_gene_map=snp_gene_map,
@@ -187,7 +190,7 @@ function parse_nonmpi_args(args::Vector{String})
 end
 
 function build_nonmpi_cmd(config::NonMPIConfig)
-    cmd = `$(Base.julia_cmd()) --project=$(repo_root()) $(joinpath(repo_root(), "scripts", "run_nonmpi.jl")) --data_path $(config.data_path) --analysis_path $(config.analysis_path) --n_iter $(string(config.nIter)) --burnin $(string(config.burnin)) --seed $(string(config.seed)) --annot_file $(config.annot_file) --annot_dict $(config.annot_dict) --starting_value_dir $(config.starting_value_dir) --gscale_value_dir $(config.gscale_value_dir) --st_path $(config.st_path) --thin $(string(config.thin)) --n1 $(string(config.n1)) --n2 $(string(config.n2)) --n_con $(string(config.n_con)) --annotation_prior_model $(String(config.annotation_prior_model)) --is_continue $(_bool_arg(config.is_continue)) --estimate_vare $(_bool_arg(config.estimate_vare)) --estimate_vara $(_bool_arg(config.estimate_vara)) --estimate_pi $(_bool_arg(config.estimate_pi)) --estimate_gscale $(_bool_arg(config.estimate_Gscale)) --estgscale_iter $(string(config.estGscale_iter)) --report_pleiotropic_qtl_effect_matrix $(_bool_arg(config.report_pleiotropic_qtl_effect_matrix)) --output_mcmc_delta $(_bool_arg(config.output_mcmc_delta))`
+    cmd = `$(Base.julia_cmd()) --project=$(repo_root()) $(joinpath(repo_root(), "scripts", "run_nonmpi.jl")) --data_path $(config.data_path) --analysis_path $(config.analysis_path) --n_iter $(string(config.nIter)) --burnin $(string(config.burnin)) --seed $(string(config.seed)) --annot_file $(config.annot_file) --annot_dict $(config.annot_dict) --starting_value_dir $(config.starting_value_dir) --gscale_value_dir $(config.gscale_value_dir) --st_path $(config.st_path) --thin $(string(config.thin)) --n1 $(string(config.n1)) --n2 $(string(config.n2)) --n_con $(string(config.n_con)) --annotation_prior_model $(String(config.annotation_prior_model)) --is_continue $(_bool_arg(config.is_continue)) --estimate_vare $(_bool_arg(config.estimate_vare)) --estimate_vara $(_bool_arg(config.estimate_vara)) --estimate_pi $(_bool_arg(config.estimate_pi)) --estimate_gscale $(_bool_arg(config.estimate_Gscale)) --estgscale_iter $(string(config.estGscale_iter)) --gscale_structure $(String(config.gscale_structure)) --report_pleiotropic_qtl_effect_matrix $(_bool_arg(config.report_pleiotropic_qtl_effect_matrix)) --output_mcmc_delta $(_bool_arg(config.output_mcmc_delta))`
     if !isnothing(config.snp_gene_map)
         cmd = `$cmd --snp-gene-map $(config.snp_gene_map) --gene-category $(config.gene_category) --gene-mapping-weight $(String(config.gene_mapping_weight))`
     end

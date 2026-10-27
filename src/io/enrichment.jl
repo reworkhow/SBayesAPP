@@ -545,6 +545,28 @@ function calculate_multi_chain_enrichment(
         ) for chain_path in resolved_chain_paths
     ]
 
+    # h21 and h22 are diagonal variance elements. They are sums of squared
+    # genetic values and must not be made positive with abs; invalid samples
+    # indicate a problem in the MCMC output and should stop the summary.
+    if normalized_parameter in (:h21, :h22)
+        for (chain_path, category_values, total_values) in zip(
+            resolved_chain_paths, category_matrices, total_vectors,
+        )
+            all(isfinite, category_values) || error(
+                "Non-finite category $normalized_parameter sample in $chain_path",
+            )
+            any(category_values .< 0) && error(
+                "Negative category $normalized_parameter sample in $chain_path",
+            )
+            all(isfinite, total_values) || error(
+                "Non-finite total $normalized_parameter sample in $chain_path",
+            )
+            any(total_values .<= 0) && error(
+                "Non-positive total $normalized_parameter sample in $chain_path",
+            )
+        end
+    end
+
     n_samples = assert_same_sample_count([size(matrix, 1) for matrix in category_matrices], "genetic-variance samples")
     assert_same_sample_count([length(vector) for vector in total_vectors], "total genetic-variance samples")
     sample_indices = posterior_sample_indices(n_samples)

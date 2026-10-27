@@ -485,3 +485,35 @@ The minimum coherent set of changes is likely to be:
 The existing SBayesAPP `:marker_probit_tree` path should remain a regression
 baseline. Its current four-state behavior is internally coherent and matches
 the documented annotated BayesC algorithm.
+
+## SBayesAPP implementation map
+
+For a runtime-ordered guide showing which file calls each function, see
+[`sbayesapp_bayesr_code_walkthrough.md`](sbayesapp_bayesr_code_walkthrough.md).
+
+The port is exposed as a separate prior mode so existing annotated BayesC runs
+remain unchanged:
+
+```text
+annotation_prior_model = :marker_probit_tree_bayesr
+```
+
+The implementation is intentionally concentrated in these locations:
+
+- `src/model/marker_probit_tree.jl`: 16-state indexing, the seven response
+  vectors, prior reconstruction, BayesR scales, and four-class conditional
+  parameters;
+- `src/workflows/nonmpi.jl`: class initialization and the trait-at-a-time
+  four-class marker sweep;
+- `src/model/priors.jl`: latent-effect covariance initialization using the
+  expected BayesR variance multiplier under the uniform 16-state start;
+- `src/io/outputs.jl`: seven-step coefficient output and the 16-state joint
+  prior summary;
+- `test/marker_probit_tree_bayesr.jl`: focused mathematical regression tests.
+
+The existing `:marker_probit_tree` path remains the four-state annotated
+BayesC implementation. In the BayesR mode, class `1` has zero realized scale
+but retains a sampled latent `beta`; classes `2:4` use multipliers
+`0.01, 0.1, 1.0`. The existing covariance update therefore continues to use
+all latent `beta` values, including the `(1,1)` markers, matching the reviewed
+JWAS implementation.

@@ -74,6 +74,27 @@ function update_matrix_second_moment!(mean_matrix, sample_matrix, weight)
     return mean_matrix
 end
 
+function update_empirical_gscale!(
+    scale_g,
+    mean_sse,
+    sse,
+    weight,
+    multiplier,
+    gscale_structure::Symbol,
+)
+    update_matrix_mean!(mean_sse, sse, weight)
+    copyto!(scale_g, mean_sse)
+    scale_g .*= multiplier
+    if gscale_structure == :independent
+        for column in axes(scale_g, 2), row in axes(scale_g, 1)
+            row == column || (scale_g[row, column] = 0.0)
+        end
+    elseif gscale_structure != :correlated
+        error("Unsupported gscale_structure: $gscale_structure")
+    end
+    return scale_g
+end
+
 # count how many annotation effects exist in each category across all blocks.
 function effect_lengths_from_blocks(blocks, nCategory::Int)
     lengths = zeros(Int, nCategory)

@@ -49,6 +49,17 @@ function write_annotation_probit_coefficients(output_file::AbstractString, annot
     return nothing
 end
 
+function write_bayesr_joint_prior_summary(output_file::AbstractString, means, standard_deviations)
+    open(output_file, "w") do io
+        println(io, "Trait1Class\tTrait2Class\tEstimate\tSD")
+        for state in marker_probit_tree_bayesr_state_order()
+            index = marker_probit_tree_bayesr_state_index(state)
+            println(io, state[1], '\t', state[2], '\t', means[index], '\t', standard_deviations[index])
+        end
+    end
+    return nothing
+end
+
 function sanitize_gene_output_component(value::AbstractString)
     component = replace(strip(String(value)), r"[^A-Za-z0-9._-]+" => "_")
     component = strip(component, ['_', '.', '-'])
@@ -218,7 +229,7 @@ function save_nonmpi_posterior_mean!(
         writedlm(analysis_path * "meanAlpha" * string(trait) * ".rank$my_rank.txt", meanAlpha[trait])
     end
 
-    if annotation_prior_model == :marker_probit_tree && marker_probit_tree_state !== nothing
+    if is_marker_probit_tree_model(annotation_prior_model) && marker_probit_tree_state !== nothing
         coefficient_names = isempty(annotation_names) ?
             ["Intercept"; ["Annotation_$index" for index in 1:(size(marker_probit_tree_state.mean_coefficients, 1) - 1)]] :
             ["Intercept"; annotation_names]
@@ -226,15 +237,26 @@ function save_nonmpi_posterior_mean!(
         write_annotation_probit_coefficients(
             analysis_path * "annotation_probit_coefficients.txt",
             coefficient_names,
-            marker_probit_tree_step_labels(),
+            marker_probit_tree_step_labels(marker_probit_tree_state),
             marker_probit_tree_state.mean_coefficients,
         )
         write_annotation_probit_coefficients(
             analysis_path * "annotation_probit_coefficients_std.txt",
             coefficient_names,
-            marker_probit_tree_step_labels(),
+            marker_probit_tree_step_labels(marker_probit_tree_state),
             coefficient_sd,
         )
+        if is_marker_probit_tree_bayesr(annotation_prior_model)
+            prior_sd = sqrt.(abs.(
+                marker_probit_tree_state.mean_snp_pi2 .-
+                marker_probit_tree_state.mean_snp_pi .^ 2
+            ))
+            write_bayesr_joint_prior_summary(
+                analysis_path * "annotation_bayesr_predicted_joint_state_probabilities.txt",
+                marker_probit_tree_state.mean_snp_pi,
+                prior_sd,
+            )
+        end
     end
 
     return nothing

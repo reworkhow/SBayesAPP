@@ -5,6 +5,23 @@ using DataFrames
 using DelimitedFiles
 using JLD2
 
+include("marker_probit_tree_bayesr.jl")
+
+@testset "Empirical Gscale structure" begin
+    sse = [4.0 2.0; 2.0 9.0]
+
+    correlated_mean = zeros(2, 2)
+    correlated_scale = zeros(2, 2)
+    SBayesAPP.update_empirical_gscale!(correlated_scale, correlated_mean, sse, 1.0, 0.5, :correlated)
+    @test correlated_scale == [2.0 1.0; 1.0 4.5]
+
+    independent_mean = zeros(2, 2)
+    independent_scale = zeros(2, 2)
+    SBayesAPP.update_empirical_gscale!(independent_scale, independent_mean, sse, 1.0, 0.5, :independent)
+    @test independent_scale == [2.0 0.0; 0.0 4.5]
+    @test SBayesAPP.ConfigTypes.normalize_gscale_structure("independent") == :independent
+end
+
 @testset "Non-MPI smoke run" begin
     root = SBayesAPP.repo_root()
     mktempdir() do tmpdir
@@ -92,6 +109,45 @@ end
         @test !isfile(joinpath(analysis_dir, "mcmcGcov_c.txt"))
         @test !isfile(joinpath(analysis_dir, "mcmcGcor_total.txt"))
         @test !isfile(joinpath(analysis_dir, "mcmcGcov_total.txt"))
+    end
+end
+
+@testset "Non-MPI smoke run marker_probit_tree_bayesr" begin
+    root = SBayesAPP.repo_root()
+    data_dir = string(joinpath(root, "example", "SBayesAPP_input_first10blks"), "/")
+    st_dir = string(joinpath(root, "example", "ST_res"), "/")
+    mktempdir() do tmpdir
+        analysis_dir = joinpath(tmpdir, "marker_probit_tree_bayesr_output")
+        config = SBayesAPP.NonMPIConfig(
+            data_dir,
+            string(analysis_dir, "/"),
+            2,
+            42,
+            "annotation_df.txt",
+            "anno_matrix_dict",
+            "XXX",
+            "XXX",
+            st_dir,
+            1,
+            300000,
+            300000,
+            false,
+            burnin=0,
+            annotation_prior_model=:marker_probit_tree_bayesr,
+            report_pleiotropic_qtl_effect_matrix=false,
+            output_mcmc_delta=true,
+        )
+
+        SBayesAPP.run_nonmpi(config)
+
+        @test isfile(joinpath(analysis_dir, "annotation_probit_coefficients.txt"))
+        @test isfile(joinpath(analysis_dir, "annotation_bayesr_joint_prior.txt"))
+        @test isfile(joinpath(analysis_dir, "estPi1.txt"))
+        @test isfile(joinpath(analysis_dir, "mcmc_Delta1.txt"))
+        @test all(value -> value in 1:4, readdlm(joinpath(analysis_dir, "mcmc_Delta1.txt")))
+        coefficient_lines = readlines(joinpath(analysis_dir, "annotation_probit_coefficients.txt"))
+        @test length(coefficient_lines) == 1 + 7 * (length(readdlm(joinpath(analysis_dir, "annotationName.txt"))) + 1)
+        @test length(readlines(joinpath(analysis_dir, "annotation_bayesr_joint_prior.txt"))) == 17
     end
 end
 

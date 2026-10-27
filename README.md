@@ -111,6 +111,7 @@ julia --project=. --threads 3 scripts/run_nonmpi.jl \
   --estimate_pi true \
   --estimate_gscale true \
   --estgscale_iter 500 \
+  --gscale_structure correlated \
   --report_pleiotropic_qtl_effect_matrix false \
   --output_mcmc_delta false
 ```
@@ -151,6 +152,7 @@ Package-level CLI defaults include:
 - `--estimate_pi true`
 - `--estimate_gscale true`
 - `--estgscale_iter 500`
+- `--gscale_structure correlated` (`independent` keeps empirical Gscale off-diagonals at zero)
 - `--report_pleiotropic_qtl_effect_matrix false`
 - `--output_mcmc_delta false`
 
@@ -159,6 +161,27 @@ Argument notes:
 - `annot_dict` should match the JLD2 filename stem, for example `anno_matrix_dict` for `anno_matrix_dict.jld2`.
 - `starting_value_dir` and `gscale_value_dir` are required by the CLI even for a fresh run; use placeholders such as `XXX` when they are not needed.
 - `n_con` is only meaningful for `group_dirichlet`, where the first `n_con` annotation columns after `SNP` are treated as continuous.
+
+## Two-Trait Annotated BayesR
+
+Set
+
+```text
+--annotation_prior_model marker_probit_tree_bayesr
+```
+
+to use the seven-step annotated two-trait BayesR model. This mode keeps one
+latent two-trait marker-effect covariance matrix and assigns each trait a class
+in `1:4`, with variance multipliers `(0, 0.01, 0.1, 1.0)`. The first three
+probit steps model the `00/10/01/11` activity pattern; four additional steps
+model the small/medium/large class within each active trait.
+
+As with `marker_probit_tree`, all annotation columns are prior features,
+`estimate_pi` is forced on, and continuation is currently disabled. With
+`--output_mcmc_delta true`, `mcmc_Delta1.txt` and `mcmc_Delta2.txt` contain
+BayesR class labels `1:4` rather than binary indicators. The run also writes
+`annotation_bayesr_joint_prior.txt`, containing posterior summaries of the 16
+genome-average annotation-induced joint prior probabilities.
 
 ## Optional Gene-Level Genetic Covariance
 
