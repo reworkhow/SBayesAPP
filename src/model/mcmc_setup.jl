@@ -88,6 +88,7 @@ end
 function prepare_mcmc_output_files(analysis_path; report_pleiotropic_qtl_effect_matrix=true)
     file_names = Dict(
         "pi" => analysis_path * "MCMC_samples_pi.txt",
+        "genome_wide_pi" => analysis_path * "MCMC_samples_genome_wide_pi.txt",
         "beta_effects_variance" => analysis_path * "MCMC_samples_beta_effects_variance.txt",
         "genetic_effects_variance" => analysis_path * "MCMC_samples_genetic_effects_variance.txt",
         "total_genetic_effects_variance" => analysis_path * "MCMC_samples_total_genetic_effects_variance.txt",
@@ -102,6 +103,7 @@ function prepare_mcmc_output_files(analysis_path; report_pleiotropic_qtl_effect_
             println("Creating file: $path")
         end
         open(path, "w") do io
+            path == file_names["genome_wide_pi"] && println(io, "pi10,pi01,pi11")
         end
     end
     return file_names

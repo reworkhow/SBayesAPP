@@ -7,6 +7,18 @@ using JLD2
 
 include("marker_probit_tree_bayesr.jl")
 
+@testset "Genome-wide pi from compact delta states" begin
+    blocks = [(
+        annotation_category_indices=[[1, 2], [1]],
+        annotation_effect_indices=[[1, 1], [2]],
+    )]
+    delta = [
+        [[1.0, 0.0], [0.0]],
+        [[0.0, 1.0], [1.0]],
+    ]
+    @test SBayesAPP.genome_wide_pi(delta, blocks, 2, :group_dirichlet) == [0.0, 0.5, 0.5]
+end
+
 @testset "Empirical Gscale structure" begin
     sse = [4.0 2.0; 2.0 9.0]
 
@@ -51,6 +63,12 @@ end
 
         @test isfile(joinpath(analysis_dir, "annotationName.txt"))
         @test isfile(joinpath(analysis_dir, "MCMC_samples_pi.txt"))
+        genome_pi_path = joinpath(analysis_dir, "MCMC_samples_genome_wide_pi.txt")
+        @test readline(genome_pi_path) == "pi10,pi01,pi11"
+        genome_pi = readdlm(genome_pi_path, ',', Float64; skipstart=1)
+        @test size(genome_pi) == (2, 3)
+        @test all(0 .<= genome_pi .<= 1)
+        @test all(sum(genome_pi; dims=2) .<= 1)
         @test isfile(joinpath(analysis_dir, "estPi1.txt"))
         @test isfile(joinpath(analysis_dir, "estR.txt"))
         @test isfile(joinpath(analysis_dir, "estGcor.txt"))
@@ -145,6 +163,17 @@ end
         @test isfile(joinpath(analysis_dir, "estPi1.txt"))
         @test isfile(joinpath(analysis_dir, "mcmc_Delta1.txt"))
         @test all(value -> value in 1:4, readdlm(joinpath(analysis_dir, "mcmc_Delta1.txt")))
+        delta1 = readdlm(joinpath(analysis_dir, "mcmc_Delta1.txt"), Float64)
+        delta2 = readdlm(joinpath(analysis_dir, "mcmc_Delta2.txt"), Float64)
+        genome_pi_path = joinpath(analysis_dir, "MCMC_samples_genome_wide_pi.txt")
+        @test readline(genome_pi_path) == "pi10,pi01,pi11"
+        genome_pi = readdlm(genome_pi_path, ',', Float64; skipstart=1)
+        expected_genome_pi = hcat(
+            vec(sum((delta1 .> 1) .& .!(delta2 .> 1); dims=1)),
+            vec(sum(.!(delta1 .> 1) .& (delta2 .> 1); dims=1)),
+            vec(sum((delta1 .> 1) .& (delta2 .> 1); dims=1)),
+        ) ./ size(delta1, 1)
+        @test genome_pi ≈ expected_genome_pi
         coefficient_lines = readlines(joinpath(analysis_dir, "annotation_probit_coefficients.txt"))
         @test length(coefficient_lines) == 1 + 7 * (length(readdlm(joinpath(analysis_dir, "annotationName.txt"))) + 1)
         @test length(readlines(joinpath(analysis_dir, "annotation_bayesr_joint_prior.txt"))) == 17

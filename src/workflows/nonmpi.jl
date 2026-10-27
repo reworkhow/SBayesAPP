@@ -59,6 +59,43 @@ function accumulate_vectors!(dest, vectors)
     return dest
 end
 
+function genome_wide_pi(deltaArray, blocks, nsnp::Int, annotation_prior_model)
+    counts = zeros(Int, 3) # trait 1 only, trait 2 only, both traits
+    bayesr_classes = is_marker_probit_tree_bayesr(annotation_prior_model)
+    markers_seen = 0
+
+    for block in blocks
+        marker_categories = block.annotation_category_indices::Vector{Vector{Int}}
+        marker_effect_indices = block.annotation_effect_indices::Vector{Vector{Int}}
+        for marker in eachindex(marker_categories)
+            trait1_active = false
+            trait2_active = false
+            categories = marker_categories[marker]
+            effect_indices = marker_effect_indices[marker]
+            for position in eachindex(categories)
+                category = categories[position]
+                effect_index = effect_indices[position]
+                delta1 = deltaArray[1][category][effect_index]
+                delta2 = deltaArray[2][category][effect_index]
+                trait1_active |= bayesr_classes ? delta1 > 1 : !iszero(delta1)
+                trait2_active |= bayesr_classes ? delta2 > 1 : !iszero(delta2)
+                trait1_active && trait2_active && break
+            end
+            markers_seen += 1
+            if trait1_active && trait2_active
+                counts[3] += 1
+            elseif trait1_active
+                counts[1] += 1
+            elseif trait2_active
+                counts[2] += 1
+            end
+        end
+    end
+
+    markers_seen == nsnp || error("Expected $nsnp SNPs while calculating genome-wide pi, found $markers_seen.")
+    return counts ./ nsnp
+end
+
 function run_nonmpi_block_range!(
     blocks,
     block_range,
@@ -905,6 +942,10 @@ function run_nonmpi_sampler!(context)
         if iter > burnin 
             if iter > burnin && (iter - burnin) % thin == 0
                 println("iter $iter")
+                genome_pi = genome_wide_pi(deltaArray, blocks, my_nsnp, annotation_prior_model)
+                open(file_names["genome_wide_pi"], "a") do io
+                    println(io, genome_pi[1], ',', genome_pi[2], ',', genome_pi[3])
+                end
                 if output_mcmc_delta
                     for trait = 1:nTraits
                         mcmc_Delta[trait][:, iout] = expand_effect_trait(deltaArray[trait], blocks, my_nsnp, nCategory)
